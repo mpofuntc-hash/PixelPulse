@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/src/index.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/public/$1"
+    }
+  ],
+  "env": {
+    "TELEGRAM_BOT_TOKEN": "@telegram_bot_token",
+    "BTCPAY_URL": "@btcpay_url",
+    "BTCPAY_STORE_ID": "@btcpay_store_id",
+    "BTCPAY_API_KEY": "@btcpay_api_key",
+    "BTC_WALLET_ADDRESS": "@btc_wallet_address",
+    "DATABASE_URL": "@database_url"
+  }
+}
