@@ -33,12 +33,17 @@ Follow the prompts:
 In Vercel Dashboard → Settings → Environment Variables:
 
 ```
-TELEGRAM_BOT_TOKEN=your_bot_token
-BTCPAY_URL=https://your-btcpay-server.com
-BTCPAY_STORE_ID=your_store_id
-BTCPAY_API_KEY=your_api_key
+TELEGRAM_BOT_TOKEN=8657988536:AAEY_vH5WaBseYHOxs2Reb7wcN2NU0k3Z00
+OWNPAY_IPN_KEY=WVapLMnLORCPaA7KHX4U6RgXHb5IJlUn
+OWNPAY_API_KEY=D9B166B-M24MSZJ-QA84NPF-H723HH5
+OWNPAY_PUBLIC_KEY=b49fd05b-8b8b-45e1-802e-6267a68bd60b
+OWNPAY_BASE_URL=https://api.ownpayment.com
 BTC_WALLET_ADDRESS=bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh
-DATABASE_URL=postgres://user:password@host:port/database
+DATABASE_URL=postgresql://neondb_owner:npg_romK0N2VdvQM@ep-broad-pond-avft85az-pooler.c-11.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require
+CLOUDFLARE_R2_ACCOUNT_ID=13f5eaed3bae652238cf50324632b916
+CLOUDFLARE_R2_ACCESS_KEY_ID=49b67ed68535967bd66b8cf89211256a
+CLOUDFLARE_R2_SECRET_ACCESS_KEY=3c530608012594177fb3831464f5ac2f6d6e7958326a0cb8617eb2ceb8617151
+CLOUDFLARE_R2_BUCKET_NAME=pixelpulse-videos
 ```
 
 ### 1.4 Set Up Database
