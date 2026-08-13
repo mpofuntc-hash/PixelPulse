@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const { Telegraf } = require('telegraf');
-const Database = require('better-sqlite3');
+const { Pool } = require('pg');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,106 +11,139 @@ const path = require('path');
 // Initialize OwnPay client (will be loaded dynamically)
 let ownpay = null;
 
-// Database setup
-const db = new Database('./data/pixelpulse.db');
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY,
-    telegram_id INTEGER UNIQUE,
-    username TEXT,
-    subscription_status TEXT DEFAULT 'free',
-    subscription_end_date TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-  );
+// Database setup - Postgres
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false }
+});
 
-  CREATE TABLE IF NOT EXISTS anime (
-    id INTEGER PRIMARY KEY,
-    title TEXT,
-    description TEXT,
-    cover_image TEXT,
-    genre TEXT,
-    year INTEGER,
-    rating TEXT,
-    free_tier INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-  );
+// Initialize database tables
+async function initDatabase() {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        telegram_id INTEGER UNIQUE,
+        username TEXT,
+        subscription_status TEXT DEFAULT 'free',
+        subscription_end_date TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
-  CREATE TABLE IF NOT EXISTS episodes (
-    id INTEGER PRIMARY KEY,
-    anime_id INTEGER,
-    episode_number INTEGER,
-    title TEXT,
-    video_url TEXT,
-    duration INTEGER,
-    season INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (anime_id) REFERENCES anime(id)
-  );
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS anime (
+        id SERIAL PRIMARY KEY,
+        title TEXT,
+        description TEXT,
+        cover_image TEXT,
+        genre TEXT,
+        year INTEGER,
+        rating TEXT,
+        free_tier INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
-  CREATE TABLE IF NOT EXISTS subscriptions (
-    id INTEGER PRIMARY KEY,
-    user_id INTEGER,
-    plan_type TEXT,
-    amount_cents INTEGER,
-    status TEXT,
-    start_date TEXT,
-    end_date TEXT,
-    stripe_subscription_id TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-  );
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS episodes (
+        id SERIAL PRIMARY KEY,
+        anime_id INTEGER,
+        episode_number INTEGER,
+        title TEXT,
+        video_url TEXT,
+        duration INTEGER,
+        season INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (anime_id) REFERENCES anime(id)
+      );
+    `);
 
-  CREATE TABLE IF NOT EXISTS betting_markets (
-    id INTEGER PRIMARY KEY,
-    title TEXT,
-    description TEXT,
-    category TEXT,
-    options TEXT, 
-    end_date TEXT,
-    status TEXT DEFAULT 'active', 
-    resolution TEXT, 
-    total_volume REAL DEFAULT 0,
-    fee_rate REAL DEFAULT 0.02, 
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-  );
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER,
+        plan_type TEXT,
+        amount_cents INTEGER,
+        status TEXT,
+        start_date TEXT,
+        end_date TEXT,
+        stripe_subscription_id TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      );
+    `);
 
-  CREATE TABLE IF NOT EXISTS user_bets (
-    id INTEGER PRIMARY KEY,
-    user_id INTEGER,
-    market_id INTEGER,
-    option TEXT,
-    amount REAL,
-    potential_payout REAL,
-    status TEXT DEFAULT 'pending', 
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (market_id) REFERENCES betting_markets(id)
-  );
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS betting_markets (
+        id SERIAL PRIMARY KEY,
+        title TEXT,
+        description TEXT,
+        category TEXT,
+        options TEXT,
+        end_date TEXT,
+        status TEXT DEFAULT 'active',
+        resolution TEXT,
+        total_volume REAL DEFAULT 0,
+        fee_rate REAL DEFAULT 0.02,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
-  CREATE TABLE IF NOT EXISTS user_balances (
-    id INTEGER PRIMARY KEY,
-    user_id INTEGER UNIQUE,
-    btc_balance REAL DEFAULT 0,
-    total_deposited REAL DEFAULT 0,
-    total_withdrawn REAL DEFAULT 0,
-    total_won REAL DEFAULT 0,
-    total_lost REAL DEFAULT 0,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-  );
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_bets (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER,
+        market_id INTEGER,
+        option TEXT,
+        amount REAL,
+        potential_payout REAL,
+        status TEXT DEFAULT 'pending',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        FOREIGN KEY (market_id) REFERENCES betting_markets(id)
+      );
+    `);
 
-  CREATE TABLE IF NOT EXISTS transactions (
-    id INTEGER PRIMARY KEY,
-    user_id INTEGER,
-    type TEXT, 
-    amount REAL,
-    btc_address TEXT,
-    tx_hash TEXT,
-    status TEXT DEFAULT 'pending',
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-  );
-`);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_balances (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER UNIQUE,
+        btc_balance REAL DEFAULT 0,
+        total_deposited REAL DEFAULT 0,
+        total_withdrawn REAL DEFAULT 0,
+        total_won REAL DEFAULT 0,
+        total_lost REAL DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS transactions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER,
+        type TEXT,
+        amount REAL,
+        btc_address TEXT,
+        tx_hash TEXT,
+        status TEXT DEFAULT 'pending',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      );
+    `);
+
+    console.log('Database tables initialized successfully');
+  } catch (error) {
+    console.error('Error initializing database:', error);
+  } finally {
+    client.release();
+  }
+}
+
+// Initialize database on startup
+initDatabase();
 
 // Telegram Bot
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
@@ -141,22 +174,28 @@ Commands:
   ctx.reply(welcomeMessage);
 });
 
-bot.command('markets', (ctx) => {
-  const markets = db.prepare('SELECT * FROM betting_markets WHERE status = ? ORDER BY created_at DESC LIMIT 5').all('active');
-  
-  if (markets.length === 0) {
-    ctx.reply('No active markets right now. Check back later!');
-    return;
+bot.command('markets', async (ctx) => {
+  try {
+    const result = await pool.query('SELECT * FROM betting_markets WHERE status = $1 ORDER BY created_at DESC LIMIT 5', ['active']);
+    const markets = result.rows;
+    
+    if (markets.length === 0) {
+      ctx.reply('No active markets right now. Check back later!');
+      return;
+    }
+    
+    let message = '🎲 Active Betting Markets:\n\n';
+    markets.forEach((market, index) => {
+      const options = JSON.parse(market.options).join(', ');
+      message += `${index + 1}. ${market.title}\n   Options: ${options}\n   Ends: ${new Date(market.end_date).toLocaleDateString()}\n\n`;
+    });
+    
+    message += '🔗 Bet now: https://cold-showers-shake.loca.lt';
+    ctx.reply(message);
+  } catch (error) {
+    console.error('Error fetching markets:', error);
+    ctx.reply('Error fetching markets. Please try again later.');
   }
-  
-  let message = '🎲 Active Betting Markets:\n\n';
-  markets.forEach((market, index) => {
-    const options = JSON.parse(market.options).join(', ');
-    message += `${index + 1}. ${market.title}\n   Options: ${options}\n   Ends: ${new Date(market.end_date).toLocaleDateString()}\n\n`;
-  });
-  
-  message += '🔗 Bet now: https://cold-showers-shake.loca.lt';
-  ctx.reply(message);
 });
 
 bot.command('news', (ctx) => {
@@ -178,13 +217,14 @@ bot.command('news', (ctx) => {
   ctx.reply(newsMessage);
 });
 
-bot.command('stats', (ctx) => {
-  const totalAnime = db.prepare('SELECT COUNT(*) as count FROM anime').get().count;
-  const totalEpisodes = db.prepare('SELECT COUNT(*) as count FROM episodes').get().count;
-  const activeMarkets = db.prepare('SELECT COUNT(*) as count FROM betting_markets WHERE status = ?').get('active').count;
-  const totalVolume = db.prepare('SELECT SUM(total_volume) as volume FROM betting_markets').get().volume || 0;
-  
-  const statsMessage = `
+bot.command('stats', async (ctx) => {
+  try {
+    const totalAnime = (await pool.query('SELECT COUNT(*) as count FROM anime')).rows[0].count;
+    const totalEpisodes = (await pool.query('SELECT COUNT(*) as count FROM episodes')).rows[0].count;
+    const activeMarkets = (await pool.query('SELECT COUNT(*) as count FROM betting_markets WHERE status = $1', ['active'])).rows[0].count;
+    const totalVolume = (await pool.query('SELECT COALESCE(SUM(total_volume), 0) as volume FROM betting_markets')).rows[0].volume;
+    
+    const statsMessage = `
 📊 Platform Statistics
 
 📺 Content:
@@ -197,7 +237,11 @@ bot.command('stats', (ctx) => {
 
 👥 Community growing daily!
   `;
-  ctx.reply(statsMessage);
+    ctx.reply(statsMessage);
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    ctx.reply('Error fetching statistics. Please try again later.');
+  }
 });
 
 bot.command('help', (ctx) => {
