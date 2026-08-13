@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PixelPulse - Anime Streaming</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #141414;
+            color: #fff;
+            min-height: 100vh;
+        }
+
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 4%;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%);
+            position: fixed;
+            top: 0;
+            width: 100%;
+            z-index: 100;
+        }
+
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: #e50914;
+            text-decoration: none;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 30px;
+        }
+
+        .nav-links a {
+            color: #fff;
+            text-decoration: none;
+            font-size: 16px;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: #e50914;
+        }
+
+        .nav-links a.active {
+            color: #e50914;
+            font-weight: bold;
+        }
+
+        .search-container {
+            display: flex;
+            align-items: center;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 8px 12px;
+        }
+
+        .search-input {
+            background: transparent;
+            border: none;
+            color: #fff;
+            font-size: 14px;
+            width: 200px;
+            outline: none;
+        }
+
+        .search-input::placeholder {
+            color: #999;
+        }
+
+        .hero {
+            height: 70vh;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, #141414 100%),
+                        url('https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1920') center/cover;
+            display: flex;
+            align-items: center;
+            padding: 0 4%;
+        }
+
+        .hero-content {
+            max-width: 600px;
+        }
+
+        .hero-title {
+            font-size: 48px;
+            font-weight: bold;
+            margin-bottom: 16px;
+        }
+
+        .hero-description {
+            font-size: 18px;
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #e50914;
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #f40612;
+        }
+
+        .btn-secondary {
+            background: rgba(109, 109, 110, 0.7);
+            color: #fff;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(109, 109, 110, 0.4);
+        }
+
+        .section {
+            padding: 40px 4%;
+        }
+
+        .section-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+
+        .anime-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .anime-card {
+            background: #1f1f1f;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .anime-card:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+        }
+
+        .anime-cover {
+            width: 100%;
+            height: 280px;
+            object-fit: cover;
+            background: #333;
+        }
+
+        .anime-info {
+            padding: 12px;
+        }
+
+        .anime-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .anime-meta {
+            font-size: 14px;
+            color: #999;
+        }
+
+        .free-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #e50914;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .premium-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #f5a623;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: #1f1f1f;
+            border-radius: 8px;
+            max-width: 800px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid #333;
+        }
+
+        .modal-title {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .episode-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .episode-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background: #2f2f2f;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .episode-item:hover {
+            background: #3f3f3f;
+        }
+
+        .episode-number {
+            font-size: 24px;
+            font-weight: bold;
+            margin-right: 16px;
+            color: #999;
+        }
+
+        .episode-title {
+            flex: 1;
+        }
+
+        .subscription-modal {
+            text-align: center;
+            padding: 40px;
+        }
+
+        .subscription-title {
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+
+        .subscription-description {
+            font-size: 18px;
+            margin-bottom: 30px;
+            color: #999;
+        }
+
+        .pricing-options {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        .pricing-option {
+            background: #2f2f2f;
+            padding: 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+            border: 2px solid transparent;
+        }
+
+        .pricing-option:hover {
+            background: #3f3f3f;
+            border-color: #e50914;
+        }
+
+        .pricing-option.selected {
+            border-color: #e50914;
+        }
+
+        .pricing-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .pricing-price {
+            font-size: 24px;
+            color: #e50914;
+        }
+
+        .subscribe-btn {
+            margin-top: 30px;
+            width: 100%;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .betting-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .betting-card {
+            background: #1f1f1f;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #333;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .betting-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+        }
+
+        .betting-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 12px;
+        }
+
+        .betting-description {
+            font-size: 14px;
+            color: #999;
+            margin-bottom: 16px;
+        }
+
+        .betting-options {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .betting-option {
+            background: #2f2f2f;
+            padding: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .betting-option:hover {
+            background: #3f3f3f;
+        }
+
+        .betting-volume {
+            font-size: 12px;
+            color: #e50914;
+        }
+
+        .wallet-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        .balance-card {
+            background: #1f1f1f;
+            border-radius: 8px;
+            padding: 30px;
+            border: 1px solid #333;
+        }
+
+        .balance-amount {
+            font-size: 36px;
+            font-weight: bold;
+            color: #e50914;
+            margin: 20px 0;
+        }
+
+        .balance-stats {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+        }
+
+        .stat-label {
+            color: #999;
+        }
+
+        .stat-value {
+            font-weight: bold;
+        }
+
+        .your-bets {
+            background: #1f1f1f;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #333;
+        }
+
+        .bet-item {
+            background: #2f2f2f;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        .bet-status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .bet-status.pending {
+            background: #f5a623;
+            color: #000;
+        }
+
+        .bet-status.won {
+            background: #4caf50;
+            color: #fff;
+        }
+
+        .bet-status.lost {
+            background: #e50914;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="#" class="logo">PixelPulse</a>
+        <div class="nav-links">
+            <a href="#" onclick="showSection('anime')" class="active" id="nav-anime">Anime</a>
+            <a href="#" onclick="showSection('betting')" id="nav-betting">Betting</a>
+            <a href="#" onclick="showSection('wallet')" id="nav-wallet">Wallet</a>
+        </div>
+        <div class="search-container">
+            <input type="text" class="search-input" placeholder="Search anime..." id="searchInput">
+        </div>
+    </nav>
+
+    <div class="hero">
+        <div class="hero-content">
+            <h1 class="hero-title">Unlimited Anime</h1>
+            <p class="hero-description">Watch thousands of anime titles. New episodes added daily. Start your free trial today.</p>
+            <div class="hero-buttons">
+                <button class="btn btn-primary" onclick="scrollToCatalogue()">Browse Catalogue</button>
+                <button class="btn btn-secondary" onclick="showSubscriptionModal()">Subscribe</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="section" id="catalogue">
+        <h2 class="section-title">Popular Anime</h2>
+        <div class="anime-grid" id="animeGrid">
+            <div class="loading">Loading anime...</div>
+        </div>
+    </div>
+
+    <div class="section" id="betting" style="display: none;">
+        <h2 class="section-title">Betting Markets</h2>
+        <div class="betting-grid" id="bettingGrid">
+            <div class="loading">Loading betting markets...</div>
+        </div>
+    </div>
+
+    <div class="section" id="wallet" style="display: none;">
+        <h2 class="section-title">Your Wallet</h2>
+        <div class="wallet-container">
+            <div class="balance-card">
+                <h3>BTC Balance</h3>
+                <div class="balance-amount" id="btcBalance">0.00000000 BTC</div>
+                <div class="balance-stats">
+                    <div class="stat">
+                        <span class="stat-label">Total Deposited:</span>
+                        <span class="stat-value" id="totalDeposited">0 BTC</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Total Won:</span>
+                        <span class="stat-value" id="totalWon">0 BTC</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Total Lost:</span>
+                        <span class="stat-value" id="totalLost">0 BTC</span>
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="showDepositModal()">Deposit</button>
+            </div>
+            <div class="your-bets">
+                <h3>Your Bets</h3>
+                <div id="yourBetsList">
+                    <div class="loading">Loading your bets...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="animeModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modalTitle">Anime Title</h3>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="modalDescription" style="margin-bottom: 20px; color: #999;"></p>
+                <div class="episode-list" id="episodeList"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="subscriptionModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Subscribe to Premium</h3>
+                <button class="close-btn" onclick="closeSubscriptionModal()">&times;</button>
+            </div>
+            <div class="modal-body subscription-modal">
+                <h2 class="subscription-title">Unlock All Anime</h2>
+                <p class="subscription-description">Choose your plan and start watching unlimited anime</p>
+                <div class="pricing-options">
+                    <div class="pricing-option" onclick="selectPlan('monthly')">
+                        <div class="pricing-title">Monthly</div>
+                        <div class="pricing-price">R50/month</div>
+                    </div>
+                    <div class="pricing-option" onclick="selectPlan('quarterly')">
+                        <div class="pricing-title">Quarterly</div>
+                        <div class="pricing-price">R150/quarter</div>
+                    </div>
+                    <div class="pricing-option" onclick="selectPlan('yearly')">
+                        <div class="pricing-title">Yearly</div>
+                        <div class="pricing-price">R500/year</div>
+                    </div>
+                </div>
+                <button class="btn btn-primary subscribe-btn" onclick="subscribe()">Subscribe Now</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedPlan = null;
+        let currentAnime = null;
+
+        // Load anime catalogue
+        async function loadAnime() {
+            try {
+                const response = await fetch('/api/anime');
+                const anime = await response.json();
+                renderAnime(anime);
+            } catch (error) {
+                console.error('Failed to load anime:', error);
+                document.getElementById('animeGrid').innerHTML = '<div class="loading">Failed to load anime</div>';
+            }
+        }
+
+        function renderAnime(anime) {
+            const grid = document.getElementById('animeGrid');
+            grid.innerHTML = anime.map(a => `
+                <div class="anime-card" onclick="openAnimeModal(${a.id})" style="position: relative;">
+                    <img src="${a.cover_image || 'https://via.placeholder.com/200x280?text=No+Cover'}" 
+                         alt="${a.title}" class="anime-cover">
+                    ${a.free_tier === 1 ? '<div class="free-badge">FREE</div>' : '<div class="premium-badge">PREMIUM</div>'}
+                    <div class="anime-info">
+                        <div class="anime-title">${a.title}</div>
+                        <div class="anime-meta">${a.genre || 'Action'} • ${a.year || '2024'}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function openAnimeModal(animeId) {
+            try {
+                const response = await fetch(`/api/anime/${animeId}/episodes`);
+                const episodes = await response.json();
+                const animeResponse = await fetch('/api/anime');
+                const allAnime = await animeResponse.json();
+                currentAnime = allAnime.find(a => a.id === animeId);
+
+                document.getElementById('modalTitle').textContent = currentAnime.title;
+                document.getElementById('modalDescription').textContent = currentAnime.description || 'No description available';
+                
+                const episodeList = document.getElementById('episodeList');
+                episodeList.innerHTML = episodes.map(ep => `
+                    <div class="episode-item" onclick="playEpisode(${ep.id})">
+                        <div class="episode-number">${ep.episode_number}</div>
+                        <div class="episode-title">${ep.title || `Episode ${ep.episode_number}`}</div>
+                    </div>
+                `).join('');
+
+                document.getElementById('animeModal').style.display = 'flex';
+            } catch (error) {
+                console.error('Failed to load episodes:', error);
+            }
+        }
+
+        async function playEpisode(episodeId) {
+            // Check if anime is free tier
+            if (currentAnime && currentAnime.free_tier === 1) {
+                // Free anime - allow access without subscription
+                openVideoPlayer(episodeId);
+                return;
+            }
+
+            // Check subscription status for premium anime
+            const telegramId = getTelegramId();
+            if (!telegramId) {
+                showSubscriptionModal();
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/subscription/${telegramId}`);
+                const data = await response.json();
+
+                if (!data.subscribed) {
+                    showSubscriptionModal();
+                    return;
+                }
+
+                // Play video
+                openVideoPlayer(episodeId);
+            } catch (error) {
+                console.error('Failed to check subscription:', error);
+                showSubscriptionModal();
+            }
+        }
+
+        function openVideoPlayer(episodeId) {
+            const videoUrl = `/api/video/${episodeId}`;
+            
+            // Create video player modal
+            const videoModal = document.createElement('div');
+            videoModal.id = 'videoModal';
+            videoModal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.95);
+                z-index: 2000;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+            `;
+            
+            videoModal.innerHTML = `
+                <button onclick="closeVideoPlayer()" style="
+                    position: absolute;
+                    top: 20px;
+                    right: 20px;
+                    background: #e50914;
+                    color: white;
+                    border: none;
+                    padding: 10px 20px;
+                    font-size: 16px;
+                    cursor: pointer;
+                    border-radius: 4px;
+                    z-index: 2001;
+                ">Close</button>
+                <video controls autoplay style="max-width: 90%; max-height: 90%;">
+                    <source src="${videoUrl}" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            `;
+            
+            document.body.appendChild(videoModal);
+        }
+
+        function closeVideoPlayer() {
+            const videoModal = document.getElementById('videoModal');
+            if (videoModal) {
+                const video = videoModal.querySelector('video');
+                if (video) {
+                    video.pause();
+                    video.src = '';
+                }
+                videoModal.remove();
+            }
+        }
+
+        function showSection(section) {
+            // Hide all sections
+            document.getElementById('catalogue').style.display = 'none';
+            document.getElementById('betting').style.display = 'none';
+            document.getElementById('wallet').style.display = 'none';
+            
+            // Remove active class from all nav links
+            document.getElementById('nav-anime').classList.remove('active');
+            document.getElementById('nav-betting').classList.remove('active');
+            document.getElementById('nav-wallet').classList.remove('active');
+            
+            // Show selected section
+            document.getElementById(section).style.display = 'block';
+            document.getElementById('nav-' + section).classList.add('active');
+            
+            // Load section data
+            if (section === 'betting') {
+                loadBettingMarkets();
+            } else if (section === 'wallet') {
+                loadWalletData();
+            }
+        }
+
+        async function loadBettingMarkets() {
+            try {
+                const response = await fetch('/api/betting/markets');
+                const markets = await response.json();
+                
+                const grid = document.getElementById('bettingGrid');
+                grid.innerHTML = markets.map(market => `
+                    <div class="betting-card">
+                        <div class="betting-title">${market.title}</div>
+                        <div class="betting-description">${market.description}</div>
+                        <div class="betting-options">
+                            ${JSON.parse(market.options).map(option => `
+                                <div class="betting-option" onclick="placeBet(${market.id}, '${option}')">
+                                    <span>${option}</span>
+                                    <span class="betting-volume">Bet</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div style="margin-top: 12px; font-size: 12px; color: #999;">
+                            Ends: ${new Date(market.end_date).toLocaleDateString()} • Fee: ${(market.fee_rate * 100).toFixed(1)}%
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load betting markets:', error);
+                document.getElementById('bettingGrid').innerHTML = '<div class="loading">Failed to load betting markets</div>';
+            }
+        }
+
+        async function placeBet(marketId, option) {
+            const amount = prompt('Enter bet amount in BTC:');
+            if (!amount) return;
+            
+            const userId = getTelegramId() || 1; // Default to user ID 1 for testing
+            
+            try {
+                const response = await fetch('/api/betting/bet', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId, marketId, option, amount: parseFloat(amount) })
+                });
+                
+                const data = await response.json();
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    alert('Bet placed successfully! Potential payout: ' + data.potentialPayout + ' BTC');
+                }
+            } catch (error) {
+                console.error('Failed to place bet:', error);
+                alert('Failed to place bet');
+            }
+        }
+
+        async function loadWalletData() {
+            const userId = getTelegramId() || 1;
+            
+            try {
+                // Load balance
+                const balanceResponse = await fetch(`/api/betting/user/${userId}/balance`);
+                const balance = await balanceResponse.json();
+                
+                document.getElementById('btcBalance').textContent = balance.btc_balance.toFixed(8) + ' BTC';
+                document.getElementById('totalDeposited').textContent = balance.total_deposited.toFixed(8) + ' BTC';
+                document.getElementById('totalWon').textContent = balance.total_won.toFixed(8) + ' BTC';
+                document.getElementById('totalLost').textContent = balance.total_lost.toFixed(8) + ' BTC';
+                
+                // Load bets
+                const betsResponse = await fetch(`/api/betting/user/${userId}/bets`);
+                const bets = await betsResponse.json();
+                
+                const betsList = document.getElementById('yourBetsList');
+                if (bets.length === 0) {
+                    betsList.innerHTML = '<div style="text-align: center; padding: 20px; color: #999;">No bets yet</div>';
+                } else {
+                    betsList.innerHTML = bets.map(bet => `
+                        <div class="bet-item">
+                            <div style="font-weight: bold; margin-bottom: 8px;">${bet.market_title}</div>
+                            <div style="font-size: 14px; color: #999; margin-bottom: 8px;">
+                                Bet: ${bet.option} • Amount: ${bet.amount.toFixed(8)} BTC
+                            </div>
+                            <span class="bet-status ${bet.status}">${bet.status.toUpperCase()}</span>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Failed to load wallet data:', error);
+            }
+        }
+
+        function showDepositModal() {
+            const btcAddress = 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh';
+            alert(`Send BTC to: ${btcAddress}\n\nMinimum deposit: 0.001 BTC\n\nDeposits will be credited after confirmation.`);
+        }
+
+        function getTelegramId() {
+            const tg = window.Telegram.WebApp;
+            return tg.initDataUnsafe?.user?.id;
+        }
+
+        function closeModal() {
+            document.getElementById('animeModal').style.display = 'none';
+        }
+
+        function showSubscriptionModal() {
+            document.getElementById('subscriptionModal').style.display = 'flex';
+        }
+
+        function closeSubscriptionModal() {
+            document.getElementById('subscriptionModal').style.display = 'none';
+        }
+
+        function selectPlan(plan) {
+            selectedPlan = plan;
+            document.querySelectorAll('.pricing-option').forEach(el => el.classList.remove('selected'));
+            event.target.closest('.pricing-option').classList.add('selected');
+        }
+
+        async function subscribe() {
+            if (!selectedPlan) {
+                alert('Please select a plan');
+                return;
+            }
+
+            const telegramId = getTelegramId();
+            if (!telegramId) {
+                alert('Please open this app from Telegram');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/create-payment', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        planType: selectedPlan,
+                        telegramId: telegramId
+                    })
+                });
+
+                const data = await response.json();
+                if (data.url) {
+                    // Open OwnPay checkout in Telegram
+                    const tg = window.Telegram.WebApp;
+                    tg.openLink(data.url);
+                } else {
+                    alert('Failed to create payment');
+                }
+            } catch (error) {
+                console.error('Subscription error:', error);
+                alert('Failed to process subscription');
+            }
+        }
+
+        function scrollToCatalogue() {
+            document.getElementById('catalogue').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('input', async (e) => {
+            const query = e.target.value.toLowerCase();
+            if (query.length < 2) {
+                loadAnime();
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/anime');
+                const anime = await response.json();
+                const filtered = anime.filter(a => 
+                    a.title.toLowerCase().includes(query) || 
+                    (a.genre && a.genre.toLowerCase().includes(query))
+                );
+                renderAnime(filtered);
+            } catch (error) {
+                console.error('Search failed:', error);
+            }
+        });
+
+        // Initialize
+        loadAnime();
+
+        // Telegram WebApp setup
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+    </script>
+</body>
+</html>
