@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/index.js",
     "bot": "node bot.js",
-    "seed": "node src/seed-betting-markets.js",
+    "seed:quizzes": "node src/seed-quizzes.js",
+    "seed:betting": "node src/seed-betting-markets.js",
     "import": "node src/import-anime.js"
   },
   "keywords": [

@@ -94,6 +94,51 @@ db.exec(`
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
+
+  CREATE TABLE IF NOT EXISTS user_points (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER UNIQUE,
+    points INTEGER DEFAULT 0,
+    total_earned INTEGER DEFAULT 0,
+    total_spent INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS quizzes (
+    id INTEGER PRIMARY KEY,
+    anime_id INTEGER,
+    title TEXT,
+    description TEXT,
+    questions TEXT,
+    reward_points INTEGER DEFAULT 50,
+    difficulty TEXT DEFAULT 'easy',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (anime_id) REFERENCES anime(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS user_quiz_attempts (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER,
+    quiz_id INTEGER,
+    score INTEGER,
+    points_earned INTEGER DEFAULT 0,
+    completed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (quiz_id) REFERENCES quizzes(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS user_profiles (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER UNIQUE,
+    username TEXT,
+    bio TEXT,
+    cover_image TEXT,
+    profile_image TEXT,
+    badges TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
 `);
 
 // Initialize OwnPay client (will be loaded dynamically)
@@ -444,6 +489,165 @@ app.post('/api/betting/deposit', async (req, res) => {
       btcAddress: process.env.BTC_WALLET_ADDRESS
     });
   }
+});
+
+// API: Get all quizzes
+app.get('/api/quizzes', (req, res) => {
+  const quizzes = db.prepare('SELECT * FROM quizzes ORDER BY created_at DESC').all();
+  res.json(quizzes);
+});
+
+// API: Get quiz by ID
+app.get('/api/quizzes/:id', (req, res) => {
+  const quiz = db.prepare('SELECT * FROM quizzes WHERE id = ?').get(req.params.id);
+  if (!quiz) {
+    return res.status(404).json({ error: 'Quiz not found' });
+  }
+  res.json(quiz);
+});
+
+// API: Submit quiz attempt
+app.post('/api/quizzes/:id/submit', (req, res) => {
+  const { userId, answers } = req.body;
+  const quizId = req.params.id;
+  
+  const quiz = db.prepare('SELECT * FROM quizzes WHERE id = ?').get(quizId);
+  if (!quiz) {
+    return res.status(404).json({ error: 'Quiz not found' });
+  }
+  
+  const questions = JSON.parse(quiz.questions);
+  let correctCount = 0;
+  
+  questions.forEach((q, index) => {
+    if (answers[index] === q.correctAnswer) {
+      correctCount++;
+    }
+  });
+  
+  const score = Math.round((correctCount / questions.length) * 100);
+  const pointsEarned = Math.round((score / 100) * quiz.reward_points);
+  
+  // Record quiz attempt
+  db.prepare(`
+    INSERT INTO user_quiz_attempts (user_id, quiz_id, score, points_earned)
+    VALUES (?, ?, ?, ?)
+  `).run(userId, quizId, score, pointsEarned);
+  
+  // Update user points
+  let userPoints = db.prepare('SELECT * FROM user_points WHERE user_id = ?').get(userId);
+  if (!userPoints) {
+    db.prepare(`
+      INSERT INTO user_points (user_id, points, total_earned)
+      VALUES (?, ?, ?)
+    `).run(userId, pointsEarned, pointsEarned);
+  } else {
+    db.prepare(`
+      UPDATE user_points
+      SET points = points + ?, total_earned = total_earned + ?
+      WHERE user_id = ?
+    `).run(pointsEarned, pointsEarned, userId);
+  }
+  
+  res.json({
+    score,
+    pointsEarned,
+    correctCount,
+    totalQuestions: questions.length,
+    message: score >= 70 ? 'Great job! Points earned.' : 'Keep practicing!'
+  });
+});
+
+// API: Get user points
+app.get('/api/points/:userId', (req, res) => {
+  let points = db.prepare('SELECT * FROM user_points WHERE user_id = ?').get(req.params.userId);
+  if (!points) {
+    points = {
+      points: 0,
+      total_earned: 0,
+      total_spent: 0
+    };
+  }
+  res.json(points);
+});
+
+// API: Purchase points with BTC
+app.post('/api/points/purchase', async (req, res) => {
+  const { userId, pointsAmount } = req.body;
+  
+  // Calculate BTC cost (1000 points = 0.0001 BTC)
+  const btcCost = (pointsAmount / 1000) * 0.0001;
+  
+  try {
+    // Create payment with OwnPayment
+    const OwnPayModule = await import('ownpay-nodejs');
+    const ownpay = new OwnPayModule.default({
+      apiKey: process.env.OWNPAY_API_KEY,
+      baseUrl: process.env.OWNPAY_BASE_URL
+    });
+    
+    const payment = await ownpay.payments.create({
+      amount: btcCost,
+      currency: 'BTC',
+      redirect_url: `${process.env.SITE_URL}/points/success`,
+      cancel_url: `${process.env.SITE_URL}/points/cancel`,
+      callback_url: `${process.env.SITE_URL}/webhook/ownpayment`,
+      reference: `POINTS-${userId}-${Date.now()}`,
+      metadata: {
+        userId: userId.toString(),
+        pointsAmount: pointsAmount.toString()
+      }
+    });
+    
+    // Record transaction
+    db.prepare(`
+      INSERT INTO transactions (user_id, type, amount, btc_address, tx_hash, status)
+      VALUES (?, 'points_purchase', ?, ?, ?, 'pending')
+    `).run(userId, pointsAmount, process.env.BTC_WALLET_ADDRESS, payment.paymentId);
+    
+    res.json({
+      checkoutUrl: payment.checkoutUrl,
+      paymentId: payment.paymentId,
+      btcCost,
+      pointsAmount
+    });
+  } catch (error) {
+    console.error('Payment error:', error);
+    res.status(500).json({ error: 'Payment initialization failed' });
+  }
+});
+
+// API: Get user profile
+app.get('/api/profile/:userId', (req, res) => {
+  const profile = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(req.params.userId);
+  if (!profile) {
+    return res.json({ username: null, bio: null, cover_image: null, profile_image: null, badges: [] });
+  }
+  profile.badges = profile.badges ? JSON.parse(profile.badges) : [];
+  res.json(profile);
+});
+
+// API: Update user profile
+app.put('/api/profile/:userId', (req, res) => {
+  const { username, bio, cover_image, profile_image } = req.body;
+  const userId = req.params.userId;
+  
+  let existing = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(userId);
+  
+  if (existing) {
+    db.prepare(`
+      UPDATE user_profiles
+      SET username = ?, bio = ?, cover_image = ?, profile_image = ?
+      WHERE user_id = ?
+    `).run(username, bio, cover_image, profile_image, userId);
+  } else {
+    db.prepare(`
+      INSERT INTO user_profiles (user_id, username, bio, cover_image, profile_image)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(userId, username, bio, cover_image, profile_image);
+  }
+  
+  res.json({ message: 'Profile updated successfully' });
 });
 
 // API: BTCPay webhook handler
