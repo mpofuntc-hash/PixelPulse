@@ -206,8 +206,8 @@ Follow the prompts:
 
 ### 3.4 Add Environment Variables
 ```bash
-railway variables set TELEGRAM_BOT_TOKEN=your_bot_token
-railway variables set DATABASE_URL=postgres://user:password@host:port/database
+railway variables set TELEGRAM_BOT_TOKEN=8657988536:AAEY_vH5WaBseYHOxs2Reb7wcN2NU0k3Z00
+railway variables set DATABASE_URL=postgresql://neondb_owner:npg_romK0N2VdvQM@ep-broad-pond-avft85az-pooler.c-11.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require
 ```
 
 Or use Railway Dashboard:
@@ -359,3 +359,15 @@ pm2 save
 3. Monitor logs for errors
 4. Set up alerts
 5. Update welcome message with Vercel URL
+
+---
+
+## Quick Reference
+
+**Your Credentials:**
+- Telegram Bot Token: `8657988536:AAEY_vH5WaBseYHOxs2Reb7wcN2NU0k3Z00`
+- Neon Database URL: `postgresql://neondb_owner:npg_romK0N2VdvQM@ep-broad-pond-avft85az-pooler.c-11.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require`
+
+**Railway Settings:**
+- Start Command: `npm run bot`
+- Environment Variables: Set both above
