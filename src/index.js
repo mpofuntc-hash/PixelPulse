@@ -153,19 +153,27 @@ async function getTokenRate(tokenType) {
 
 // ESPORTS API INTEGRATION
 
-// PandaScore API integration
-async function fetchPandaScoreMatches(game = 'cs2') {
-  const gameId = game === 'cs2' ? 'csgo' : 'valorant';
+// PandaScore creates and settles markets from provider facts; it never
+// fabricates an outcome or claims an event is live without source data.
+const PANDASCORE_GAMES = { cs2: 'csgo', valorant: 'valorant', lol: 'lol', dota2: 'dota2' };
+
+async function fetchPandaScoreMatches(game = 'cs2', state = 'upcoming') {
+  const gameId = PANDASCORE_GAMES[game];
+  const apiKey = process.env.PANDASCORE_API_KEY;
+  if (!apiKey || !gameId) return [];
+  const endpoint = state === 'live' ? 'running' : 'upcoming';
+  const url = new URL(`https://api.pandascore.co/matches/${endpoint}`);
+  url.searchParams.set('filter[videogame]', gameId);
+  url.searchParams.set('token', apiKey);
   return new Promise((resolve, reject) => {
-    https.get(`https://api.pandascore.co/matches/upcoming?filter[videogame]=${gameId}`, {
-      headers: { 'Authorization': `Bearer ${process.env.PANDASCORE_API_KEY || ''}` }
-    }, (res) => {
+    https.get(url, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
         try {
+          if (res.statusCode < 200 || res.statusCode >= 300) return reject(new Error(`PandaScore returned HTTP ${res.statusCode}`));
           const matches = JSON.parse(data);
-          resolve(matches);
+          resolve(Array.isArray(matches) ? matches : []);
         } catch (error) {
           reject(error);
         }
@@ -195,7 +203,13 @@ async function fetchEsportsMatches(game = 'cs2') {
       fetchLiquipediaMatches(game).catch(() => [])
     ]);
     
-    return [...pandaMatches, ...ggMatches, ...liquiMatches];
+    const seen = new Set();
+    return [...pandaMatches, ...ggMatches, ...liquiMatches].filter(match => {
+      const key = `${match.id || ''}:${match.name || ''}:${match.scheduled_at || ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   } catch (error) {
     console.error('Error fetching esports matches:', error);
     return [];
@@ -314,7 +328,12 @@ async function createSubBetsForMatch(parentMarketId, match, game) {
 
 // Sync esports matches to betting markets
 async function syncEsportsMatches() {
-  const games = ['cs2', 'standoff2'];
+  if (!process.env.PANDASCORE_API_KEY) {
+    console.log('Esports sync skipped: PANDASCORE_API_KEY is not configured');
+    return { created: 0, skipped: 'missing_api_key' };
+  }
+  const games = Object.keys(PANDASCORE_GAMES);
+  let created = 0;
   
   for (const game of games) {
     try {
@@ -326,6 +345,7 @@ async function syncEsportsMatches() {
         
         if (!existing) {
           await createBettingMarketFromMatch(match, game);
+          created++;
           console.log(`Created betting market for ${game} match: ${match.opponent1?.name} vs ${match.opponent2?.name}`);
         }
       }
@@ -333,6 +353,7 @@ async function syncEsportsMatches() {
       console.error(`Error syncing ${game} matches:`, error);
     }
   }
+  return { created };
 }
 
 // Resolve betting markets from API data
@@ -2305,6 +2326,46 @@ app.get('/api/esports/data', async (req, res) => {
   }
 });
 
+// Information-first feed for the Prediction page. Fixtures are shown before a
+// market is opened, and source availability is explicit instead of simulated.
+app.get('/api/predictions/feed', async (req, res) => {
+  const requested = String(req.query.games || 'cs2,valorant,lol,dota2')
+    .split(',').map(game => game.trim()).filter(game => PANDASCORE_GAMES[game]);
+  const games = requested.length ? requested : Object.keys(PANDASCORE_GAMES);
+  const [liveGroups, upcomingGroups, anime] = await Promise.all([
+    Promise.all(games.map(async game => ({ game, matches: await fetchPandaScoreMatches(game, 'live').catch(() => []) }))),
+    Promise.all(games.map(async game => ({ game, matches: await fetchPandaScoreMatches(game, 'upcoming').catch(() => []) }))),
+    fetchAniListAnime().catch(() => [])
+  ]);
+  const decorate = groups => groups.flatMap(({ game, matches }) => matches.map(match => ({
+    id: match.id,
+    game,
+    title: match.name || `${match.opponents?.[0]?.opponent?.name || 'TBD'} vs ${match.opponents?.[1]?.opponent?.name || 'TBD'}`,
+    league: match.league?.name || 'Tournament',
+    scheduledAt: match.scheduled_at || match.begin_at,
+    status: match.status,
+    bestOf: match.number_of_games ? `BO${match.number_of_games}` : null,
+    opponents: (match.opponents || []).map(entry => entry.opponent?.name).filter(Boolean)
+  })));
+  res.json({
+    mode: process.env.PREDICTION_MODE || 'credits',
+    sources: {
+      pandaScore: { configured: Boolean(process.env.PANDASCORE_API_KEY), games: Object.keys(PANDASCORE_GAMES) },
+      aniList: { configured: true }
+    },
+    live: decorate(liveGroups),
+    upcoming: decorate(upcomingGroups),
+    anime: anime.slice(0, 8).map(item => ({
+      id: item.id,
+      title: item.title?.english || item.title?.romaji || item.title,
+      startDate: item.startDate,
+      score: item.averageScore,
+      genres: item.genres || []
+    })),
+    refreshedAt: new Date().toISOString()
+  });
+});
+
 // API: Manual sync anime data
 app.post('/api/admin/sync-anime', (req, res) => {
   syncAnimeData()
@@ -3160,14 +3221,17 @@ app.post('/api/convert', async (req, res) => {
 // BETTING API ENDPOINTS
 
 // API: Get all betting markets
-app.get('/api/betting/markets', (req, res) => {
-  const markets = db.prepare('SELECT * FROM betting_markets WHERE status = ? AND parent_market_id IS NULL ORDER BY created_at DESC').all('active');
+app.get('/api/betting/markets', async (req, res) => {
+  const markets = await dbAll(`SELECT bm.*, COUNT(ub.id) AS total_bets
+    FROM betting_markets bm LEFT JOIN user_bets ub ON ub.market_id = bm.id
+    WHERE bm.status = ? AND bm.parent_market_id IS NULL
+    GROUP BY bm.id ORDER BY bm.end_date ASC`, ['active']);
   res.json(markets);
 });
 
 // API: Get sub-bets for a market
-app.get('/api/betting/markets/:id/sub-bets', (req, res) => {
-  const subBets = db.prepare('SELECT * FROM betting_markets WHERE parent_market_id = ? AND status = ? ORDER BY layer_depth ASC').all(req.params.id, 'active');
+app.get('/api/betting/markets/:id/sub-bets', async (req, res) => {
+  const subBets = await dbAll('SELECT * FROM betting_markets WHERE parent_market_id = ? AND status = ? ORDER BY layer_depth ASC', [req.params.id, 'active']);
   res.json(subBets);
 });
 

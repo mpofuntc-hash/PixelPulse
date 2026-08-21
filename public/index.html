@@ -698,6 +698,15 @@
                 <button class="btn" style="background: #2f2f2f; color: #fff; border: 1px solid #333;" onclick="filterMarkets('anime')">Anime</button>
             </div>
         </div>
+
+        <div style="background: linear-gradient(135deg, #121c18, #171717); border: 1px solid #2d5438; border-radius: 10px; padding: 18px; margin-bottom: 20px;">
+            <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
+                <div><div style="font-size:12px; color:#8cdb9a; font-weight:bold; letter-spacing:.08em;">LIVE INFORMATION FIRST</div><h3 style="margin:4px 0 0;">Events waiting for your prediction</h3></div>
+                <span id="predictionSourceStatus" style="font-size:12px; color:#aaa;">Checking sources…</span>
+            </div>
+            <div id="predictionLiveFeed" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px;"><div style="color:#999;">Loading live fixtures…</div></div>
+            <div id="predictionUpcomingFeed" style="margin-top:12px; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px;"></div>
+        </div>
         
         <!-- Auto-scrolling news ticker -->
         <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; border: 1px solid #333; margin-bottom: 20px; overflow: hidden;">
@@ -1600,8 +1609,49 @@
             }
         }
 
+        function escapePredictionText(value) {
+            return String(value || '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+        }
+
+        function predictionEventCard(event, live) {
+            const teams = event.opponents?.length ? event.opponents.join(' vs ') : event.title;
+            const timing = event.scheduledAt ? new Date(event.scheduledAt).toLocaleString() : 'Start time pending';
+            return `<div style="padding:12px; background:#101010; border:1px solid #333; border-radius:7px;">
+                <div style="font-size:11px; color:${live ? '#ff7777' : '#8cdb9a'}; font-weight:bold; text-transform:uppercase;">${live ? '● Live now' : 'Upcoming'} · ${escapePredictionText(event.game)}</div>
+                <div style="font-weight:bold; margin-top:5px;">${escapePredictionText(teams)}</div>
+                <div style="font-size:12px; color:#aaa; margin-top:4px;">${escapePredictionText(event.league)}${event.bestOf ? ` · ${escapePredictionText(event.bestOf)}` : ''}</div>
+                <div style="font-size:11px; color:#777; margin-top:5px;">${escapePredictionText(timing)}</div>
+            </div>`;
+        }
+
+        async function loadPredictionFeed() {
+            const live = document.getElementById('predictionLiveFeed');
+            const upcoming = document.getElementById('predictionUpcomingFeed');
+            const sourceStatus = document.getElementById('predictionSourceStatus');
+            try {
+                const response = await fetch('/api/predictions/feed');
+                const feed = await response.json();
+                if (!response.ok) throw new Error(feed.error || 'Feed unavailable');
+                const sourceLabel = feed.sources.pandaScore.configured
+                    ? `PandaScore live feed connected · ${new Date(feed.refreshedAt).toLocaleTimeString()}`
+                    : 'Esports feed awaits PandaScore API key · AniList is live';
+                sourceStatus.textContent = sourceLabel;
+                live.innerHTML = feed.live.length
+                    ? feed.live.map(event => predictionEventCard(event, true)).join('')
+                    : '<div style="padding:12px; color:#999;">No verified live esports events right now.</div>';
+                const cards = feed.upcoming.slice(0, 6).map(event => predictionEventCard(event, false));
+                const animeCards = feed.anime.slice(0, 2).map(anime => `<div style="padding:12px; background:#101010; border:1px solid #333; border-radius:7px;"><div style="font-size:11px; color:#ad8cff; font-weight:bold;">UPCOMING ANIME</div><div style="font-weight:bold; margin-top:5px;">${escapePredictionText(anime.title)}</div><div style="font-size:12px; color:#aaa; margin-top:4px;">${anime.startDate?.year || 'Date TBA'} · ${(anime.genres || []).slice(0, 2).map(escapePredictionText).join(', ')}</div></div>`);
+                upcoming.innerHTML = [...cards, ...animeCards].join('') || '<div style="padding:12px; color:#999;">No scheduled events available yet.</div>';
+            } catch (error) {
+                sourceStatus.textContent = 'Live sources are temporarily unavailable';
+                live.innerHTML = '<div style="padding:12px; color:#999;">Live fixtures will appear here when the data source reconnects.</div>';
+                upcoming.innerHTML = '';
+            }
+        }
+
         async function loadBettingMarkets() {
             try {
+                loadPredictionFeed();
                 const response = await fetch('/api/betting/markets');
                 const markets = await response.json();
                 
