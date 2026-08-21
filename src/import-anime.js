@@ -72,10 +72,7 @@ Object.entries(animeGroups).forEach(([key, anime]) => {
   let animeId;
   
   if (!existing) {
-    // Determine if this is a "big 3" anime (free tier)
-    const big3 = ['One Piece', 'Naruto', 'Dragon Ball Z'];
-    const isFree = big3.some(name => anime.title.toLowerCase().includes(name.toLowerCase()));
-    
+    // All anime are now free tier
     const result = db.prepare(`
       INSERT INTO anime (title, description, cover_image, genre, year, rating, free_tier)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -86,10 +83,10 @@ Object.entries(animeGroups).forEach(([key, anime]) => {
       'Anime',
       2020,
       'TV-14',
-      isFree ? 1 : 0
+      1 // All anime are free
     );
     animeId = result.lastInsertRowid;
-    console.log(`  Created anime ID: ${animeId} (Free: ${isFree})`);
+    console.log(`  Created anime ID: ${animeId} (Free: true)`);
   } else {
     animeId = existing.id;
     console.log(`  Using existing anime ID: ${animeId}`);
