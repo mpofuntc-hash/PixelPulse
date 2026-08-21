@@ -53,6 +53,28 @@ function dbAll(sql, params = []) {
   });
 }
 
+function postJson(url, payload) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload);
+    const request = https.request(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+    }, response => {
+      let data = '';
+      response.on('data', chunk => data += chunk);
+      response.on('end', () => {
+        try {
+          if (response.statusCode < 200 || response.statusCode >= 300) return reject(new Error(`HTTP ${response.statusCode}`));
+          resolve(JSON.parse(data));
+        } catch (error) { reject(error); }
+      });
+    });
+    request.on('error', reject);
+    request.write(body);
+    request.end();
+  });
+}
+
 // Supported currencies
 const SUPPORTED_CURRENCIES = {
   'USD': { symbol: '$', type: 'fiat' },
@@ -474,23 +496,9 @@ async function fetchAniListAnime() {
       }
     `;
     
-    https.post('https://graphql.anilist.co', JSON.stringify({ query }), {
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      }
-    }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const anime = JSON.parse(data);
-          resolve(anime.data?.Page?.media || []);
-        } catch (error) {
-          reject(error);
-        }
-      });
-    }).on('error', reject);
+    postJson('https://graphql.anilist.co', { query })
+      .then(anime => resolve(anime.data?.Page?.media || []))
+      .catch(reject);
   });
 }
 
@@ -721,23 +729,9 @@ async function fetchAnimeStatus(apiSource, eventId) {
         }
       `;
       
-      https.post('https://graphql.anilist.co', JSON.stringify({ query }), {
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
-      }, (res) => {
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => {
-          try {
-            const anime = JSON.parse(data);
-            resolve(anime.data?.Media);
-          } catch (error) {
-            reject(error);
-          }
-        });
-      }).on('error', reject);
+      postJson('https://graphql.anilist.co', { query })
+        .then(anime => resolve(anime.data?.Media))
+        .catch(reject);
     });
   }
   return null;
