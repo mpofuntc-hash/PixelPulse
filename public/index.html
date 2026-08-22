@@ -654,7 +654,7 @@
         <a href="#" class="logo">PixelPulse</a>
         <div class="nav-links">
             <a href="#" onclick="showSection('clips')" class="active" id="nav-clips">Clips</a>
-            <a href="#" onclick="showSection('betting')" id="nav-betting">Betting</a>
+            <a href="#" onclick="showSection('betting')" id="nav-betting">Predictions</a>
             <a href="#" onclick="showSection('marketplace')" id="nav-marketplace">Marketplace</a>
             <a href="#" onclick="showSection('gold-transfer')" id="nav-gold-transfer">Send Gold</a>
             <a href="#" onclick="showSection('chat')" id="nav-chat">Chat</a>
@@ -670,11 +670,11 @@
 
     <div class="hero">
         <div class="hero-content">
-            <h1 class="hero-title">Gaming Clips & Betting</h1>
-            <p class="hero-description">Share your CS2 & Standoff 2 highlights. Bet on matches. Trade skins. Win prizes.</p>
+            <h1 class="hero-title">Gaming Clips & Predictions</h1>
+            <p class="hero-description">Share your CS2 & Standoff 2 highlights. Explore demo-only predictions using demo credits. Marketplaces and transfers remain informational only unless verified by official integrations.</p>
             <div class="hero-buttons">
                 <button class="btn btn-primary" onclick="showSection('clips')">Browse Clips</button>
-                <button class="btn btn-secondary" onclick="showSection('betting')">Betting Markets</button>
+                <button class="btn btn-secondary" onclick="showSection('betting')">Demo Predictions</button>
             </div>
         </div>
     </div>
@@ -691,7 +691,7 @@
 
     <div class="section" id="betting" style="display: none;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h2 class="section-title">Prediction Markets</h2>
+            <h2 class="section-title">Prediction Markets — Demo Credits Only</h2>
             <div style="display: flex; gap: 10px;">
                 <button class="btn" style="background: #2f2f2f; color: #fff; border: 1px solid #333;" onclick="filterMarkets('all')">All</button>
                 <button class="btn" style="background: #2f2f2f; color: #fff; border: 1px solid #333;" onclick="filterMarkets('esports')">Esports</button>
@@ -1763,7 +1763,7 @@
                     data: {
                         labels: data.map(d => d.date),
                         datasets: [{
-                            label: 'Betting Volume (BTC)',
+                            label: 'Demo Prediction Volume (demo credits)',
                             data: data.map(d => d.total_volume || 0),
                             borderColor: '#e50914',
                             backgroundColor: 'rgba(229, 9, 20, 0.1)',

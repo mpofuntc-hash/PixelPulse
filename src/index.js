@@ -1,7 +1,12 @@
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const app = express();
+
+process.on('unhandledRejection', (err) => {
+  console.error('UnhandledRejection:', err && err.stack ? err.stack : err);
+});
 
 const PORT = process.env.PORT || 3000;
 const fs = require('fs');
@@ -51,6 +56,55 @@ function dbAll(sql, params = []) {
       else resolve(rows);
     });
   });
+}
+
+async function ensureSchemaColumn(tableName, columnName, definition) {
+  const columns = await dbAll(`PRAGMA table_info(${tableName})`);
+  if (columns.some((column) => column.name === columnName)) {
+    return;
+  }
+  await dbExec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+  console.log(`Migrated ${tableName}.${columnName}`);
+}
+
+async function ensureLegacySchema() {
+  const requiredColumns = [
+    ['users', 'email', 'TEXT'],
+    ['users', 'password_hash', 'TEXT'],
+    ['users', 'username', 'TEXT'],
+    ['users', 'is_adult', 'INTEGER DEFAULT 0'],
+    ['users', 'subscription_status', "TEXT DEFAULT 'free'"],
+    ['users', 'game_points', 'INTEGER DEFAULT 0'],
+    ['users', 'steam_tokens', 'REAL DEFAULT 0'],
+    ['users', 'standoff2_tokens', 'REAL DEFAULT 0'],
+    ['admin_users', 'email', 'TEXT'],
+    ['admin_users', 'password_hash', 'TEXT'],
+    ['admin_users', 'is_one_time_password', 'INTEGER DEFAULT 1'],
+    ['betting_markets', 'fee_rate', 'REAL DEFAULT 0.02'],
+    ['betting_markets', 'total_volume', 'REAL DEFAULT 0'],
+    ['betting_markets', 'bet_type', "TEXT DEFAULT 'simple'"],
+    ['betting_markets', 'api_source', 'TEXT'],
+    ['betting_markets', 'api_event_id', 'TEXT'],
+    ['betting_markets', 'resolution_value', 'TEXT'],
+    ['betting_markets', 'parent_market_id', 'INTEGER'],
+    ['betting_markets', 'layer_depth', 'INTEGER DEFAULT 0'],
+    ['betting_markets', 'condition_logic', 'TEXT'],
+    ['user_balances', 'btc_balance', 'REAL DEFAULT 0'],
+    ['user_profiles', 'username', 'TEXT'],
+    ['user_profiles', 'avatar_id', "TEXT DEFAULT 'male_default'"],
+    ['user_profiles', 'banner_id', "TEXT DEFAULT 'bronze_cloth'"],
+    ['user_points', 'points', 'INTEGER DEFAULT 0'],
+    ['sessions', 'session_token', 'TEXT'],
+    ['sessions', 'expires_at', 'TEXT']
+  ];
+
+  for (const [tableName, columnName, definition] of requiredColumns) {
+    try {
+      await ensureSchemaColumn(tableName, columnName, definition);
+    } catch (error) {
+      console.warn(`Schema migration skipped for ${tableName}.${columnName}:`, error.message);
+    }
+  }
 }
 
 function postJson(url, payload) {
@@ -778,6 +832,17 @@ async function initSchema() {
   `);
 
   await dbExec(`
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+      id INTEGER PRIMARY KEY,
+      admin_id INTEGER,
+      session_token TEXT UNIQUE,
+      expires_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (admin_id) REFERENCES admin_users(id)
+    );
+  `);
+
+  await dbExec(`
     CREATE TABLE IF NOT EXISTS chat_messages (
       id INTEGER PRIMARY KEY,
       user_id INTEGER,
@@ -1361,21 +1426,25 @@ async function initSchema() {
 
 // Initialize database schema and exchange rates
 async function initDatabaseAndSchema() {
+  await ensureLegacySchema();
   await initSchema();
   await initializeExchangeRates();
 }
 
 // Initialize admin user if not exists
 async function initAdminUser() {
-  const adminEmail = 'chester.nt@zentriva.online';
-  const adminPassword = '123tryme';
+  const adminEmail = process.env.ADMIN_EMAIL || 'chester.nt@zentriva.online';
   const existingAdmin = await dbGet('SELECT * FROM admin_users WHERE email = ?', [adminEmail]);
 
   if (!existingAdmin) {
-    const crypto = require('crypto');
-    const passwordHash = crypto.createHash('sha256').update(adminPassword).digest('hex');
-    await dbRun('INSERT INTO admin_users (email, password_hash, is_one_time_password) VALUES (?, ?, 1)', [adminEmail, passwordHash]);
-    console.log('Admin user initialized with one-time password');
+    await dbRun('INSERT INTO admin_users (email, password_hash, is_one_time_password) VALUES (?, NULL, 1)', [adminEmail]);
+    console.log(`Admin user created with no password for ${adminEmail}; use reset_admin.js to set one-time password.`);
+  }
+
+  if (process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD.length > 0) {
+    const passwordHash = await hashPassword(process.env.ADMIN_PASSWORD);
+    await dbRun('UPDATE admin_users SET password_hash = ?, is_one_time_password = 1 WHERE email = ?', [passwordHash, adminEmail]);
+    console.log('Admin password applied from ADMIN_PASSWORD at startup.');
   }
 }
 
@@ -1383,7 +1452,19 @@ async function initAdminUser() {
 let ownpay = null;
 
 // Telegram bot setup
-const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+let bot;
+if (TELEGRAM_BOT_TOKEN) {
+  bot = new Telegraf(TELEGRAM_BOT_TOKEN);
+} else {
+  bot = {
+    launch: async () => {},
+    stop: async () => {},
+    command: () => {},
+    on: () => {},
+    telegram: { sendMessage: async () => {}, sendPhoto: async () => {} }
+  };
+}
 
 // Initialize database on startup
 async function startupInit() {
@@ -1854,95 +1935,142 @@ bot.on('text', (ctx) => {
 });
 
 // Express middleware
-app.use(express.json());
+app.disable('x-powered-by');
+app.use(express.json({ limit: '1mb' }));
 app.use(express.static('public'));
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowedOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000'];
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Admin-Session');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
+const rateLimitStore = new Map();
+function rateLimit({ windowMs, max, key }) {
+  return (req, res, next) => {
+    const identifier = key(req);
+    const now = Date.now();
+    const window = rateLimitStore.get(identifier) || { count: 0, resetAt: now + windowMs };
+    if (now > window.resetAt) {
+      window.count = 0;
+      window.resetAt = now + windowMs;
+    }
+    window.count += 1;
+    rateLimitStore.set(identifier, window);
+    if (window.count > max) {
+      return res.status(429).json({ error: 'Too many requests. Please slow down.' });
+    }
+    next();
+  };
+}
 
 // Helper: Generate session token
 function generateSessionToken() {
   return Math.random().toString(36).substring(2) + Date.now().toString(36);
 }
 
-// Helper: Hash password (simple for now - use bcrypt in production)
-function hashPassword(password) {
-  // In production, use bcrypt: return bcrypt.hash(password, 10);
-  return password; // TODO: Replace with proper hashing
+async function hashPassword(password) {
+  return bcrypt.hash(password, 10);
 }
 
-// Helper: Verify password
-function verifyPassword(password, hash) {
-  // In production, use bcrypt: return bcrypt.compare(password, hash);
-  return password === hash; // TODO: Replace with proper verification
+async function verifyPassword(password, hash) {
+  return bcrypt.compare(password, hash);
+}
+
+function validateEmail(email) {
+  return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+function validateText(value, { maxLength = 300, required = false } = {}) {
+  if (value === undefined || value === null) return !required ? true : false;
+  const text = String(value).trim();
+  if (required && text.length === 0) return false;
+  return text.length <= maxLength;
+}
+
+function ensureOwnsResource(req, res, resourceUserId, label = 'resource') {
+  if (Number(resourceUserId) !== Number(req.userId)) {
+    return res.status(403).json({ error: `You do not own this ${label}.` });
+  }
+  return true;
 }
 
 // AUTHENTICATION API ENDPOINTS
 
 // API: Register user
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', rateLimit({ windowMs: 60 * 1000, max: 5, key: req => `register:${req.ip || 'unknown'}` }), async (req, res) => {
   const { email, password, username, isAdult } = req.body;
-  
-  if (!email || !password || !username) {
-    return res.status(400).json({ error: 'Missing required fields' });
+
+  if (!validateEmail(email) || !validateText(password, { maxLength: 128, required: true }) || !validateText(username, { maxLength: 50, required: true })) {
+    return res.status(400).json({ error: 'Invalid email, password, or username.' });
   }
-  
-  if (!isAdult) {
+
+  if (String(password).length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  }
+
+  if (isAdult !== true && isAdult !== 1) {
     return res.status(400).json({ error: 'You must be 18+ to use this platform' });
   }
-  
-  // Check if email already exists
-  const existing = await dbGet('SELECT * FROM users WHERE email = ?', [email]);
+
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const existing = await dbGet('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
   if (existing) {
     return res.status(400).json({ error: 'Email already registered' });
   }
-  
-  // Create user
+
+  const passwordHash = await hashPassword(String(password));
   const result = await dbRun(`
     INSERT INTO users (email, password_hash, username, is_adult)
     VALUES (?, ?, ?, ?)
-  `, [email, hashPassword(password), username, isAdult ? 1 : 0]);
-  
+  `, [normalizedEmail, passwordHash, String(username).trim(), 1]);
+
   const userId = result.lastID;
-  
-  // Create user balance
   await dbRun('INSERT INTO user_balances (user_id, btc_balance) VALUES (?, 0)', [userId]);
-  
-  // Create user profile with default avatar/banner
-  await dbRun('INSERT INTO user_profiles (user_id, username, avatar_id, banner_id, pixelation_level, weekly_streak, max_streak, clip_wins) VALUES (?, ?, ?, ?, 8, 0, 0, 0)', [userId, username, 'male_default', 'bronze_cloth']);
-  
-  // Create user points
+  await dbRun('INSERT INTO user_profiles (user_id, username, avatar_id, banner_id, pixelation_level, weekly_streak, max_streak, clip_wins) VALUES (?, ?, ?, ?, 8, 0, 0, 0)', [userId, String(username).trim(), 'male_default', 'bronze_cloth']);
   await dbRun('INSERT INTO user_points (user_id, points, total_earned, total_spent) VALUES (?, 0, 0, 0)', [userId]);
-  
+
   res.json({ message: 'Registration successful', userId });
 });
 
 // API: Login user
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', rateLimit({ windowMs: 60 * 1000, max: 10, key: req => `login:${req.ip || 'unknown'}` }), async (req, res) => {
   const { email, password } = req.body;
-  
-  if (!email || !password) {
+
+  if (!validateEmail(email) || !validateText(password, { maxLength: 128, required: true })) {
     return res.status(400).json({ error: 'Missing email or password' });
   }
-  
-  const user = await dbGet('SELECT * FROM users WHERE email = ?', [email]);
+
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const user = await dbGet('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
   if (!user) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
-  
-  if (!verifyPassword(password, user.password_hash)) {
+
+  if (!(await verifyPassword(String(password), user.password_hash))) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
-  
-  // Create session
+
   const sessionToken = generateSessionToken();
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-  
+
   await dbRun(`
     INSERT INTO sessions (user_id, session_token, expires_at)
     VALUES (?, ?, ?)
   `, [user.id, sessionToken, expiresAt]);
-  
-  res.json({ 
-    message: 'Login successful', 
-    sessionToken, 
+
+  res.json({
+    message: 'Login successful',
+    sessionToken,
     user: { id: user.id, username: user.username, email: user.email }
   });
 });
@@ -1959,19 +2087,19 @@ app.post('/api/auth/logout', async (req, res) => {
 // API: Get current user
 app.get('/api/auth/me', async (req, res) => {
   const sessionToken = req.headers.authorization?.replace('Bearer ', '');
-  
+
   if (!sessionToken) {
     return res.status(401).json({ error: 'No session token' });
   }
-  
+
   const session = await dbGet('SELECT * FROM sessions WHERE session_token = ? AND expires_at > datetime("now")', [sessionToken]);
   if (!session) {
     return res.status(401).json({ error: 'Invalid or expired session' });
   }
-  
+
   const user = await dbGet('SELECT id, username, email, steam_tokens, standoff2_tokens FROM users WHERE id = ?', [session.user_id]);
   const balance = await dbGet('SELECT * FROM user_balances WHERE user_id = ?', [session.user_id]);
-  
+
   res.json({ user, balance });
 });
 
@@ -2043,15 +2171,22 @@ app.get('/api/clips/:id', (req, res) => {
 // API: Upload clip
 app.post('/api/clips', authenticateRequest, (req, res) => {
   const { title, description, video_url, game_type, thumbnail_url } = req.body;
-  
+
+  if (!validateText(title, { maxLength: 120, required: true }) || !validateText(description, { maxLength: 500 })) {
+    return res.status(400).json({ error: 'Clip title is required and must be shorter than 120 characters.' });
+  }
+
+  if (!video_url || !/^https?:\/\//.test(String(video_url))) {
+    return res.status(400).json({ error: 'A valid video URL is required.' });
+  }
+
   if (!['CS2', 'Standoff2'].includes(game_type)) {
     return res.status(400).json({ error: 'Invalid game type. Must be CS2 or Standoff2' });
   }
-  
-  // Detect video type and extract embed URL
+
   let embedUrl = video_url;
   let videoType = 'direct';
-  
+
   if (video_url.includes('youtube.com') || video_url.includes('youtu.be')) {
     videoType = 'youtube';
     const videoId = video_url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&]+)/)?.[1];
@@ -2060,13 +2195,12 @@ app.post('/api/clips', authenticateRequest, (req, res) => {
     }
   } else if (video_url.includes('twitch.tv')) {
     videoType = 'twitch';
-    // Twitch embed URL format
     const match = video_url.match(/twitch\.tv\/([^\/]+)/);
     if (match) {
       embedUrl = `https://player.twitch.tv/?channel=${match[1]}&parent=localhost`;
     }
   }
-  
+
   const result = db.prepare(`
     INSERT INTO clips (user_id, title, description, video_url, game_type, thumbnail_url)
     VALUES (?, ?, ?, ?, ?, ?)
@@ -2101,14 +2235,18 @@ app.post('/api/clips/:id/vote', authenticateRequest, (req, res) => {
 });
 
 // API: Comment on clip
-app.post('/api/clips/:id/comments', authenticateRequest, (req, res) => {
+app.post('/api/clips/:id/comments', authenticateRequest, rateLimit({ windowMs: 60 * 1000, max: 30, key: req => `clip-comments:${req.userId || req.ip}` }), (req, res) => {
   const { comment } = req.body;
-  
+
+  if (!validateText(comment, { maxLength: 500, required: true })) {
+    return res.status(400).json({ error: 'Comment must be 1-500 characters.' });
+  }
+
   const result = db.prepare(`
     INSERT INTO clip_comments (clip_id, user_id, comment)
     VALUES (?, ?, ?)
-  `).run(req.params.id, req.userId, comment);
-  
+  `).run(req.params.id, req.userId, String(comment).trim());
+
   res.json({ id: result.lastInsertRowid, message: 'Comment added successfully' });
 });
 
@@ -2237,21 +2375,33 @@ app.get('/api/chat/dm/:userId', authenticateRequest, async (req, res) => {
 });
 
 // API: Send community message
-app.post('/api/chat/community', authenticateRequest, async (req, res) => {
+app.post('/api/chat/community', authenticateRequest, rateLimit({ windowMs: 60 * 1000, max: 20, key: req => `community-chat:${req.userId || req.ip}` }), async (req, res) => {
   const { message } = req.body;
-  
-  await dbRun('INSERT INTO chat_messages (user_id, message, message_type) VALUES (?, ?, ?)', [req.userId, message, 'community']);
-  
+
+  if (!validateText(message, { maxLength: 500, required: true })) {
+    return res.status(400).json({ error: 'Message must be 1-500 characters.' });
+  }
+
+  await dbRun('INSERT INTO chat_messages (user_id, message, message_type) VALUES (?, ?, ?)', [req.userId, String(message).trim(), 'community']);
+
   res.json({ message: 'Message sent' });
 });
 
 // API: Send DM
-app.post('/api/chat/dm/:userId', authenticateRequest, async (req, res) => {
+app.post('/api/chat/dm/:userId', authenticateRequest, rateLimit({ windowMs: 60 * 1000, max: 20, key: req => `dm-chat:${req.userId}:${req.params.userId}` }), async (req, res) => {
   const otherUserId = parseInt(req.params.userId);
   const { message } = req.body;
-  
-  await dbRun('INSERT INTO chat_messages (user_id, recipient_id, message, message_type) VALUES (?, ?, ?, ?)', [req.userId, otherUserId, message, 'dm']);
-  
+
+  if (!Number.isInteger(otherUserId) || otherUserId === req.userId) {
+    return res.status(400).json({ error: 'Invalid conversation target.' });
+  }
+
+  if (!validateText(message, { maxLength: 500, required: true })) {
+    return res.status(400).json({ error: 'Message must be 1-500 characters.' });
+  }
+
+  await dbRun('INSERT INTO chat_messages (user_id, recipient_id, message, message_type) VALUES (?, ?, ?, ?)', [req.userId, otherUserId, String(message).trim(), 'dm']);
+
   res.json({ message: 'DM sent' });
 });
 
@@ -3028,33 +3178,32 @@ app.get('/api/admin/revenue', (req, res) => {
 // ADMIN AUTHENTICATION
 
 // API: Admin login
-app.post('/api/admin/login', (req, res) => {
+app.post('/api/admin/login', rateLimit({ windowMs: 60 * 1000, max: 8, key: req => `admin-login:${req.ip || 'unknown'}` }), async (req, res) => {
   const { email, password } = req.body;
-  
-  if (!email || !password) {
+
+  if (!validateEmail(email) || !validateText(password, { maxLength: 128, required: true })) {
     return res.status(400).json({ error: 'Email and password required' });
   }
-  
-  const crypto = require('crypto');
-  const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
-  
-  const admin = db.prepare('SELECT * FROM admin_users WHERE email = ? AND password_hash = ?').get(email, passwordHash);
-  
-  if (!admin) {
+
+  const admin = await dbGet('SELECT * FROM admin_users WHERE email = ?', [String(email).trim().toLowerCase()]);
+  if (!admin || !admin.password_hash) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
-  
-  // Check if one-time password
-  if (admin.is_one_time_password === 1) {
-    // Mark as used
-    db.prepare('UPDATE admin_users SET is_one_time_password = 0, last_login = CURRENT_TIMESTAMP WHERE id = ?').run(admin.id);
-  } else {
-    db.prepare('UPDATE admin_users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(admin.id);
+
+  if (!(await verifyPassword(String(password), admin.password_hash))) {
+    return res.status(401).json({ error: 'Invalid credentials' });
   }
-  
-  // Generate session token
-  const sessionToken = crypto.randomBytes(32).toString('hex');
-  
+
+  if (admin.is_one_time_password === 1) {
+    await dbRun('UPDATE admin_users SET is_one_time_password = 0, last_login = CURRENT_TIMESTAMP WHERE id = ?', [admin.id]);
+  } else {
+    await dbRun('UPDATE admin_users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', [admin.id]);
+  }
+
+  const sessionToken = require('crypto').randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  await dbRun('INSERT INTO admin_sessions (admin_id, session_token, expires_at) VALUES (?, ?, ?)', [admin.id, sessionToken, expiresAt]);
+
   res.json({
     message: 'Login successful',
     sessionToken,
@@ -3063,40 +3212,48 @@ app.post('/api/admin/login', (req, res) => {
 });
 
 // API: Admin change password
-app.post('/api/admin/change-password', (req, res) => {
+app.post('/api/admin/change-password', rateLimit({ windowMs: 60 * 1000, max: 5, key: req => `admin-change:${req.ip || 'unknown'}` }), async (req, res) => {
   const { email, currentPassword, newPassword } = req.body;
-  
-  if (!email || !currentPassword || !newPassword) {
+
+  if (!validateEmail(email) || !validateText(currentPassword, { maxLength: 128, required: true }) || !validateText(newPassword, { maxLength: 128, required: true })) {
     return res.status(400).json({ error: 'All fields required' });
   }
-  
-  const crypto = require('crypto');
-  const currentPasswordHash = crypto.createHash('sha256').update(currentPassword).digest('hex');
-  
-  const admin = db.prepare('SELECT * FROM admin_users WHERE email = ? AND password_hash = ?').get(email, currentPasswordHash);
-  
-  if (!admin) {
+
+  const admin = await dbGet('SELECT * FROM admin_users WHERE email = ?', [String(email).trim().toLowerCase()]);
+  if (!admin || !admin.password_hash) {
     return res.status(401).json({ error: 'Invalid current password' });
   }
-  
-  const newPasswordHash = crypto.createHash('sha256').update(newPassword).digest('hex');
-  db.prepare('UPDATE admin_users SET password_hash = ? WHERE id = ?').run(newPasswordHash, admin.id);
-  
+
+  if (!(await verifyPassword(String(currentPassword), admin.password_hash))) {
+    return res.status(401).json({ error: 'Invalid current password' });
+  }
+
+  if (String(newPassword).length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  }
+
+  const newPasswordHash = await hashPassword(String(newPassword));
+  await dbRun('UPDATE admin_users SET password_hash = ? WHERE id = ?', [newPasswordHash, admin.id]);
+
   logSystemEvent('info', `Admin password changed`, `Admin ID: ${admin.id}`);
-  
+
   res.json({ message: 'Password changed successfully' });
 });
 
 // Middleware to check admin session
-function checkAdminSession(req, res, next) {
+async function checkAdminSession(req, res, next) {
   const sessionToken = req.headers['x-admin-session'];
-  
-  if (!sessionToken) {
+
+  if (!sessionToken || typeof sessionToken !== 'string') {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  
-  // For simplicity, we'll use a basic token check
-  // In production, use proper session management
+
+  const adminSession = await dbGet('SELECT * FROM admin_sessions WHERE session_token = ? AND expires_at > datetime("now")', [sessionToken]);
+  if (!adminSession) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  req.adminId = adminSession.admin_id;
   next();
 }
 
@@ -3518,25 +3675,34 @@ app.get('/api/profile/:userId', (req, res) => {
 });
 
 // API: Update user profile
-app.put('/api/profile/:userId', (req, res) => {
+app.put('/api/profile/:userId', authenticateRequest, (req, res) => {
   const { username, bio, cover_image, profile_image } = req.body;
-  const userId = req.params.userId;
-  
+  const userId = parseInt(req.params.userId, 10);
+
+  if (!Number.isInteger(userId) || userId !== req.userId) {
+    return res.status(403).json({ error: 'You can only update your own profile.' });
+  }
+
+  if (!validateText(username, { maxLength: 50, required: true })) {
+    return res.status(400).json({ error: 'Username must be 1-50 characters.' });
+  }
+
+  const safeBio = validateText(bio, { maxLength: 500 }) ? String(bio || '').trim() : null;
   let existing = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(userId);
-  
+
   if (existing) {
     db.prepare(`
       UPDATE user_profiles
       SET username = ?, bio = ?, cover_image = ?, profile_image = ?
       WHERE user_id = ?
-    `).run(username, bio, cover_image, profile_image, userId);
+    `).run(username.trim(), safeBio, cover_image, profile_image, userId);
   } else {
     db.prepare(`
       INSERT INTO user_profiles (user_id, username, bio, cover_image, profile_image)
       VALUES (?, ?, ?, ?, ?)
-    `).run(userId, username, bio, cover_image, profile_image);
+    `).run(userId, username.trim(), safeBio, cover_image, profile_image);
   }
-  
+
   res.json({ message: 'Profile updated successfully' });
 });
 

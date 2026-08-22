@@ -123,22 +123,22 @@ async function initDatabase() {
 // Bot commands - Marketing & News Focus
 bot.command('start', (ctx) => {
   const welcomeMessage = `
-🎰 Welcome to PixelPulse - Anime Streaming & Betting!
-
+🎰 Welcome to PixelPulse - Anime Streaming & Demo Predictions!
+ 
 📺 FREE Anime Streaming
 • 22+ anime series
 • 560+ episodes
 • No subscription required
-
-🎲 BETTING MARKETS
-• Predict anime outcomes
-• Win BTC prizes
-• 2% flat fee on all bets
-
+ 
+🔮 PREDICTION MARKETS
+• Test anime outcomes with demo credits only
+• No real-money settlement is active
+• Public info-only until verified integrations are approved
+ 
 🔗 Start now: https://your-vercel-app.vercel.app
-
+ 
 Commands:
-/markets - View active betting markets
+/markets - View active prediction markets
 /news - Latest anime news
 /stats - Platform statistics
 /help - Get help
@@ -156,13 +156,13 @@ bot.command('markets', async (ctx) => {
       return;
     }
     
-    let message = '🎲 Active Betting Markets:\n\n';
+    let message = '🔮 Active Prediction Markets:\n\n';
     markets.forEach((market, index) => {
       const options = JSON.parse(market.options).join(', ');
       message += `${index + 1}. ${market.title}\n   Options: ${options}\n   Ends: ${new Date(market.end_date).toLocaleDateString()}\n\n`;
     });
     
-    message += '🔗 Bet now: https://your-vercel-app.vercel.app';
+    message += '🔗 View demo prediction markets: https://your-vercel-app.vercel.app';
     ctx.reply(message);
   } catch (error) {
     console.error('Error fetching markets:', error);
@@ -173,18 +173,18 @@ bot.command('markets', async (ctx) => {
 bot.command('news', (ctx) => {
   const newsMessage = `
 📰 Latest Anime News
-
-🔥 HOT: New betting markets added!
+ 
+🔥 HOT: New demo prediction markets added!
 • One Piece continuation prediction
 • Jujutsu Kaisen final villain poll
 • Demon Slayer Season 4 release date
-
+ 
 📺 NEW UPLOADS:
 • Attack on Titan Junior High (12 eps)
 • Hunter x Hunter (148 eps)
 • Jujutsu Kaisen Season 1 (18 eps)
-
-🎲 TIP: Bet on anime you know best!
+ 
+🔮 TIP: Try demo credits on the anime events you know best.
   `;
   ctx.reply(newsMessage);
 });
@@ -198,15 +198,15 @@ bot.command('stats', async (ctx) => {
     
     const statsMessage = `
 📊 Platform Statistics
-
+ 
 📺 Content:
 • ${totalAnime} Anime Series
 • ${totalEpisodes} Episodes
-
-🎲 Betting:
+ 
+🔮 Predictions — demo credits only:
 • ${activeMarkets} Active Markets
-• ${totalVolume.toFixed(4)} BTC Total Volume
-
+• ${totalVolume.toFixed(4)} BTC Total Volume (informational only)
+ 
 👥 Community growing daily!
   `;
     ctx.reply(statsMessage);
@@ -219,15 +219,15 @@ bot.command('stats', async (ctx) => {
 bot.command('help', (ctx) => {
   const helpMessage = `
 🆘 Help & Commands
-
+ 
 /start - Welcome message
-/markets - View betting markets
+/markets - View prediction markets
 /news - Latest anime news
 /stats - Platform statistics
 /help - This help message
-
+ 
 🔗 Website: https://your-vercel-app.vercel.app
-
+ 
 For support, contact: @PixelPulseSupport
   `;
   ctx.reply(helpMessage);
@@ -235,7 +235,7 @@ For support, contact: @PixelPulseSupport
 
 // Handle text messages
 bot.on('text', (ctx) => {
-  ctx.reply('Use /help to see available commands. Visit https://your-vercel-app.vercel.app for anime streaming and betting!');
+  ctx.reply('Use /help to see available commands. Visit https://your-vercel-app.vercel.app for anime streaming and demo predictions.');
 });
 
 // Start bot
