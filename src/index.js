@@ -1510,14 +1510,13 @@ setInterval(() => {
 
 // STREAK SYSTEM
 
-// Calculate weekly leaderboard and update streaks
-function calculateWeeklyLeaderboard() {
+// Update weekly leaderboard based on clip performance
+async function updateWeeklyLeaderboard() {
   const weekStart = new Date();
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay()); // Start of week (Sunday)
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
   const weekStartStr = weekStart.toISOString().split('T')[0];
   
-  // Calculate clip likes for each user this week
-  const clipStats = db.prepare(`
+  const clipStats = await dbAll(`
     SELECT 
       c.user_id,
       COUNT(c.id) as total_clips,
@@ -1526,42 +1525,39 @@ function calculateWeeklyLeaderboard() {
     FROM clips c
     WHERE c.created_at >= ?
     GROUP BY c.user_id
-  `).all(weekStartStr);
+  `, [weekStartStr]);
   
-  // Update weekly leaderboard
-  clipStats.forEach((stat, index) => {
-    const existing = db.prepare('SELECT * FROM weekly_leaderboard WHERE user_id = ? AND week_start = ?').get(stat.user_id, weekStartStr);
+  for (const [index, stat] of clipStats.entries()) {
+    const existing = await dbGet('SELECT * FROM weekly_leaderboard WHERE user_id = ? AND week_start = ?', [stat.user_id, weekStartStr]);
     
     if (existing) {
-      db.prepare(`
+      await dbRun(`
         UPDATE weekly_leaderboard 
         SET total_likes = ?, total_clips = ?, rank = ?
         WHERE id = ?
-      `).run(stat.total_likes, stat.total_clips, index + 1, existing.id);
+      `, [stat.total_likes, stat.total_clips, index + 1, existing.id]);
     } else {
-      db.prepare(`
+      await dbRun(`
         INSERT INTO weekly_leaderboard (user_id, week_start, total_likes, total_clips, rank)
         VALUES (?, ?, ?, ?, ?)
-      `).run(stat.user_id, weekStartStr, stat.total_likes, stat.total_clips, index + 1);
+      `, [stat.user_id, weekStartStr, stat.total_likes, stat.total_clips, index + 1]);
     }
-  });
+  }
   
-  // Update streaks for top performers
-  updateStreaks(weekStartStr);
+  await updateStreaks(weekStartStr);
 }
 
 // Update streaks for users who consistently perform well
-function updateStreaks(weekStartStr) {
-  const topUsers = db.prepare('SELECT user_id, rank FROM weekly_leaderboard WHERE week_start = ? AND rank <= 10 ORDER BY rank ASC').all(weekStartStr);
+async function updateStreaks(weekStartStr) {
+  const topUsers = await dbAll('SELECT user_id, rank FROM weekly_leaderboard WHERE week_start = ? AND rank <= 10 ORDER BY rank ASC', [weekStartStr]);
   
-  topUsers.forEach(user => {
-    // Award Royal Coins for top 3 weekly clip contest winners
+  for (const user of topUsers) {
     if (user.rank === 1) {
-      awardRoyalCoins(user.user_id, ROYAL_COIN_REWARDS.WEEKLY_WIN_1ST, 'Weekly clip contest 1st place');
+      await awardRoyalCoins(user.user_id, ROYAL_COIN_REWARDS.WEEKLY_WIN_1ST, 'Weekly clip contest 1st place');
     } else if (user.rank === 2) {
-      awardRoyalCoins(user.user_id, ROYAL_COIN_REWARDS.WEEKLY_WIN_2ND, 'Weekly clip contest 2nd place');
+      await awardRoyalCoins(user.user_id, ROYAL_COIN_REWARDS.WEEKLY_WIN_2ND, 'Weekly clip contest 2nd place');
     } else if (user.rank === 3) {
-      awardRoyalCoins(user.user_id, ROYAL_COIN_REWARDS.WEEKLY_WIN_3RD, 'Weekly clip contest 3rd place');
+      await awardRoyalCoins(user.user_id, ROYAL_COIN_REWARDS.WEEKLY_WIN_3RD, 'Weekly clip contest 3rd place');
     }
     
     // Check if user was in top 10 previous week
@@ -1569,39 +1565,33 @@ function updateStreaks(weekStartStr) {
     prevWeekStart.setDate(prevWeekStart.getDate() - 7);
     const prevWeekStr = prevWeekStart.toISOString().split('T')[0];
     
-    const prevWeek = db.prepare('SELECT * FROM weekly_leaderboard WHERE user_id = ? AND week_start = ? AND rank <= 10').get(user.user_id, prevWeekStr);
+    const prevWeek = await dbGet('SELECT * FROM weekly_leaderboard WHERE user_id = ? AND week_start = ? AND rank <= 10', [user.user_id, prevWeekStr]);
     
     if (prevWeek) {
-      // User has streak - increment
-      const currentStreak = db.prepare('SELECT streak_weeks FROM weekly_leaderboard WHERE user_id = ? AND week_start = ?').get(user.user_id, weekStartStr);
+      const currentStreak = await dbGet('SELECT streak_weeks FROM weekly_leaderboard WHERE user_id = ? AND week_start = ?', [user.user_id, weekStartStr]);
       const newStreak = (currentStreak?.streak_weeks || 0) + 1;
       
-      db.prepare('UPDATE weekly_leaderboard SET streak_weeks = ? WHERE user_id = ? AND week_start = ?').run(newStreak, user.user_id, weekStartStr);
+      await dbRun('UPDATE weekly_leaderboard SET streak_weeks = ? WHERE user_id = ? AND week_start = ?', [newStreak, user.user_id, weekStartStr]);
       
-      // Award streak rewards
-      awardStreakReward(user.user_id, newStreak);
-      
-      // Update avatar system streak (rank-based)
-      updateWeeklyStreak(user.user_id, user.rank);
+      await awardStreakReward(user.user_id, newStreak);
+      await updateWeeklyStreak(user.user_id, user.rank);
     } else {
-      // Reset streak
-      db.prepare('UPDATE weekly_leaderboard SET streak_weeks = 1 WHERE user_id = ? AND week_start = ?').run(user.user_id, weekStartStr);
-      // Update avatar system streak (rank-based)
-      updateWeeklyStreak(user.user_id, user.rank);
+      await dbRun('UPDATE weekly_leaderboard SET streak_weeks = 1 WHERE user_id = ? AND week_start = ?', [user.user_id, weekStartStr]);
+      await updateWeeklyStreak(user.user_id, user.rank);
     }
-  });
+  }
 }
 
 // Helper: Award Royal Coins to a user
-function awardRoyalCoins(userId, amount, reason) {
+async function awardRoyalCoins(userId, amount, reason) {
   if (!amount || amount <= 0) return;
-  const existing = db.prepare('SELECT * FROM user_points WHERE user_id = ?').get(userId);
+  const existing = await dbGet('SELECT * FROM user_points WHERE user_id = ?', [userId]);
   if (existing) {
-    db.prepare('UPDATE user_points SET points = points + ?, total_earned = total_earned + ? WHERE user_id = ?').run(amount, amount, userId);
+    await dbRun('UPDATE user_points SET points = points + ?, total_earned = total_earned + ? WHERE user_id = ?', [amount, amount, userId]);
   } else {
-    db.prepare('INSERT INTO user_points (user_id, points, total_earned) VALUES (?, ?, ?)').run(userId, amount, amount);
+    await dbRun('INSERT INTO user_points (user_id, points, total_earned) VALUES (?, ?, ?)', [userId, amount, amount]);
   }
-  logSystemEvent('info', `Awarded ${amount} Royal Coins to user ${userId}`, reason || 'Activity reward');
+  await logSystemEvent('info', `Awarded ${amount} Royal Coins to user ${userId}`, reason || 'Activity reward');
 }
 
 // Royal Coins reward constants
@@ -1617,7 +1607,7 @@ const ROYAL_COIN_REWARDS = {
 };
 
 // Award streak rewards
-function awardStreakReward(userId, streakLength) {
+async function awardStreakReward(userId, streakLength) {
   let reward = null;
   
   if (streakLength === 2) {
@@ -1641,16 +1631,15 @@ function awardStreakReward(userId, streakLength) {
   }
   
   if (reward) {
-    db.prepare(`
+    await dbRun(`
       INSERT INTO streak_rewards (user_id, streak_length, reward_type, reward_amount, reward_description)
       VALUES (?, ?, ?, ?, ?)
-    `).run(userId, streakLength, reward.type, reward.amount, reward.description);
+    `, [userId, streakLength, reward.type, reward.amount, reward.description]);
     
-    // Apply reward
     if (reward.type === 'royal_coins') {
-      awardRoyalCoins(userId, reward.amount, `Streak bonus (${streakLength} weeks)`);
+      await awardRoyalCoins(userId, reward.amount, `Streak bonus (${streakLength} weeks)`);
     } else if (reward.type === 'btc') {
-      db.prepare('UPDATE user_balances SET btc_balance = btc_balance + ? WHERE user_id = ?').run(reward.amount, userId);
+      await dbRun('UPDATE user_balances SET btc_balance = btc_balance + ? WHERE user_id = ?', [reward.amount, userId]);
     }
     
     console.log(`Awarded streak reward to user ${userId}: ${reward.description}`);
@@ -1668,26 +1657,26 @@ setInterval(() => {
 // ANALYTICS TRACKING
 
 // Track page view
-function trackPageView(sessionId) {
+async function trackPageView() {
   const today = new Date().toISOString().split('T')[0];
-  const existing = db.prepare('SELECT * FROM site_analytics WHERE date = ?').get(today);
+  const existing = await dbGet('SELECT * FROM site_analytics WHERE date = ?', [today]);
   
   if (existing) {
-    db.prepare('UPDATE site_analytics SET page_views = page_views + 1 WHERE id = ?').run(existing.id);
+    await dbRun('UPDATE site_analytics SET page_views = page_views + 1 WHERE id = ?', [existing.id]);
   } else {
-    db.prepare('INSERT INTO site_analytics (date, page_views) VALUES (?, 1)').run(today);
+    await dbRun('INSERT INTO site_analytics (date, page_views) VALUES (?, 1)', [today]);
   }
 }
 
 // Track unique visitor
-function trackVisitor(sessionId) {
+async function trackVisitor(sessionId) {
   const today = new Date().toISOString().split('T')[0];
-  const existing = db.prepare('SELECT * FROM site_analytics WHERE date = ?').get(today);
+  const existing = await dbGet('SELECT * FROM site_analytics WHERE date = ?', [today]);
   
   if (existing) {
-    db.prepare('UPDATE site_analytics SET unique_visitors = unique_visitors + 1 WHERE id = ?').run(existing.id);
+    await dbRun('UPDATE site_analytics SET unique_visitors = unique_visitors + 1 WHERE id = ?', [existing.id]);
   } else {
-    db.prepare('INSERT INTO site_analytics (date, unique_visitors) VALUES (?, 1)').run(today);
+    await dbRun('INSERT INTO site_analytics (date, unique_visitors) VALUES (?, 1)', [today]);
   }
 }
 
@@ -1838,8 +1827,8 @@ Commands:
   ctx.reply(welcomeMessage);
 });
 
-bot.command('markets', (ctx) => {
-  const markets = db.prepare('SELECT * FROM betting_markets WHERE status = ? ORDER BY created_at DESC LIMIT 5').all('active');
+bot.command('markets', async (ctx) => {
+  const markets = await dbAll('SELECT * FROM betting_markets WHERE status = ? ORDER BY created_at DESC LIMIT 5', ['active']);
   
   if (markets.length === 0) {
     ctx.reply('No active markets right now. Check back later!');
@@ -1856,8 +1845,8 @@ bot.command('markets', (ctx) => {
   ctx.reply(message);
 });
 
-bot.command('clips', (ctx) => {
-  const clips = db.prepare('SELECT c.*, u.username, (SELECT COUNT(*) FROM clip_votes WHERE clip_id = c.id AND vote_type = 1) as upvotes FROM clips c JOIN users u ON c.user_id = u.id ORDER BY upvotes DESC LIMIT 5').all();
+bot.command('clips', async (ctx) => {
+  const clips = await dbAll('SELECT c.*, u.username, (SELECT COUNT(*) FROM clip_votes WHERE clip_id = c.id AND vote_type = 1) as upvotes FROM clips c JOIN users u ON c.user_id = u.id ORDER BY upvotes DESC LIMIT 5');
   
   if (clips.length === 0) {
     ctx.reply('No clips yet. Be the first to share your highlight!');
@@ -1873,8 +1862,8 @@ bot.command('clips', (ctx) => {
   ctx.reply(message);
 });
 
-bot.command('marketplace', (ctx) => {
-  const skins = db.prepare('SELECT s.*, u.username FROM skins s JOIN users u ON s.user_id = u.id WHERE s.status = ? ORDER BY s.created_at DESC LIMIT 5').all('available');
+bot.command('marketplace', async (ctx) => {
+  const skins = await dbAll('SELECT s.*, u.username FROM skins s JOIN users u ON s.user_id = u.id WHERE s.status = ? ORDER BY s.created_at DESC LIMIT 5', ['available']);
   
   if (skins.length === 0) {
     ctx.reply('No skins listed yet. List your first skin!');
@@ -1890,11 +1879,11 @@ bot.command('marketplace', (ctx) => {
   ctx.reply(message);
 });
 
-bot.command('stats', (ctx) => {
-  const totalClips = db.prepare('SELECT COUNT(*) as count FROM clips').get().count;
-  const totalSkins = db.prepare('SELECT COUNT(*) as count FROM skins WHERE status = ?').get('available').count;
-  const activeMarkets = db.prepare('SELECT COUNT(*) as count FROM betting_markets WHERE status = ?').get('active').count;
-  const totalVolume = db.prepare('SELECT COALESCE(SUM(total_volume), 0) as volume FROM betting_markets').get().volume;
+bot.command('stats', async (ctx) => {
+  const totalClips = (await dbGet('SELECT COUNT(*) as count FROM clips')).count;
+  const totalSkins = (await dbGet('SELECT COUNT(*) as count FROM skins WHERE status = ?', ['available'])).count;
+  const activeMarkets = (await dbGet('SELECT COUNT(*) as count FROM betting_markets WHERE status = ?', ['active'])).count;
+  const totalVolume = (await dbGet('SELECT COALESCE(SUM(total_volume), 0) as volume FROM betting_markets')).volume;
   
   const statsMessage = `
 📊 Platform Statistics
@@ -2128,48 +2117,47 @@ app.get('/', (req, res) => {
 // CLIPS API ENDPOINTS
 
 // API: Get all clips
-app.get('/api/clips', (req, res) => {
-  const clips = db.prepare(`
+app.get('/api/clips', async (req, res) => {
+  const clips = await dbAll(`
     SELECT c.*, u.username, 
            (SELECT COUNT(*) FROM clip_votes WHERE clip_id = c.id AND vote_type = 1) as upvotes,
            (SELECT COUNT(*) FROM clip_votes WHERE clip_id = c.id AND vote_type = -1) as downvotes
     FROM clips c 
     JOIN users u ON c.user_id = u.id 
     ORDER BY c.created_at DESC
-  `).all();
+  `);
   res.json(clips);
 });
 
 // API: Get single clip
-app.get('/api/clips/:id', (req, res) => {
-  const clip = db.prepare(`
+app.get('/api/clips/:id', async (req, res) => {
+  const clip = await dbGet(`
     SELECT c.*, u.username, 
            (SELECT COUNT(*) FROM clip_votes WHERE clip_id = c.id AND vote_type = 1) as upvotes,
            (SELECT COUNT(*) FROM clip_votes WHERE clip_id = c.id AND vote_type = -1) as downvotes
     FROM clips c 
     JOIN users u ON c.user_id = u.id 
     WHERE c.id = ?
-  `).get(req.params.id);
+  `, [req.params.id]);
   
   if (!clip) {
     return res.status(404).json({ error: 'Clip not found' });
   }
   
-  // Get comments
-  const comments = db.prepare(`
+  const comments = await dbAll(`
     SELECT cc.*, u.username 
     FROM clip_comments cc 
     JOIN users u ON cc.user_id = u.id 
     WHERE cc.clip_id = ? 
     ORDER BY cc.created_at DESC
-  `).all(req.params.id);
+  `, [req.params.id]);
   
   clip.comments = comments;
   res.json(clip);
 });
 
 // API: Upload clip
-app.post('/api/clips', authenticateRequest, (req, res) => {
+app.post('/api/clips', authenticateRequest, async (req, res) => {
   const { title, description, video_url, game_type, thumbnail_url } = req.body;
 
   if (!validateText(title, { maxLength: 120, required: true }) || !validateText(description, { maxLength: 500 })) {
@@ -2201,65 +2189,61 @@ app.post('/api/clips', authenticateRequest, (req, res) => {
     }
   }
 
-  const result = db.prepare(`
+  const result = await dbRun(`
     INSERT INTO clips (user_id, title, description, video_url, game_type, thumbnail_url)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(req.userId, title, description, embedUrl, game_type, thumbnail_url);
+  `, [req.userId, title, description, embedUrl, game_type, thumbnail_url]);
   
-  // Award Royal Coins for uploading a clip
-  awardRoyalCoins(req.userId, ROYAL_COIN_REWARDS.CLIP_UPLOAD, 'Clip upload');
+  await awardRoyalCoins(req.userId, ROYAL_COIN_REWARDS.CLIP_UPLOAD, 'Clip upload');
   
-  res.json({ id: result.lastInsertRowid, message: 'Clip uploaded successfully', videoType, embedUrl, royalCoinsEarned: ROYAL_COIN_REWARDS.CLIP_UPLOAD });
+  res.json({ id: result.lastID, message: 'Clip uploaded successfully', videoType, embedUrl, royalCoinsEarned: ROYAL_COIN_REWARDS.CLIP_UPLOAD });
 });
 
 // API: Vote on clip
-app.post('/api/clips/:id/vote', authenticateRequest, (req, res) => {
-  const { vote_type } = req.body; // vote_type: 1 for upvote, -1 for downvote
+app.post('/api/clips/:id/vote', authenticateRequest, async (req, res) => {
+  const { vote_type } = req.body;
   
   if (vote_type !== 1 && vote_type !== -1) {
     return res.status(400).json({ error: 'Invalid vote type' });
   }
   
-  // Check if user already voted
-  const existingVote = db.prepare('SELECT * FROM clip_votes WHERE clip_id = ? AND user_id = ?').get(req.params.id, req.userId);
+  const existingVote = await dbGet('SELECT * FROM clip_votes WHERE clip_id = ? AND user_id = ?', [req.params.id, req.userId]);
   
   if (existingVote) {
-    // Update existing vote
-    db.prepare('UPDATE clip_votes SET vote_type = ? WHERE id = ?').run(vote_type, existingVote.id);
+    await dbRun('UPDATE clip_votes SET vote_type = ? WHERE id = ?', [vote_type, existingVote.id]);
   } else {
-    // Create new vote
-    db.prepare('INSERT INTO clip_votes (clip_id, user_id, vote_type) VALUES (?, ?, ?)').run(req.params.id, req.userId, vote_type);
+    await dbRun('INSERT INTO clip_votes (clip_id, user_id, vote_type) VALUES (?, ?, ?)', [req.params.id, req.userId, vote_type]);
   }
   
   res.json({ message: 'Vote recorded successfully' });
 });
 
 // API: Comment on clip
-app.post('/api/clips/:id/comments', authenticateRequest, rateLimit({ windowMs: 60 * 1000, max: 30, key: req => `clip-comments:${req.userId || req.ip}` }), (req, res) => {
+app.post('/api/clips/:id/comments', authenticateRequest, rateLimit({ windowMs: 60 * 1000, max: 30, key: req => `clip-comments:${req.userId || req.ip}` }), async (req, res) => {
   const { comment } = req.body;
 
   if (!validateText(comment, { maxLength: 500, required: true })) {
     return res.status(400).json({ error: 'Comment must be 1-500 characters.' });
   }
 
-  const result = db.prepare(`
+  const result = await dbRun(`
     INSERT INTO clip_comments (clip_id, user_id, comment)
     VALUES (?, ?, ?)
-  `).run(req.params.id, req.userId, String(comment).trim());
+  `, [req.params.id, req.userId, String(comment).trim()]);
 
-  res.json({ id: result.lastInsertRowid, message: 'Comment added successfully' });
+  res.json({ id: result.lastID, message: 'Comment added successfully' });
 });
 
 // API: Get weekly leaderboard
-app.get('/api/leaderboard', (req, res) => {
-  const leaderboard = db.prepare(`
+app.get('/api/leaderboard', async (req, res) => {
+  const leaderboard = await dbAll(`
     SELECT u.username, wl.total_likes, wl.total_clips, wl.rank
     FROM weekly_leaderboard wl
     JOIN users u ON wl.user_id = u.id
     WHERE wl.week_start = date('now', 'weekday 0', '-7 days')
     ORDER BY wl.total_likes DESC
     LIMIT 10
-  `).all();
+  `);
   
   res.json(leaderboard);
 });
@@ -2295,51 +2279,6 @@ app.post('/api/skins', authenticateRequest, async (req, res) => {
   `, [req.userId, game_type, skin_name, weapon, rarity, float_value, price_tokens, tokenType, image_url]);
   
   res.json({ id: result.lastID, message: 'Skin listed successfully' });
-});
-
-// API: Purchase skin with tokens
-app.post('/api/skins/:id/purchase', authenticateRequest, async (req, res) => {
-  const skinId = req.params.id;
-  
-  // Get skin
-  const skin = await dbGet('SELECT * FROM skins WHERE id = ? AND status = ?', [skinId, 'available']);
-  if (!skin) {
-    return res.status(404).json({ error: 'Skin not available' });
-  }
-  
-  if (skin.user_id === req.userId) {
-    return res.status(400).json({ error: 'Cannot purchase your own skin' });
-  }
-  
-  // Check buyer token balance
-  const tokenColumn = skin.token_type === 'steam' ? 'steam_tokens' : 'standoff2_tokens';
-  const buyer = await dbGet(`SELECT ${tokenColumn} FROM users WHERE id = ?`, [req.userId]);
-  if (!buyer || buyer[tokenColumn] < skin.price_tokens) {
-    const tokenName = skin.token_type === 'steam' ? 'Steam' : 'Standoff 2';
-    return res.status(400).json({ error: `Insufficient ${tokenName} tokens` });
-  }
-  
-  // Create transaction
-  const result = await dbRun(`
-    INSERT INTO skin_transactions (skin_id, seller_id, buyer_id, price_tokens, token_type, status)
-    VALUES (?, ?, ?, ?, ?, 'pending')
-  `, [skinId, skin.user_id, req.userId, skin.price_tokens, skin.token_type]);
-  
-  const transactionId = result.lastID;
-  
-  // Update skin status
-  await dbRun('UPDATE skins SET status = ? WHERE id = ?', ['pending', skinId]);
-  
-  // Auto-complete for testing (in production, bot middleman trade would happen here)
-  await dbRun('UPDATE skin_transactions SET status = ? WHERE id = ?', ['completed', transactionId]);
-  await dbRun('UPDATE skins SET status = ?, user_id = ? WHERE id = ?', ['sold', req.userId, skinId]);
-  
-  // Transfer tokens: buyer loses, seller gains
-  await dbRun(`UPDATE users SET ${tokenColumn} = ${tokenColumn} - ? WHERE id = ?`, [skin.price_tokens, req.userId]);
-  await dbRun(`UPDATE users SET ${tokenColumn} = ${tokenColumn} + ? WHERE id = ?`, [skin.price_tokens, skin.user_id]);
-  
-  const tokenLabel = skin.token_type === 'steam' ? 'Steam tokens' : 'Standoff 2 tokens';
-  res.json({ transactionId, message: `Skin purchased successfully for ${skin.price_tokens} ${tokenLabel}` });
 });
 
 // CHAT API ENDPOINTS
@@ -2405,15 +2344,14 @@ app.post('/api/chat/dm/:userId', authenticateRequest, rateLimit({ windowMs: 60 *
   res.json({ message: 'DM sent' });
 });
 
-// TOKEN CONVERSION API ENDPOINTS
 
 // Conversion fee: 3%
 const CONVERSION_FEE = 0.03;
 
-// API: Get current exchange rates
-app.get('/api/rates', (req, res) => {
-  const rates = db.prepare('SELECT * FROM exchange_rates').all();
-  const tokenRates = db.prepare('SELECT * FROM token_rates').all();
+// API: Get exchange rates
+app.get('/api/rates', async (req, res) => {
+  const rates = await dbAll('SELECT * FROM exchange_rates');
+  const tokenRates = await dbAll('SELECT * FROM token_rates');
   res.json({ currencies: rates, tokens: tokenRates });
 });
 
@@ -2908,31 +2846,29 @@ app.get('/api/profile', authenticateRequest, async (req, res) => {
 });
 
 // API: Equip avatar
-app.post('/api/profile/equip-avatar', authenticateRequest, (req, res) => {
+app.post('/api/profile/equip-avatar', authenticateRequest, async (req, res) => {
   const userId = req.userId;
   const { avatarId } = req.body;
   
   const avatar = AVATARS.find(a => a.id === avatarId);
   if (!avatar) return res.status(400).json({ error: 'Invalid avatar' });
   
-  // Check if unlocked
   if (avatar.unlockCondition !== 'default') {
-    const unlocked = db.prepare('SELECT 1 FROM user_avatar_unlocks WHERE user_id = ? AND avatar_id = ?').get(userId, avatarId);
+    const unlocked = await dbGet('SELECT 1 FROM user_avatar_unlocks WHERE user_id = ? AND avatar_id = ?', [userId, avatarId]);
     if (!unlocked) return res.status(403).json({ error: 'Avatar not unlocked' });
   }
   
-  // If it's a dragon, set as dragon_id instead
   if (avatar.tier === 'dragon') {
-    db.prepare('UPDATE user_profiles SET dragon_id = ? WHERE user_id = ?').run(avatarId, userId);
+    await dbRun('UPDATE user_profiles SET dragon_id = ? WHERE user_id = ?', [avatarId, userId]);
   } else {
-    db.prepare('UPDATE user_profiles SET avatar_id = ? WHERE user_id = ?').run(avatarId, userId);
+    await dbRun('UPDATE user_profiles SET avatar_id = ? WHERE user_id = ?', [avatarId, userId]);
   }
   
   res.json({ message: 'Avatar equipped', avatarId });
 });
 
 // API: Equip banner
-app.post('/api/profile/equip-banner', authenticateRequest, (req, res) => {
+app.post('/api/profile/equip-banner', authenticateRequest, async (req, res) => {
   const userId = req.userId;
   const { bannerId } = req.body;
   
@@ -2940,16 +2876,16 @@ app.post('/api/profile/equip-banner', authenticateRequest, (req, res) => {
   if (!banner) return res.status(400).json({ error: 'Invalid banner' });
   
   if (banner.unlockCondition !== 'default') {
-    const unlocked = db.prepare('SELECT 1 FROM user_banner_unlocks WHERE user_id = ? AND banner_id = ?').get(userId, bannerId);
+    const unlocked = await dbGet('SELECT 1 FROM user_banner_unlocks WHERE user_id = ? AND banner_id = ?', [userId, bannerId]);
     if (!unlocked) return res.status(403).json({ error: 'Banner not unlocked' });
   }
   
-  db.prepare('UPDATE user_profiles SET banner_id = ? WHERE user_id = ?').run(bannerId, userId);
+  await dbRun('UPDATE user_profiles SET banner_id = ? WHERE user_id = ?', [bannerId, userId]);
   res.json({ message: 'Banner equipped', bannerId });
 });
 
 // API: Purchase avatar with site points
-app.post('/api/avatars/purchase', authenticateRequest, (req, res) => {
+app.post('/api/avatars/purchase', authenticateRequest, async (req, res) => {
   const userId = req.userId;
   const { avatarId } = req.body;
   
@@ -2957,24 +2893,22 @@ app.post('/api/avatars/purchase', authenticateRequest, (req, res) => {
   if (!avatar) return res.status(400).json({ error: 'Invalid avatar' });
   if (avatar.category !== 'buyable') return res.status(400).json({ error: 'This avatar cannot be purchased' });
   
-  const stats = getUserStats(userId);
+  const stats = await getUserStats(userId);
   if (stats.sitePoints < avatar.cost) return res.status(400).json({ error: 'Insufficient site points' });
   
-  // Check if already unlocked
-  const existing = db.prepare('SELECT 1 FROM user_avatar_unlocks WHERE user_id = ? AND avatar_id = ?').get(userId, avatarId);
+  const existing = await dbGet('SELECT 1 FROM user_avatar_unlocks WHERE user_id = ? AND avatar_id = ?', [userId, avatarId]);
   if (existing) return res.status(400).json({ error: 'Already unlocked' });
   
-  // Deduct points and unlock
-  db.prepare('UPDATE user_points SET points = points - ?, total_spent = total_spent + ? WHERE user_id = ?').run(avatar.cost, avatar.cost, userId);
-  db.prepare('INSERT INTO user_avatar_unlocks (user_id, avatar_id, unlock_method) VALUES (?, ?, ?)').run(userId, avatarId, 'purchase');
+  await dbRun('UPDATE user_points SET points = points - ?, total_spent = total_spent + ? WHERE user_id = ?', [avatar.cost, avatar.cost, userId]);
+  await dbRun('INSERT INTO user_avatar_unlocks (user_id, avatar_id, unlock_method) VALUES (?, ?, ?)', [userId, avatarId, 'purchase']);
   
-  logSystemEvent('info', `User ${userId} purchased avatar ${avatarId}`, `Cost: ${avatar.cost} points`);
+  await logSystemEvent('info', `User ${userId} purchased avatar ${avatarId}`, `Cost: ${avatar.cost} points`);
   
   res.json({ message: 'Avatar purchased successfully!', avatarId, cost: avatar.cost });
 });
 
 // API: Purchase banner with site points
-app.post('/api/banners/purchase', authenticateRequest, (req, res) => {
+app.post('/api/banners/purchase', authenticateRequest, async (req, res) => {
   const userId = req.userId;
   const { bannerId } = req.body;
   
@@ -2982,23 +2916,23 @@ app.post('/api/banners/purchase', authenticateRequest, (req, res) => {
   if (!banner) return res.status(400).json({ error: 'Invalid banner' });
   if (banner.category !== 'buyable') return res.status(400).json({ error: 'This banner cannot be purchased' });
   
-  const stats = getUserStats(userId);
+  const stats = await getUserStats(userId);
   if (stats.sitePoints < banner.cost) return res.status(400).json({ error: 'Insufficient site points' });
   
-  const existing = db.prepare('SELECT 1 FROM user_banner_unlocks WHERE user_id = ? AND banner_id = ?').get(userId, bannerId);
+  const existing = await dbGet('SELECT 1 FROM user_banner_unlocks WHERE user_id = ? AND banner_id = ?', [userId, bannerId]);
   if (existing) return res.status(400).json({ error: 'Already unlocked' });
   
-  db.prepare('UPDATE user_points SET points = points - ?, total_spent = total_spent + ? WHERE user_id = ?').run(banner.cost, banner.cost, userId);
-  db.prepare('INSERT INTO user_banner_unlocks (user_id, banner_id, unlock_method) VALUES (?, ?, ?)').run(userId, bannerId, 'purchase');
+  await dbRun('UPDATE user_points SET points = points - ?, total_spent = total_spent + ? WHERE user_id = ?', [banner.cost, banner.cost, userId]);
+  await dbRun('INSERT INTO user_banner_unlocks (user_id, banner_id, unlock_method) VALUES (?, ?, ?)', [userId, bannerId, 'purchase']);
   
-  logSystemEvent('info', `User ${userId} purchased banner ${bannerId}`, `Cost: ${banner.cost} points`);
+  await logSystemEvent('info', `User ${userId} purchased banner ${bannerId}`, `Cost: ${banner.cost} points`);
   
   res.json({ message: 'Banner purchased successfully!', bannerId, cost: banner.cost });
 });
 
 // API: Get user's avatar info for public display (chat, clips, leaderboard)
-app.get('/api/user/:userId/avatar-info', (req, res) => {
-  const profile = getOrCreateUserProfile(parseInt(req.params.userId));
+app.get('/api/user/:userId/avatar-info', async (req, res) => {
+  const profile = await getOrCreateUserProfile(parseInt(req.params.userId));
   const avatar = AVATARS.find(a => a.id === profile.avatar_id) || AVATARS[0];
   const banner = BANNERS.find(b => b.id === profile.banner_id) || BANNERS[0];
   const dragon = profile.dragon_id ? AVATARS.find(a => a.id === profile.dragon_id) : null;
@@ -3021,7 +2955,7 @@ app.get('/api/user/:userId/avatar-info', (req, res) => {
 });
 
 // API: Update streak (called internally when clip contest resolves)
-function updateWeeklyStreak(userId, contestRank) {
+async function updateWeeklyStreak(userId, contestRank) {
   const profile = getOrCreateUserProfile(userId);
   const thisWeek = new Date().toISOString().split('T')[0];
   const weekStart = new Date(Date.now() - ((new Date().getDay()) * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
@@ -3042,10 +2976,9 @@ function updateWeeklyStreak(userId, contestRank) {
     
     // Increment clip_wins if rank 1
     if (contestRank === 1) {
-      db.prepare('UPDATE user_profiles SET clip_wins = clip_wins + 1 WHERE user_id = ?').run(userId);
+      await dbRun('UPDATE user_profiles SET clip_wins = clip_wins + 1 WHERE user_id = ?', [userId]);
     }
   } else {
-    // Didn't win — streak resets
     newStreak = 0;
     eventType = 'streak_reset';
   }
@@ -3053,19 +2986,14 @@ function updateWeeklyStreak(userId, contestRank) {
   const maxStreak = Math.max(profile.max_streak || 0, newStreak);
   const newPixelLevel = getPixelationLevel(newStreak);
   
-  db.prepare('UPDATE user_profiles SET weekly_streak = ?, max_streak = ?, last_streak_week = ?, pixelation_level = ? WHERE user_id = ?')
-    .run(newStreak, maxStreak, weekStart, newPixelLevel, userId);
+  await dbRun('UPDATE user_profiles SET weekly_streak = ?, max_streak = ?, last_streak_week = ?, pixelation_level = ? WHERE user_id = ?', [newStreak, maxStreak, weekStart, newPixelLevel, userId]);
   
-  // Record streak history
-  db.prepare('INSERT INTO streak_history (user_id, week_start, clip_contest_rank, streak_before, streak_after, event_type) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(userId, weekStart, contestRank || null, oldStreak, newStreak, eventType);
+  await dbRun('INSERT INTO streak_history (user_id, week_start, clip_contest_rank, streak_before, streak_after, event_type) VALUES (?, ?, ?, ?, ?, ?)', [userId, weekStart, contestRank || null, oldStreak, newStreak, eventType]);
   
-  // Check for new unlocks
   const unlocks = checkStreakUnlocks(userId);
   
-  // Notify Telegram for milestone streaks
   if (newStreak === 10 || newStreak === 25 || newStreak === 50) {
-    const user = db.prepare('SELECT username FROM users WHERE id = ?').get(userId);
+    const user = await dbGet('SELECT username FROM users WHERE id = ?', [userId]);
     postToChannel(`🔥 STREAK MILESTONE!\n\n👤 ${user?.username || 'Anonymous'}\n⚡ ${newStreak}-week streak achieved!\n${newStreak === 50 ? '👑 LEGENDARY STATUS UNLOCKED!' : newStreak === 25 ? '👑 ROYAL STATUS UNLOCKED!' : '🏆 STREAK BADGE EARNED!'}\n${unlocks.length > 0 ? '🎁 New unlocks: ' + unlocks.map(u => u.name).join(', ') : ''}`).catch(() => {});
   }
   
@@ -3073,8 +3001,8 @@ function updateWeeklyStreak(userId, contestRank) {
 }
 
 // API: Get streak history
-app.get('/api/profile/streak-history', authenticateRequest, (req, res) => {
-  const history = db.prepare('SELECT * FROM streak_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 52').all(req.userId);
+app.get('/api/profile/streak-history', authenticateRequest, async (req, res) => {
+  const history = await dbAll('SELECT * FROM streak_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 52', [req.userId]);
   res.json(history);
 });
 
@@ -3091,14 +3019,14 @@ app.post('/api/admin/award-points', (req, res) => {
 // ADMIN DASHBOARD API ENDPOINTS
 
 // API: Get analytics overview
-app.get('/api/admin/analytics/overview', (req, res) => {
+app.get('/api/admin/analytics/overview', async (req, res) => {
   const today = new Date().toISOString().split('T')[0];
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   
-  const todayStats = db.prepare('SELECT * FROM site_analytics WHERE date = ?').get(today) || {};
-  const weekStats = db.prepare('SELECT SUM(unique_visitors) as visitors, SUM(page_views) as views, SUM(total_bets) as bets, SUM(total_volume) as volume, SUM(total_revenue) as revenue FROM site_analytics WHERE date >= ?').get(weekAgo);
-  const totalUsers = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
-  const activeMarkets = db.prepare('SELECT COUNT(*) as count FROM betting_markets WHERE status = ?').get('active').count;
+  const todayStats = await dbGet('SELECT * FROM site_analytics WHERE date = ?', [today]) || {};
+  const weekStats = await dbGet('SELECT SUM(unique_visitors) as visitors, SUM(page_views) as views, SUM(total_bets) as bets, SUM(total_volume) as volume, SUM(total_revenue) as revenue FROM site_analytics WHERE date >= ?', [weekAgo]);
+  const totalUsers = (await dbGet('SELECT COUNT(*) as count FROM users')).count;
+  const activeMarkets = (await dbGet('SELECT COUNT(*) as count FROM betting_markets WHERE status = ?', ['active'])).count;
   
   res.json({
     today: todayStats,
@@ -3109,16 +3037,16 @@ app.get('/api/admin/analytics/overview', (req, res) => {
 });
 
 // API: Get analytics chart data
-app.get('/api/admin/analytics/chart', (req, res) => {
+app.get('/api/admin/analytics/chart', async (req, res) => {
   const days = parseInt(req.query.days) || 30;
   const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   
-  const chartData = db.prepare('SELECT * FROM site_analytics WHERE date >= ? ORDER BY date ASC').all(startDate);
+  const chartData = await dbAll('SELECT * FROM site_analytics WHERE date >= ? ORDER BY date ASC', [startDate]);
   res.json(chartData);
 });
 
 // API: Get IT tickets
-app.get('/api/admin/tickets', (req, res) => {
+app.get('/api/admin/tickets', async (req, res) => {
   const status = req.query.status;
   let query = 'SELECT * FROM it_tickets';
   const params = [];
@@ -3130,44 +3058,44 @@ app.get('/api/admin/tickets', (req, res) => {
   
   query += ' ORDER BY created_at DESC';
   
-  const tickets = db.prepare(query).all(...params);
+  const tickets = await dbAll(query, params);
   res.json(tickets);
 });
 
 // API: Create IT ticket
-app.post('/api/admin/tickets', (req, res) => {
+app.post('/api/admin/tickets', async (req, res) => {
   const { title, description, priority, category, createdBy } = req.body;
   
   if (!title || !description) {
     return res.status(400).json({ error: 'Title and description required' });
   }
   
-  const ticketId = createITTicket(title, description, priority || 'medium', category || 'general', createdBy || 'admin');
+  const ticketId = await createITTicket(title, description, priority || 'medium', category || 'general', createdBy || 'admin');
   res.json({ ticketId, message: 'Ticket created successfully' });
 });
 
 // API: Update IT ticket
-app.put('/api/admin/tickets/:id', (req, res) => {
+app.put('/api/admin/tickets/:id', async (req, res) => {
   const { status, assignedTo } = req.body;
   
-  updateITTicketStatus(req.params.id, status, assignedTo);
+  await updateITTicketStatus(req.params.id, status, assignedTo);
   res.json({ message: 'Ticket updated successfully' });
 });
 
 // API: Get system logs
-app.get('/api/admin/logs', (req, res) => {
+app.get('/api/admin/logs', async (req, res) => {
   const limit = parseInt(req.query.limit) || 100;
-  const logs = db.prepare('SELECT * FROM system_logs ORDER BY created_at DESC LIMIT ?').all(limit);
+  const logs = await dbAll('SELECT * FROM system_logs ORDER BY created_at DESC LIMIT ?', [limit]);
   res.json(logs);
 });
 
 // API: Get revenue breakdown
-app.get('/api/admin/revenue', (req, res) => {
+app.get('/api/admin/revenue', async (req, res) => {
   const days = parseInt(req.query.days) || 30;
   const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   
-  const revenueData = db.prepare('SELECT date, total_revenue FROM site_analytics WHERE date >= ? ORDER BY date ASC').all(startDate);
-  const totalRevenue = db.prepare('SELECT SUM(total_revenue) as total FROM site_analytics WHERE date >= ?').get(startDate).total || 0;
+  const revenueData = await dbAll('SELECT date, total_revenue FROM site_analytics WHERE date >= ? ORDER BY date ASC', [startDate]);
+  const totalRevenue = (await dbGet('SELECT SUM(total_revenue) as total FROM site_analytics WHERE date >= ?', [startDate])).total || 0;
   
   res.json({
     daily: revenueData,
@@ -3258,14 +3186,14 @@ async function checkAdminSession(req, res, next) {
 }
 
 // Protect admin dashboard endpoints
-app.get('/api/admin/analytics/overview', checkAdminSession, (req, res) => {
+app.get('/api/admin/analytics/overview', checkAdminSession, async (req, res) => {
   const today = new Date().toISOString().split('T')[0];
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   
-  const todayStats = db.prepare('SELECT * FROM site_analytics WHERE date = ?').get(today) || {};
-  const weekStats = db.prepare('SELECT SUM(unique_visitors) as visitors, SUM(page_views) as views, SUM(total_bets) as bets, SUM(total_volume) as volume, SUM(total_revenue) as revenue FROM site_analytics WHERE date >= ?').get(weekAgo);
-  const totalUsers = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
-  const activeMarkets = db.prepare('SELECT COUNT(*) as count FROM betting_markets WHERE status = ?').get('active').count;
+  const todayStats = await dbGet('SELECT * FROM site_analytics WHERE date = ?', [today]) || {};
+  const weekStats = await dbGet('SELECT SUM(unique_visitors) as visitors, SUM(page_views) as views, SUM(total_bets) as bets, SUM(total_volume) as volume, SUM(total_revenue) as revenue FROM site_analytics WHERE date >= ?', [weekAgo]);
+  const totalUsers = (await dbGet('SELECT COUNT(*) as count FROM users')).count;
+  const activeMarkets = (await dbGet('SELECT COUNT(*) as count FROM betting_markets WHERE status = ?', ['active'])).count;
   
   res.json({
     today: todayStats,
@@ -3317,27 +3245,24 @@ app.post('/api/convert', async (req, res) => {
   const feeInBTC = trackFeeFromConversion(fee, targetCurrency);
   trackConversion();
   
-  // For authenticated users, deduct tokens from balance
   if (req.userId) {
     const tokenColumn = tokenType === 'steam' ? 'steam_tokens' : 'standoff2_tokens';
-    const user = db.prepare(`SELECT ${tokenColumn} FROM users WHERE id = ?`).get(req.userId);
+    const user = await dbGet(`SELECT ${tokenColumn} FROM users WHERE id = ?`, [req.userId]);
     if (!user || user[tokenColumn] < amount) {
       return res.status(400).json({ error: `Insufficient ${tokenType} tokens` });
     }
     
-    // Deduct tokens from user
-    db.prepare(`UPDATE users SET ${tokenColumn} = ${tokenColumn} - ? WHERE id = ?`).run(amount, req.userId);
+    await dbRun(`UPDATE users SET ${tokenColumn} = ${tokenColumn} - ? WHERE id = ?`, [amount, req.userId]);
     
-    // Create conversion record
-    const result = db.prepare(`
+    const result = await dbRun(`
       INSERT INTO token_conversions (user_id, token_type, amount, btc_received, status)
       VALUES (?, ?, ?, ?, 'completed')
-    `).run(req.userId, tokenType, amount, netAmount);
+    `, [req.userId, tokenType, amount, netAmount]);
     
-    logSystemEvent('info', `Token conversion by user ${req.userId}`, `Converted ${amount} ${tokenType} tokens to ${netAmount.toFixed(8)} ${targetCurrency}. Fee: ${fee.toFixed(8)} ${targetCurrency} (${feeInBTC.toFixed(8)} BTC)`);
+    await logSystemEvent('info', `Token conversion by user ${req.userId}`, `Converted ${amount} ${tokenType} tokens to ${netAmount.toFixed(8)} ${targetCurrency}. Fee: ${fee.toFixed(8)} ${targetCurrency} (${feeInBTC.toFixed(8)} BTC)`);
     
     res.json({ 
-      id: result.lastInsertRowid, 
+      id: result.lastID, 
       amountReceived: netAmount,
       currency: targetCurrency,
       symbol: SUPPORTED_CURRENCIES[targetCurrency].symbol,
@@ -3347,16 +3272,15 @@ app.post('/api/convert', async (req, res) => {
       message: 'Conversion successful' 
     });
   } else {
-    // Guest conversion - create pending record
-    const result = db.prepare(`
+    const result = await dbRun(`
       INSERT INTO token_conversions (user_id, token_type, amount, btc_received, status)
       VALUES (?, ?, ?, ?, 'pending')
-    `).run(null, tokenType, amount, netAmount);
+    `, [null, tokenType, amount, netAmount]);
     
-    logSystemEvent('info', `Guest token conversion`, `Converted ${amount} ${tokenType} to ${netAmount.toFixed(8)} ${targetCurrency}. Fee: ${fee.toFixed(8)} ${targetCurrency} (${feeInBTC.toFixed(8)} BTC)`);
+    await logSystemEvent('info', `Guest token conversion`, `Converted ${amount} ${tokenType} to ${netAmount.toFixed(8)} ${targetCurrency}. Fee: ${fee.toFixed(8)} ${targetCurrency} (${feeInBTC.toFixed(8)} BTC)`);
     
     res.json({ 
-      id: result.lastInsertRowid, 
+      id: result.lastID, 
       amountReceived: netAmount,
       currency: targetCurrency,
       symbol: SUPPORTED_CURRENCIES[targetCurrency].symbol,
@@ -3387,14 +3311,13 @@ app.get('/api/betting/markets/:id/sub-bets', async (req, res) => {
 });
 
 // API: Get single market details
-app.get('/api/betting/markets/:id', (req, res) => {
-  const market = db.prepare('SELECT * FROM betting_markets WHERE id = ?').get(req.params.id);
+app.get('/api/betting/markets/:id', async (req, res) => {
+  const market = await dbGet('SELECT * FROM betting_markets WHERE id = ?', [req.params.id]);
   if (!market) {
     return res.status(404).json({ error: 'Market not found' });
   }
   
-  // Get betting volume for each option
-  const bets = db.prepare('SELECT option, SUM(amount) as volume FROM user_bets WHERE market_id = ? GROUP BY option').all(req.params.id);
+  const bets = await dbAll('SELECT option, SUM(amount) as volume FROM user_bets WHERE market_id = ? GROUP BY option', [req.params.id]);
   
   market.options = JSON.parse(market.options);
   market.betting_volume = bets;
@@ -3403,76 +3326,65 @@ app.get('/api/betting/markets/:id', (req, res) => {
 });
 
 // API: Create new betting market (admin only)
-app.post('/api/betting/markets', (req, res) => {
+app.post('/api/betting/markets', async (req, res) => {
   const { title, description, category, options, end_date, fee_rate } = req.body;
   
-  const result = db.prepare(`
+  const result = await dbRun(`
     INSERT INTO betting_markets (title, description, category, options, end_date, fee_rate)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(title, description, category, JSON.stringify(options), end_date, fee_rate || 0.02);
+  `, [title, description, category, JSON.stringify(options), end_date, fee_rate || 0.02]);
   
-  res.json({ id: result.lastInsertRowid, message: 'Market created successfully' });
+  res.json({ id: result.lastID, message: 'Market created successfully' });
 });
 
 // API: Place a bet
-app.post('/api/betting/bet', (req, res) => {
+app.post('/api/betting/bet', async (req, res) => {
   const { userId, marketId, option, amount } = req.body;
   
-  // Get market
-  const market = db.prepare('SELECT * FROM betting_markets WHERE id = ?').get(marketId);
+  const market = await dbGet('SELECT * FROM betting_markets WHERE id = ?', [marketId]);
   if (!market || market.status !== 'active') {
     return res.status(400).json({ error: 'Market not available' });
   }
 
-  if (market.status !== 'active') {
-    return res.status(400).json({ error: 'Market is not active' });
-  }
-
-  // Check user balance
-  const balance = db.prepare('SELECT btc_balance FROM user_balances WHERE user_id = ?').get(userId);
+  const balance = await dbGet('SELECT btc_balance FROM user_balances WHERE user_id = ?', [userId]);
   if (!balance || balance.btc_balance < amount) {
     return res.status(400).json({ error: 'Insufficient balance' });
   }
 
-  // Deduct from balance
-  db.prepare('UPDATE user_balances SET btc_balance = btc_balance - ? WHERE user_id = ?').run(amount, userId);
+  await dbRun('UPDATE user_balances SET btc_balance = btc_balance - ? WHERE user_id = ?', [amount, userId]);
 
-  // Create bet record
   const potentialPayout = amount * (1 - market.fee_rate);
-  db.prepare(`
+  await dbRun(`
     INSERT INTO user_bets (user_id, market_id, option, amount, potential_payout)
     VALUES (?, ?, ?, ?, ?)
-  `).run(userId, marketId, option, amount, potentialPayout);
+  `, [userId, marketId, option, amount, potentialPayout]);
 
-  // Update market volume
-  db.prepare('UPDATE betting_markets SET total_volume = total_volume + ? WHERE id = ?').run(amount, marketId);
+  await dbRun('UPDATE betting_markets SET total_volume = total_volume + ? WHERE id = ?', [amount, marketId]);
 
-  // Track analytics
-  trackBet(amount);
-  trackRevenue(amount * market.fee_rate);
+  await trackBet(amount);
+  await trackRevenue(amount * market.fee_rate);
 
-  // Log system event
-  logSystemEvent('info', `Bet placed by user ${userId}`, `Market: ${marketId}, Amount: ${amount} BTC`);
+  await logSystemEvent('info', `Bet placed by user ${userId}`, `Market: ${marketId}, Amount: ${amount} BTC`);
 
   res.json({ message: 'Bet placed successfully', potentialPayout });
 });
 
 // API: Get user bets
-app.get('/api/betting/user/:userId/bets', (req, res) => {
-  const bets = db.prepare(`
+app.get('/api/betting/user/:userId/bets', async (req, res) => {
+  const bets = await dbAll(`
     SELECT ub.*, bm.title as market_title, bm.status as market_status
     FROM user_bets ub
     JOIN betting_markets bm ON ub.market_id = bm.id
     WHERE ub.user_id = ?
     ORDER BY ub.created_at DESC
-  `).all(req.params.userId);
+  `, [req.params.userId]);
   
   res.json(bets);
 });
 
 // API: Get user balance
-app.get('/api/betting/user/:userId/balance', (req, res) => {
-  let balance = db.prepare('SELECT * FROM user_balances WHERE user_id = ?').get(req.params.userId);
+app.get('/api/betting/user/:userId/balance', async (req, res) => {
+  let balance = await dbGet('SELECT * FROM user_balances WHERE user_id = ?', [req.params.userId]);
   if (!balance) {
     balance = {
       btc_balance: 0,
@@ -3485,68 +3397,50 @@ app.get('/api/betting/user/:userId/balance', (req, res) => {
   res.json(balance);
 });
 
-// API: Deposit crypto (BTCPay Server integration)
+// API: Demo-only betting deposit (real crypto deposits disabled)
 app.post('/api/betting/deposit', async (req, res) => {
-  const { userId, amount, crypto } = req.body;
+  const { userId, amount } = req.body;
   
-  try {
-    // Create BTCPay invoice
-    const response = await fetch(`${process.env.BTCPAY_URL}/api/v1/stores/${process.env.BTCPAY_STORE_ID}/invoices`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `token ${process.env.BTCPAY_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        amount: amount,
-        currency: crypto || 'BTC',
-        metadata: {
-          userId: userId.toString(),
-          orderId: `DEPOSIT-${userId}-${Date.now()}`
-        }
-      })
-    });
-    
-    const invoice = await response.json();
-    
-    // Create deposit transaction
-    const result = db.prepare(`
-      INSERT INTO transactions (user_id, type, amount, btc_address, tx_hash, status)
-      VALUES (?, 'deposit', ?, ?, ?, 'pending')
-    `).run(userId, amount, process.env.BTC_WALLET_ADDRESS, invoice.id);
-    
-    res.json({ 
-      transactionId: result.lastInsertRowid,
-      message: 'Deposit initiated',
-      checkoutUrl: invoice.checkoutUrl,
-      invoiceId: invoice.id,
-      btcAddress: process.env.BTC_WALLET_ADDRESS
-    });
-  } catch (error) {
-    console.error('BTCPay error:', error);
-    // Fallback to manual deposit
-    const result = db.prepare(`
-      INSERT INTO transactions (user_id, type, amount, btc_address, status)
-      VALUES (?, 'deposit', ?, ?, 'pending')
-    `).run(userId, amount, process.env.BTC_WALLET_ADDRESS);
-    
-    res.json({ 
-      transactionId: result.lastInsertRowid,
-      message: 'Deposit initiated (manual)',
-      btcAddress: process.env.BTC_WALLET_ADDRESS
-    });
+  if (!userId || !Number.isFinite(amount) || amount <= 0 || amount > 0.1) {
+    return res.status(400).json({ error: 'Invalid user or amount (max 0.1 demo BTC per deposit)' });
   }
+  
+  const DEMO_BALANCE_CAP = 1.0;
+  const userBalance = await dbGet('SELECT btc_balance, total_deposited FROM user_balances WHERE user_id = ?', [userId]);
+  if (userBalance && userBalance.btc_balance >= DEMO_BALANCE_CAP) {
+    return res.status(400).json({ error: 'Demo betting balance cap reached' });
+  }
+  
+  await dbRun(`
+    INSERT INTO user_balances (user_id, btc_balance, total_deposited)
+    VALUES (?, ?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET
+      btc_balance = btc_balance + ?,
+      total_deposited = total_deposited + ?
+  `, [userId, amount, amount, amount, amount]);
+  
+  const result = await dbRun(`
+    INSERT INTO transactions (user_id, type, amount, btc_address, tx_hash, status)
+    VALUES (?, 'demo_deposit', ?, ?, 'DEMO', 'completed')
+  `, [userId, amount, process.env.BTC_WALLET_ADDRESS]);
+  
+  res.json({
+    transactionId: result.lastID,
+    message: 'Demo deposit credited (real crypto deposits are disabled)',
+    amount,
+    demo: true
+  });
 });
 
 // API: Get all quizzes
-app.get('/api/quizzes', (req, res) => {
-  const quizzes = db.prepare('SELECT * FROM quizzes ORDER BY created_at DESC').all();
+app.get('/api/quizzes', async (req, res) => {
+  const quizzes = await dbAll('SELECT * FROM quizzes ORDER BY created_at DESC');
   res.json(quizzes);
 });
 
 // API: Get quiz by ID
-app.get('/api/quizzes/:id', (req, res) => {
-  const quiz = db.prepare('SELECT * FROM quizzes WHERE id = ?').get(req.params.id);
+app.get('/api/quizzes/:id', async (req, res) => {
+  const quiz = await dbGet('SELECT * FROM quizzes WHERE id = ?', [req.params.id]);
   if (!quiz) {
     return res.status(404).json({ error: 'Quiz not found' });
   }
@@ -3554,11 +3448,11 @@ app.get('/api/quizzes/:id', (req, res) => {
 });
 
 // API: Submit quiz attempt
-app.post('/api/quizzes/:id/submit', (req, res) => {
+app.post('/api/quizzes/:id/submit', async (req, res) => {
   const { userId, answers } = req.body;
   const quizId = req.params.id;
   
-  const quiz = db.prepare('SELECT * FROM quizzes WHERE id = ?').get(quizId);
+  const quiz = await dbGet('SELECT * FROM quizzes WHERE id = ?', [quizId]);
   if (!quiz) {
     return res.status(404).json({ error: 'Quiz not found' });
   }
@@ -3575,25 +3469,23 @@ app.post('/api/quizzes/:id/submit', (req, res) => {
   const score = Math.round((correctCount / questions.length) * 100);
   const pointsEarned = Math.round((score / 100) * quiz.reward_points);
   
-  // Record quiz attempt
-  db.prepare(`
+  await dbRun(`
     INSERT INTO user_quiz_attempts (user_id, quiz_id, score, points_earned)
     VALUES (?, ?, ?, ?)
-  `).run(userId, quizId, score, pointsEarned);
+  `, [userId, quizId, score, pointsEarned]);
   
-  // Update user points
-  let userPoints = db.prepare('SELECT * FROM user_points WHERE user_id = ?').get(userId);
+  let userPoints = await dbGet('SELECT * FROM user_points WHERE user_id = ?', [userId]);
   if (!userPoints) {
-    db.prepare(`
+    await dbRun(`
       INSERT INTO user_points (user_id, points, total_earned)
       VALUES (?, ?, ?)
-    `).run(userId, pointsEarned, pointsEarned);
+    `, [userId, pointsEarned, pointsEarned]);
   } else {
-    db.prepare(`
+    await dbRun(`
       UPDATE user_points
       SET points = points + ?, total_earned = total_earned + ?
       WHERE user_id = ?
-    `).run(pointsEarned, pointsEarned, userId);
+    `, [pointsEarned, pointsEarned, userId]);
   }
   
   res.json({
@@ -3606,8 +3498,8 @@ app.post('/api/quizzes/:id/submit', (req, res) => {
 });
 
 // API: Get user points
-app.get('/api/points/:userId', (req, res) => {
-  let points = db.prepare('SELECT * FROM user_points WHERE user_id = ?').get(req.params.userId);
+app.get('/api/points/:userId', async (req, res) => {
+  let points = await dbGet('SELECT * FROM user_points WHERE user_id = ?', [req.params.userId]);
   if (!points) {
     points = {
       points: 0,
@@ -3646,11 +3538,10 @@ app.post('/api/points/purchase', async (req, res) => {
       }
     });
     
-    // Record transaction
-    db.prepare(`
+    await dbRun(`
       INSERT INTO transactions (user_id, type, amount, btc_address, tx_hash, status)
       VALUES (?, 'points_purchase', ?, ?, ?, 'pending')
-    `).run(userId, pointsAmount, process.env.BTC_WALLET_ADDRESS, payment.paymentId);
+    `, [userId, pointsAmount, process.env.BTC_WALLET_ADDRESS, payment.paymentId]);
     
     res.json({
       checkoutUrl: payment.checkoutUrl,
@@ -3665,8 +3556,8 @@ app.post('/api/points/purchase', async (req, res) => {
 });
 
 // API: Get user profile
-app.get('/api/profile/:userId', (req, res) => {
-  const profile = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(req.params.userId);
+app.get('/api/profile/:userId', async (req, res) => {
+  const profile = await dbGet('SELECT * FROM user_profiles WHERE user_id = ?', [req.params.userId]);
   if (!profile) {
     return res.json({ username: null, bio: null, cover_image: null, profile_image: null, badges: [] });
   }
@@ -3675,7 +3566,7 @@ app.get('/api/profile/:userId', (req, res) => {
 });
 
 // API: Update user profile
-app.put('/api/profile/:userId', authenticateRequest, (req, res) => {
+app.put('/api/profile/:userId', authenticateRequest, async (req, res) => {
   const { username, bio, cover_image, profile_image } = req.body;
   const userId = parseInt(req.params.userId, 10);
 
@@ -3688,19 +3579,19 @@ app.put('/api/profile/:userId', authenticateRequest, (req, res) => {
   }
 
   const safeBio = validateText(bio, { maxLength: 500 }) ? String(bio || '').trim() : null;
-  let existing = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(userId);
+  let existing = await dbGet('SELECT * FROM user_profiles WHERE user_id = ?', [userId]);
 
   if (existing) {
-    db.prepare(`
+    await dbRun(`
       UPDATE user_profiles
       SET username = ?, bio = ?, cover_image = ?, profile_image = ?
       WHERE user_id = ?
-    `).run(username.trim(), safeBio, cover_image, profile_image, userId);
+    `, [username.trim(), safeBio, cover_image, profile_image, userId]);
   } else {
-    db.prepare(`
+    await dbRun(`
       INSERT INTO user_profiles (user_id, username, bio, cover_image, profile_image)
       VALUES (?, ?, ?, ?, ?)
-    `).run(userId, username.trim(), safeBio, cover_image, profile_image);
+    `, [userId, username.trim(), safeBio, cover_image, profile_image]);
   }
 
   res.json({ message: 'Profile updated successfully' });
@@ -3743,13 +3634,11 @@ app.get('/api/steam/auth/callback', async (req, res) => {
   }
   const steamId = steamIdMatch[1];
   
-  // Verify session
-  const session = db.prepare('SELECT * FROM sessions WHERE session_token = ? AND expires_at > datetime("now")').get(token);
+  const session = await dbGet('SELECT * FROM sessions WHERE session_token = ? AND expires_at > datetime("now")', [token]);
   if (!session) {
     return res.status(401).send('Invalid session');
   }
   
-  // Fetch Steam user info
   let steamUsername = 'Steam User';
   let avatarUrl = '';
   if (STEAM_API_KEY) {
@@ -3765,13 +3654,13 @@ app.get('/api/steam/auth/callback', async (req, res) => {
     }
   }
   
-  // Link Steam account
-  db.prepare(`
+  const verified = STEAM_API_KEY ? 1 : 0;
+  await dbRun(`
     INSERT INTO steam_accounts (user_id, steam_id, steam_username, avatar_url, inventory_verified)
     VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(user_id) DO UPDATE SET steam_id = ?, steam_username = ?, avatar_url = ?, inventory_verified = ?
-  `).run(session.user_id, steamId, steamUsername, avatarUrl, STEAM_API_KEY ? 1 : 0,
-         steamId, steamUsername, avatarUrl, STEAM_API_KEY ? 1 : 0);
+  `, [session.user_id, steamId, steamUsername, avatarUrl, verified,
+       steamId, steamUsername, avatarUrl, verified]);
   
   logSystemEvent('info', `User ${session.user_id} linked Steam account`, `Steam ID: ${steamId}, Username: ${steamUsername}`);
   
@@ -3779,24 +3668,24 @@ app.get('/api/steam/auth/callback', async (req, res) => {
 });
 
 // API: Update Steam trade URL
-app.post('/api/steam/trade-url', authenticateRequest, (req, res) => {
+app.post('/api/steam/trade-url', authenticateRequest, async (req, res) => {
   const { tradeUrl } = req.body;
   if (!tradeUrl || !tradeUrl.includes('steamcommunity.com/tradeoffer/new/')) {
     return res.status(400).json({ error: 'Invalid Steam trade URL' });
   }
   
-  const existing = db.prepare('SELECT * FROM steam_accounts WHERE user_id = ?').get(req.userId);
+  const existing = await dbGet('SELECT * FROM steam_accounts WHERE user_id = ?', [req.userId]);
   if (!existing) {
     return res.status(400).json({ error: 'Steam account not linked. Please link your Steam account first.' });
   }
   
-  db.prepare('UPDATE steam_accounts SET trade_url = ? WHERE user_id = ?').run(tradeUrl, req.userId);
+  await dbRun('UPDATE steam_accounts SET trade_url = ? WHERE user_id = ?', [tradeUrl, req.userId]);
   res.json({ message: 'Trade URL saved successfully' });
 });
 
 // API: Get Steam account info
-app.get('/api/steam/account', authenticateRequest, (req, res) => {
-  const steam = db.prepare('SELECT * FROM steam_accounts WHERE user_id = ?').get(req.userId);
+app.get('/api/steam/account', authenticateRequest, async (req, res) => {
+  const steam = await dbGet('SELECT * FROM steam_accounts WHERE user_id = ?', [req.userId]);
   if (!steam) return res.json({ linked: false });
   res.json({ linked: true, ...steam });
 });
@@ -4071,7 +3960,7 @@ app.get('/api/gold-transfers/:id', authenticateRequest, async (req, res) => {
 // ============================================================
 
 // API: Request token deposit (user submits deposit request)
-app.post('/api/tokens/deposit', authenticateRequest, (req, res) => {
+app.post('/api/tokens/deposit', authenticateRequest, async (req, res) => {
   const { tokenType, amount } = req.body;
   
   if (!tokenType || !['steam', 'standoff2'].includes(tokenType)) {
@@ -4081,17 +3970,15 @@ app.post('/api/tokens/deposit', authenticateRequest, (req, res) => {
     return res.status(400).json({ error: 'Invalid amount' });
   }
   
-  // For Steam: verify Steam account is linked
   if (tokenType === 'steam') {
-    const steam = db.prepare('SELECT * FROM steam_accounts WHERE user_id = ?').get(req.userId);
+    const steam = await dbGet('SELECT * FROM steam_accounts WHERE user_id = ?', [req.userId]);
     if (!steam) {
       return res.status(400).json({ error: 'Please link your Steam account first' });
     }
   }
   
-  // For Standoff2: verify account is linked
   if (tokenType === 'standoff2') {
-    const so2 = db.prepare('SELECT * FROM standoff2_accounts WHERE user_id = ?').get(req.userId);
+    const so2 = await dbGet('SELECT * FROM standoff2_accounts WHERE user_id = ?', [req.userId]);
     if (!so2) {
       return res.status(400).json({ error: 'Please link your Standoff2 account first' });
     }
@@ -4099,15 +3986,15 @@ app.post('/api/tokens/deposit', authenticateRequest, (req, res) => {
   
   const verificationMethod = tokenType === 'steam' ? 'steam_api' : 'manual';
   
-  const result = db.prepare(`
+  const result = await dbRun(`
     INSERT INTO token_deposits (user_id, token_type, amount, status, verification_method)
     VALUES (?, ?, ?, 'pending', ?)
-  `).run(req.userId, tokenType, amount, verificationMethod);
+  `, [req.userId, tokenType, amount, verificationMethod]);
   
-  logSystemEvent('info', `Token deposit request by user ${req.userId}`, `${amount} ${tokenType} tokens (ID: ${result.lastInsertRowid})`);
+  logSystemEvent('info', `Token deposit request by user ${req.userId}`, `${amount} ${tokenType} tokens (ID: ${result.lastID})`);
   
   res.json({
-    depositId: result.lastInsertRowid,
+    depositId: result.lastID,
     message: tokenType === 'steam' 
       ? 'Deposit request submitted. Your Steam inventory will be verified by the bot.'
       : 'Deposit request submitted. An admin will verify your Standoff2 transfer manually.'
@@ -4115,41 +4002,41 @@ app.post('/api/tokens/deposit', authenticateRequest, (req, res) => {
 });
 
 // API: Get user's deposit history
-app.get('/api/tokens/deposits', authenticateRequest, (req, res) => {
-  const deposits = db.prepare('SELECT * FROM token_deposits WHERE user_id = ? ORDER BY created_at DESC').all(req.userId);
+app.get('/api/tokens/deposits', authenticateRequest, async (req, res) => {
+  const deposits = await dbAll('SELECT * FROM token_deposits WHERE user_id = ? ORDER BY created_at DESC', [req.userId]);
   res.json(deposits);
 });
 
 // API: Admin verify token deposit (approves and credits tokens)
-app.post('/api/admin/verify-deposit', (req, res) => {
+app.post('/api/admin/verify-deposit', async (req, res) => {
   const { depositId, approved } = req.body;
   
-  const deposit = db.prepare('SELECT * FROM token_deposits WHERE id = ?').get(depositId);
+  const deposit = await dbGet('SELECT * FROM token_deposits WHERE id = ?', [depositId]);
   if (!deposit) return res.status(404).json({ error: 'Deposit not found' });
   if (deposit.status !== 'pending') return res.status(400).json({ error: 'Deposit already processed' });
   
   if (approved) {
     const tokenColumn = deposit.token_type === 'steam' ? 'steam_tokens' : 'standoff2_tokens';
-    db.prepare(`UPDATE users SET ${tokenColumn} = ${tokenColumn} + ? WHERE id = ?`).run(deposit.amount, deposit.user_id);
-    db.prepare('UPDATE token_deposits SET status = ?, verified_at = CURRENT_TIMESTAMP WHERE id = ?').run('verified', depositId);
+    await dbRun(`UPDATE users SET ${tokenColumn} = ${tokenColumn} + ? WHERE id = ?`, [deposit.amount, deposit.user_id]);
+    await dbRun('UPDATE token_deposits SET status = ?, verified_at = CURRENT_TIMESTAMP WHERE id = ?', ['verified', depositId]);
     
     logSystemEvent('info', `Token deposit verified`, `Deposit ID: ${depositId}, ${deposit.amount} ${deposit.token_type} tokens to user ${deposit.user_id}`);
     res.json({ message: 'Deposit verified and tokens credited' });
   } else {
-    db.prepare('UPDATE token_deposits SET status = ? WHERE id = ?').run('rejected', depositId);
+    await dbRun('UPDATE token_deposits SET status = ? WHERE id = ?', ['rejected', depositId]);
     res.json({ message: 'Deposit rejected' });
   }
 });
 
 // API: Get pending token deposits (admin)
-app.get('/api/admin/pending-deposits', (req, res) => {
-  const deposits = db.prepare(`
+app.get('/api/admin/pending-deposits', async (req, res) => {
+  const deposits = await dbAll(`
     SELECT td.*, u.username 
     FROM token_deposits td 
     JOIN users u ON td.user_id = u.id 
     WHERE td.status = 'pending' 
     ORDER BY td.created_at ASC
-  `).all();
+  `);
   res.json(deposits);
 });
 
@@ -4158,92 +4045,83 @@ app.get('/api/admin/pending-deposits', (req, res) => {
 // ============================================================
 
 // Helper: Create escrow trade
-function createEscrowTrade(skinId, sellerId, buyerId, priceTokens, tokenType, tradeType) {
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24h expiry
+async function createEscrowTrade(skinId, sellerId, buyerId, priceTokens, tokenType, tradeType) {
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
   
-  const result = db.prepare(`
+  const result = await dbRun(`
     INSERT INTO escrow_trades (skin_id, seller_id, buyer_id, price_tokens, token_type, status, trade_type, expires_at)
     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)
-  `).run(skinId, sellerId, buyerId, priceTokens, tokenType, tradeType, expiresAt);
+  `, [skinId, sellerId, buyerId, priceTokens, tokenType, tradeType, expiresAt]);
   
-  return result.lastInsertRowid;
+  return result.lastID;
 }
 
 // Helper: Complete escrow trade (release tokens to seller)
-function completeEscrowTrade(tradeId) {
-  const trade = db.prepare('SELECT * FROM escrow_trades WHERE id = ?').get(tradeId);
+async function completeEscrowTrade(tradeId) {
+  const trade = await dbGet('SELECT * FROM escrow_trades WHERE id = ?', [tradeId]);
   if (!trade || trade.status !== 'buyer_confirmed') return;
   
   const tokenColumn = trade.token_type === 'steam' ? 'steam_tokens' : 'standoff2_tokens';
   
-  // Transfer tokens: buyer loses, seller gains
-  db.prepare(`UPDATE users SET ${tokenColumn} = ${tokenColumn} - ? WHERE id = ?`).run(trade.price_tokens, trade.buyer_id);
-  db.prepare(`UPDATE users SET ${tokenColumn} = ${tokenColumn} + ? WHERE id = ?`).run(trade.price_tokens, trade.seller_id);
+  await dbRun(`UPDATE users SET ${tokenColumn} = ${tokenColumn} - ? WHERE id = ?`, [trade.price_tokens, trade.buyer_id]);
+  await dbRun(`UPDATE users SET ${tokenColumn} = ${tokenColumn} + ? WHERE id = ?`, [trade.price_tokens, trade.seller_id]);
   
-  // Update trade and skin
-  db.prepare('UPDATE escrow_trades SET status = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?').run('completed', tradeId);
-  db.prepare('UPDATE skins SET status = ?, user_id = ? WHERE id = ?').run('sold', trade.buyer_id, trade.skin_id);
+  await dbRun('UPDATE escrow_trades SET status = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?', ['completed', tradeId]);
+  await dbRun('UPDATE skins SET status = ?, user_id = ? WHERE id = ?', ['sold', trade.buyer_id, trade.skin_id]);
   
   logSystemEvent('info', `Escrow trade completed`, `Trade ID: ${tradeId}, Skin ID: ${trade.skin_id}`);
 }
 
 // Helper: Cancel escrow trade (refund buyer if tokens were held)
-function cancelEscrowTrade(tradeId, reason) {
-  const trade = db.prepare('SELECT * FROM escrow_trades WHERE id = ?').get(tradeId);
+async function cancelEscrowTrade(tradeId, reason) {
+  const trade = await dbGet('SELECT * FROM escrow_trades WHERE id = ?', [tradeId]);
   if (!trade) return;
   
-  db.prepare('UPDATE escrow_trades SET status = ?, dispute_reason = ? WHERE id = ?').run('cancelled', reason, tradeId);
-  db.prepare('UPDATE skins SET status = ? WHERE id = ?').run('available', trade.skin_id);
+  await dbRun('UPDATE escrow_trades SET status = ?, dispute_reason = ? WHERE id = ?', ['cancelled', reason, tradeId]);
+  await dbRun('UPDATE skins SET status = ? WHERE id = ?', ['available', trade.skin_id]);
   
   logSystemEvent('info', `Escrow trade cancelled`, `Trade ID: ${tradeId}, Reason: ${reason}`);
 }
 
 // API: Purchase skin with escrow (replaces instant purchase)
-app.post('/api/skins/:id/purchase', authenticateRequest, (req, res) => {
+app.post('/api/skins/:id/purchase', authenticateRequest, async (req, res) => {
   const skinId = req.params.id;
   
-  const skin = db.prepare('SELECT * FROM skins WHERE id = ? AND status = ?').get(skinId, 'available');
+  const skin = await dbGet('SELECT * FROM skins WHERE id = ? AND status = ?', [skinId, 'available']);
   if (!skin) return res.status(404).json({ error: 'Skin not available' });
   if (skin.user_id === req.userId) return res.status(400).json({ error: 'Cannot purchase your own skin' });
   
-  // Check buyer token balance
   const tokenColumn = skin.token_type === 'steam' ? 'steam_tokens' : 'standoff2_tokens';
-  const buyer = db.prepare(`SELECT ${tokenColumn} FROM users WHERE id = ?`).get(req.userId);
+  const buyer = await dbGet(`SELECT ${tokenColumn} FROM users WHERE id = ?`, [req.userId]);
   if (!buyer || buyer[tokenColumn] < skin.price_tokens) {
     const tokenName = skin.token_type === 'steam' ? 'Steam' : 'Standoff 2';
     return res.status(400).json({ error: `Insufficient ${tokenName} tokens` });
   }
   
-  // Determine trade type based on game
   const tradeType = skin.game_type === 'CS2' ? 'steam_bot' : 'manual';
   
-  // For CS2: verify both users have Steam accounts linked
   if (tradeType === 'steam_bot') {
-    const buyerSteam = db.prepare('SELECT * FROM steam_accounts WHERE user_id = ?').get(req.userId);
+    const buyerSteam = await dbGet('SELECT * FROM steam_accounts WHERE user_id = ?', [req.userId]);
     if (!buyerSteam || !buyerSteam.trade_url) {
       return res.status(400).json({ error: 'Please link your Steam account and set your trade URL first' });
     }
   }
   
-  // For Standoff2: verify both users have Standoff2 accounts linked
   if (tradeType === 'manual') {
-    const buyerSO2 = db.prepare('SELECT * FROM standoff2_accounts WHERE user_id = ?').get(req.userId);
+    const buyerSO2 = await dbGet('SELECT * FROM standoff2_accounts WHERE user_id = ?', [req.userId]);
     if (!buyerSO2) {
       return res.status(400).json({ error: 'Please link your Standoff2 account first' });
     }
   }
   
-  // Create escrow trade
-  const escrowId = createEscrowTrade(skinId, skin.user_id, req.userId, skin.price_tokens, skin.token_type, tradeType);
+  const escrowId = await createEscrowTrade(skinId, skin.user_id, req.userId, skin.price_tokens, skin.token_type, tradeType);
   
-  // Mark skin as pending
-  db.prepare('UPDATE skins SET status = ? WHERE id = ?').run('pending', skinId);
+  await dbRun('UPDATE skins SET status = ? WHERE id = ?', ['pending', skinId]);
   
-  // Create transaction record
-  db.prepare(`
+  await dbRun(`
     INSERT INTO skin_transactions (skin_id, seller_id, buyer_id, price_tokens, token_type, status)
     VALUES (?, ?, ?, ?, ?, 'pending')
-  `).run(skinId, skin.user_id, req.userId, skin.price_tokens, skin.token_type);
+  `, [skinId, skin.user_id, req.userId, skin.price_tokens, skin.token_type]);
   
   const tokenLabel = skin.token_type === 'steam' ? 'Steam tokens' : 'Standoff 2 tokens';
   const instructions = tradeType === 'steam_bot'
@@ -4660,35 +4538,33 @@ app.get('/api/analytics/community', (req, res) => {
 });
 
 // API: Get platform analytics
-app.get('/api/analytics', (req, res) => {
-  const totalUsers = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
-  const totalAnime = db.prepare('SELECT COUNT(*) as count FROM anime').get().count;
-  const totalEpisodes = db.prepare('SELECT COUNT(*) as count FROM episodes').get().count;
-  const activeMarkets = db.prepare('SELECT COUNT(*) as count FROM betting_markets WHERE status = ?').get('active').count;
-  const totalMarkets = db.prepare('SELECT COUNT(*) as count FROM betting_markets').get().count;
-  const totalBets = db.prepare('SELECT COUNT(*) as count FROM user_bets').get().count;
-  const totalVolume = db.prepare('SELECT SUM(total_volume) as volume FROM betting_markets').get().volume || 0;
-  const totalFees = db.prepare('SELECT SUM(amount * fee_rate) as fees FROM betting_markets').get().fees || 0;
-  const totalDeposits = db.prepare('SELECT SUM(amount) as deposits FROM transactions WHERE type = ? AND status = ?').get('deposit', 'completed').deposits || 0;
-  const totalWithdrawals = db.prepare('SELECT SUM(amount) as withdrawals FROM transactions WHERE type = ? AND status = ?').get('withdraw', 'completed').withdrawals || 0;
+app.get('/api/analytics', async (req, res) => {
+  const totalUsers = (await dbGet('SELECT COUNT(*) as count FROM users')).count;
+  const totalAnime = (await dbGet('SELECT COUNT(*) as count FROM anime')).count;
+  const totalEpisodes = (await dbGet('SELECT COUNT(*) as count FROM episodes')).count;
+  const activeMarkets = (await dbGet('SELECT COUNT(*) as count FROM betting_markets WHERE status = ?', ['active'])).count;
+  const totalMarkets = (await dbGet('SELECT COUNT(*) as count FROM betting_markets')).count;
+  const totalBets = (await dbGet('SELECT COUNT(*) as count FROM user_bets')).count;
+  const totalVolume = (await dbGet('SELECT SUM(total_volume) as volume FROM betting_markets')).volume || 0;
+  const totalFees = (await dbGet('SELECT SUM(amount * fee_rate) as fees FROM betting_markets')).fees || 0;
+  const totalDeposits = (await dbGet('SELECT SUM(amount) as deposits FROM transactions WHERE type = ? AND status = ?', ['deposit', 'completed'])).deposits || 0;
+  const totalWithdrawals = (await dbGet('SELECT SUM(amount) as withdrawals FROM transactions WHERE type = ? AND status = ?', ['withdraw', 'completed'])).withdrawals || 0;
   
-  // Recent activity
-  const recentBets = db.prepare(`
+  const recentBets = await dbAll(`
     SELECT ub.*, bm.title as market_title, u.username
     FROM user_bets ub
     JOIN betting_markets bm ON ub.market_id = bm.id
     JOIN users u ON ub.user_id = u.id
     ORDER BY ub.created_at DESC
     LIMIT 10
-  `).all();
+  `);
   
-  // Top markets by volume
-  const topMarkets = db.prepare(`
+  const topMarkets = await dbAll(`
     SELECT *, (SELECT COUNT(*) FROM user_bets WHERE market_id = betting_markets.id) as bet_count
     FROM betting_markets
     ORDER BY total_volume DESC
     LIMIT 5
-  `).all();
+  `);
   
   res.json({
     users: {
@@ -4717,34 +4593,32 @@ app.get('/api/analytics', (req, res) => {
 });
 
 // API: Get market analytics
-app.get('/api/analytics/markets/:id', (req, res) => {
+app.get('/api/analytics/markets/:id', async (req, res) => {
   const marketId = req.params.id;
   
-  const market = db.prepare('SELECT * FROM betting_markets WHERE id = ?').get(marketId);
+  const market = await dbGet('SELECT * FROM betting_markets WHERE id = ?', [marketId]);
   if (!market) {
     return res.status(404).json({ error: 'Market not found' });
   }
   
-  const totalBets = db.prepare('SELECT COUNT(*) as count FROM user_bets WHERE market_id = ?').get(marketId).count;
-  const totalVolume = db.prepare('SELECT SUM(amount) as volume FROM user_bets WHERE market_id = ?').get(marketId).volume || 0;
+  const totalBets = (await dbGet('SELECT COUNT(*) as count FROM user_bets WHERE market_id = ?', [marketId])).count;
+  const totalVolume = (await dbGet('SELECT SUM(amount) as volume FROM user_bets WHERE market_id = ?', [marketId])).volume || 0;
   
-  // Bets by option
-  const betsByOption = db.prepare(`
+  const betsByOption = await dbAll(`
     SELECT option, COUNT(*) as count, SUM(amount) as volume
     FROM user_bets
     WHERE market_id = ?
     GROUP BY option
-  `).all(marketId);
+  `, [marketId]);
   
-  // Recent bets
-  const recentBets = db.prepare(`
+  const recentBets = await dbAll(`
     SELECT ub.*, u.username
     FROM user_bets ub
     JOIN users u ON ub.user_id = u.id
     WHERE ub.market_id = ?
     ORDER BY ub.created_at DESC
     LIMIT 10
-  `).all(marketId);
+  `, [marketId]);
   
   res.json({
     market,
@@ -4756,8 +4630,8 @@ app.get('/api/analytics/markets/:id', (req, res) => {
 });
 
 // API: Check subscription status
-app.get('/api/subscription/:telegramId', (req, res) => {
-  const user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(req.params.telegramId);
+app.get('/api/subscription/:telegramId', async (req, res) => {
+  const user = await dbGet('SELECT * FROM users WHERE telegram_id = ?', [req.params.telegramId]);
   if (!user) {
     return res.json({ subscribed: false });
   }
@@ -4789,11 +4663,10 @@ app.post('/api/create-payment', async (req, res) => {
     
     const price = prices[planType];
     
-    // Create or get user
-    let user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(telegramId);
+    let user = await dbGet('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
     if (!user) {
-      const result = db.prepare('INSERT INTO users (telegram_id, username, subscription_status) VALUES (?, ?, ?)').run(telegramId, 'user', 'free');
-      user = db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid);
+      const result = await dbRun('INSERT INTO users (telegram_id, username, subscription_status) VALUES (?, ?, ?)', [telegramId, 'user', 'free']);
+      user = await dbGet('SELECT * FROM users WHERE id = ?', [result.lastID]);
     }
     
     // Create OwnPay payment
@@ -4851,26 +4724,18 @@ app.get('/success', async (req, res) => {
           break;
       }
       
-      // Update user subscription
-      db.prepare(`
+      await dbRun(`
         UPDATE users 
         SET subscription_status = 'premium', subscription_end_date = ?
         WHERE telegram_id = ?
-      `).run(endDate.toISOString(), telegram_id);
+      `, [endDate.toISOString(), telegram_id]);
       
-      // Record subscription
-      db.prepare(`
+      const userId = (await dbGet('SELECT id FROM users WHERE telegram_id = ?', [telegram_id])).id;
+      
+      await dbRun(`
         INSERT INTO subscriptions (user_id, plan_type, amount_cents, status, start_date, end_date, stripe_subscription_id)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        db.prepare('SELECT id FROM users WHERE telegram_id = ?').get(telegram_id).id,
-        plan,
-        payment.amount,
-        'active',
-        new Date().toISOString(),
-        endDate.toISOString(),
-        payment_id
-      );
+      `, [userId, plan, payment.amount, 'active', new Date().toISOString(), endDate.toISOString(), payment_id]);
       
       res.send(`
         <html>
@@ -4906,7 +4771,7 @@ app.get('/cancel', (req, res) => {
 });
 
 // API: Add sample anime data (for testing)
-app.post('/api/seed', (req, res) => {
+app.post('/api/seed', async (req, res) => {
   const sampleAnime = [
     {
       title: 'One Piece',
@@ -4973,23 +4838,22 @@ app.post('/api/seed', (req, res) => {
     }
   ];
 
-  sampleAnime.forEach(anime => {
-    const existing = db.prepare('SELECT * FROM anime WHERE title = ?').get(anime.title);
+  for (const anime of sampleAnime) {
+    const existing = await dbGet('SELECT * FROM anime WHERE title = ?', [anime.title]);
     if (!existing) {
-      const result = db.prepare(`
+      const result = await dbRun(`
         INSERT INTO anime (title, description, cover_image, genre, year, rating, free_tier)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(anime.title, anime.description, anime.cover_image, anime.genre, anime.year, anime.rating, anime.free_tier);
+      `, [anime.title, anime.description, anime.cover_image, anime.genre, anime.year, anime.rating, anime.free_tier]);
       
-      // Add sample episodes
       for (let i = 1; i <= 3; i++) {
-        db.prepare(`
+        await dbRun(`
           INSERT INTO episodes (anime_id, episode_number, title, video_url, duration)
           VALUES (?, ?, ?, ?, ?)
-        `).run(result.lastInsertRowid, i, `Episode ${i}`, `https://example.com/video${i}.mp4`, 1440);
+        `, [result.lastID, i, `Episode ${i}`, `https://example.com/video${i}.mp4`, 1440]);
       }
     }
-  });
+  }
 
   res.json({ message: 'Sample data added successfully' });
 });
@@ -4998,7 +4862,7 @@ app.post('/api/seed', (req, res) => {
 
 // Sweep accumulated fees to wallet
 async function sweepFeesToWallet() {
-  const pool = db.prepare('SELECT * FROM platform_fee_pool WHERE id = 1').get();
+  const pool = await dbGet('SELECT * FROM platform_fee_pool WHERE id = 1');
   if (!pool || pool.accumulated_btc < 0.001) {
     console.log('Fee sweep: Not enough accumulated BTC (minimum 0.001)');
     return;
@@ -5007,26 +4871,22 @@ async function sweepFeesToWallet() {
   const sweepAmount = pool.accumulated_btc;
   const walletAddress = pool.wallet_address || process.env.BTC_WALLET_ADDRESS;
   
-  // Create payout record
-  const result = db.prepare(`
+  const result = await dbRun(`
     INSERT INTO payout_history (amount_btc, wallet_address, status)
     VALUES (?, ?, 'pending')
-  `).run(sweepAmount, walletAddress);
+  `, [sweepAmount, walletAddress]);
   
-  // In production, this would call BTCPay Server or blockchain API to send BTC
-  // For now, we log it and mark as pending manual confirmation
-  logSystemEvent('info', `BTC payout initiated`, `Amount: ${sweepAmount} BTC to ${walletAddress}. Payout ID: ${result.lastInsertRowid}`);
+  logSystemEvent('info', `BTC payout initiated`, `Amount: ${sweepAmount} BTC to ${walletAddress}. Payout ID: ${result.lastID}`);
   
   console.log(`BTC PAYOUT: ${sweepAmount} BTC queued for sweep to ${walletAddress}`);
   
-  // Reset accumulated pool
-  db.prepare('UPDATE platform_fee_pool SET accumulated_btc = 0, total_swept_btc = total_swept_btc + ?, last_sweep_at = CURRENT_TIMESTAMP WHERE id = 1').run(sweepAmount);
+  await dbRun('UPDATE platform_fee_pool SET accumulated_btc = 0, total_swept_btc = total_swept_btc + ?, last_sweep_at = CURRENT_TIMESTAMP WHERE id = 1', [sweepAmount]);
 }
 
 // API: Get platform fee pool status
-app.get('/api/admin/fee-pool', (req, res) => {
-  const pool = db.prepare('SELECT * FROM platform_fee_pool WHERE id = 1').get();
-  const payouts = db.prepare('SELECT * FROM payout_history ORDER BY created_at DESC LIMIT 20').all();
+app.get('/api/admin/fee-pool', async (req, res) => {
+  const pool = await dbGet('SELECT * FROM platform_fee_pool WHERE id = 1');
+  const payouts = await dbAll('SELECT * FROM payout_history ORDER BY created_at DESC LIMIT 20');
   
   res.json({
     pool: pool || { accumulated_btc: 0, total_swept_btc: 0, wallet_address: process.env.BTC_WALLET_ADDRESS },
@@ -5035,8 +4895,8 @@ app.get('/api/admin/fee-pool', (req, res) => {
 });
 
 // API: Manual trigger fee sweep
-app.post('/api/admin/sweep-fees', (req, res) => {
-  const pool = db.prepare('SELECT * FROM platform_fee_pool WHERE id = 1').get();
+app.post('/api/admin/sweep-fees', async (req, res) => {
+  const pool = await dbGet('SELECT * FROM platform_fee_pool WHERE id = 1');
   if (!pool || pool.accumulated_btc <= 0) {
     return res.json({ message: 'No fees to sweep' });
   }
@@ -5047,14 +4907,14 @@ app.post('/api/admin/sweep-fees', (req, res) => {
 });
 
 // API: Confirm payout (mark as confirmed with tx hash)
-app.post('/api/admin/confirm-payout', (req, res) => {
+app.post('/api/admin/confirm-payout', async (req, res) => {
   const { payoutId, txHash } = req.body;
   
   if (!payoutId || !txHash) {
     return res.status(400).json({ error: 'Payout ID and transaction hash required' });
   }
   
-  db.prepare('UPDATE payout_history SET status = ?, tx_hash = ?, confirmed_at = CURRENT_TIMESTAMP WHERE id = ?').run('confirmed', txHash, payoutId);
+  await dbRun('UPDATE payout_history SET status = ?, tx_hash = ?, confirmed_at = CURRENT_TIMESTAMP WHERE id = ?', ['confirmed', txHash, payoutId]);
   
   logSystemEvent('info', `BTC payout confirmed`, `Payout ID: ${payoutId}, TX: ${txHash}`);
   
@@ -5062,16 +4922,17 @@ app.post('/api/admin/confirm-payout', (req, res) => {
 });
 
 // Start the HTTP server only after tables and default rates exist.
-databaseInitialization.then(() => app.listen(PORT, () => {
-  console.log(`PixelPulse server running on port ${PORT}`);
-  console.log(`BTC wallet address: ${process.env.BTC_WALLET_ADDRESS}`);
+databaseInitialization.then(async () => {
+  app.listen(PORT, () => {
+    console.log(`PixelPulse server running on port ${PORT}`);
+    console.log(`BTC wallet address: ${process.env.BTC_WALLET_ADDRESS}`);
+  });
   
-  // Initialize platform fee pool
-  const pool = db.prepare('SELECT * FROM platform_fee_pool WHERE id = 1').get();
+  const pool = await dbGet('SELECT * FROM platform_fee_pool WHERE id = 1');
   if (!pool) {
-    db.prepare('INSERT INTO platform_fee_pool (id, accumulated_btc, total_swept_btc, wallet_address) VALUES (1, 0, 0, ?)').run(process.env.BTC_WALLET_ADDRESS);
+    await dbRun('INSERT INTO platform_fee_pool (id, accumulated_btc, total_swept_btc, wallet_address) VALUES (1, 0, 0, ?)', [process.env.BTC_WALLET_ADDRESS]);
   } else if (pool.wallet_address !== process.env.BTC_WALLET_ADDRESS) {
-    db.prepare('UPDATE platform_fee_pool SET wallet_address = ? WHERE id = 1').run(process.env.BTC_WALLET_ADDRESS);
+    await dbRun('UPDATE platform_fee_pool SET wallet_address = ? WHERE id = 1', [process.env.BTC_WALLET_ADDRESS]);
   }
   
   // Schedule weekly BTC sweep to wallet
@@ -5081,7 +4942,7 @@ databaseInitialization.then(() => app.listen(PORT, () => {
   // Update crypto prices every 5 minutes
   setInterval(updateCryptoPrices, 5 * 60 * 1000);
   updateCryptoPrices(); // Initial update
-})).catch(err => {
+}).catch(err => {
   console.error('Server startup aborted:', err);
   process.exit(1);
 });
@@ -5141,7 +5002,7 @@ async function notifyMarketResolved(marketTitle, winner, totalVolume, topPayout)
 async function postWeeklyBigWins() {
   try {
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const bigWins = db.prepare(`
+    const bigWins = await dbAll(`
       SELECT ub.*, bm.title as market_title, u.username
       FROM user_bets ub
       JOIN betting_markets bm ON ub.market_id = bm.id
@@ -5149,7 +5010,7 @@ async function postWeeklyBigWins() {
       WHERE ub.status = 'won' AND ub.created_at >= ?
       ORDER BY ub.potential_payout DESC
       LIMIT 5
-    `).all(oneWeekAgo);
+    `, [oneWeekAgo]);
     
     if (bigWins.length === 0) {
       await postToChannel('📊 WEEKLY SUMMARY\n\nNo predictions were resolved this week. New markets coming soon — stay tuned! 🔮');
@@ -5173,7 +5034,7 @@ async function postWeeklyBigWins() {
 async function postClipOfTheWeek() {
   try {
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const topClip = db.prepare(`
+    const topClip = await dbGet(`
       SELECT c.*, u.username,
         (SELECT COUNT(*) FROM clip_votes WHERE clip_id = c.id AND vote_type = 1) as upvotes
       FROM clips c
@@ -5181,7 +5042,7 @@ async function postClipOfTheWeek() {
       WHERE c.created_at >= ?
       ORDER BY upvotes DESC
       LIMIT 1
-    `).get(oneWeekAgo);
+    `, [oneWeekAgo]);
     
     if (!topClip) {
       await postToChannel('🎬 CLIP OF THE WEEK\n\nNo clips were submitted this week.\nBe the first to share your highlight! 🎥\n\n🔗 https://pixelpulse.zentriva-clubsync.online');
@@ -5199,12 +5060,12 @@ async function postClipOfTheWeek() {
 // --- Auto-update: Weekly platform stats ---
 async function postWeeklyStats() {
   try {
-    const totalClips = db.prepare('SELECT COUNT(*) as count FROM clips').get().count;
-    const totalSkins = db.prepare('SELECT COUNT(*) as count FROM skins WHERE status = ?').get('available').count;
-    const activeMarkets = db.prepare('SELECT COUNT(*) as count FROM betting_markets WHERE status = ?').get('active').count;
-    const resolvedThisWeek = db.prepare(`SELECT COUNT(*) as count FROM betting_markets WHERE status = 'resolved' AND updated_at >= ?`).get(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()).count;
-    const totalVolume = db.prepare('SELECT COALESCE(SUM(total_volume), 0) as volume FROM betting_markets').get().volume;
-    const pool = db.prepare('SELECT * FROM platform_fee_pool WHERE id = 1').get();
+    const totalClips = (await dbGet('SELECT COUNT(*) as count FROM clips')).count;
+    const totalSkins = (await dbGet('SELECT COUNT(*) as count FROM skins WHERE status = ?', ['available'])).count;
+    const activeMarkets = (await dbGet('SELECT COUNT(*) as count FROM betting_markets WHERE status = ?', ['active'])).count;
+    const resolvedThisWeek = (await dbGet(`SELECT COUNT(*) as count FROM betting_markets WHERE status = 'resolved' AND updated_at >= ?`, [new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()])).count;
+    const totalVolume = (await dbGet('SELECT COALESCE(SUM(total_volume), 0) as volume FROM betting_markets')).volume;
+    const pool = await dbGet('SELECT * FROM platform_fee_pool WHERE id = 1');
     
     const msg = `📊 WEEKLY PLATFORM STATS\n\n🎬 Clips: ${totalClips}\n💼 Skins Listed: ${totalSkins}\n🔮 Active Markets: ${activeMarkets}\n🏁 Resolved This Week: ${resolvedThisWeek}\n💰 Total Volume: ${totalVolume.toFixed(4)} BTC\n🏦 Platform Fee Pool: ${(pool?.accumulated_btc || 0).toFixed(6)} BTC\n\n📈 Growing every week!\n🔗 https://pixelpulse.zentriva-clubsync.online`;
     
