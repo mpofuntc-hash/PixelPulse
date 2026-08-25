@@ -675,7 +675,7 @@
             <a href="#" onclick="showSection('clips')" class="active" id="nav-clips">Clips</a>
             <a href="#" onclick="showSection('betting')" id="nav-betting">Predictions</a>
             <a href="#" onclick="showSection('marketplace')" id="nav-marketplace">Marketplace</a>
-            <a href="#" onclick="showSection('gold-transfer')" id="nav-gold-transfer">Send Gold</a>
+            <a href="#" onclick="showSection('gold-transfer')" id="nav-gold-transfer">Trade Hub</a>
             <a href="#" onclick="showSection('chat')" id="nav-chat">Chat</a>
             <a href="#" onclick="showSection('leaderboard')" id="nav-leaderboard">Leaderboard</a>
             <a href="#" onclick="showSection('wallet')" id="nav-wallet">Wallet</a>
@@ -827,8 +827,26 @@
 
     <div class="section" id="marketplace" style="display: none;">
         <h2 class="section-title">Skin Marketplace</h2>
-        <div style="margin-bottom: 20px;">
+        <div style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
             <button class="btn btn-primary" onclick="showListSkinModal()">List Skin</button>
+            <div style="flex: 1; min-width: 200px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                <select id="skinFilterGame" onchange="loadSkins()" style="padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                    <option value="">All Games</option>
+                    <option value="CS2">CS2</option>
+                    <option value="Standoff2">Standoff 2</option>
+                </select>
+                <select id="skinFilterToken" onchange="loadSkins()" style="padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                    <option value="">All Token Types</option>
+                    <option value="steam">Steam Tokens</option>
+                    <option value="standoff2">Standoff2 Tokens</option>
+                </select>
+                <select id="skinFilterSort" onchange="loadSkins()" style="padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                    <option value="newest">Newest First</option>
+                    <option value="price-low">Price: Low to High</option>
+                    <option value="price-high">Price: High to Low</option>
+                </select>
+                <input type="text" id="skinFilterSearch" oninput="loadSkins()" placeholder="Search skin name..." style="flex: 1; min-width: 150px; padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+            </div>
         </div>
         <div class="anime-grid" id="skinsGrid">
             <div class="loading">Loading skins...</div>
@@ -885,8 +903,8 @@
                 </div>
                 <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
                     <button class="btn btn-primary" onclick="showDepositModal()">Deposit BTC</button>
-                    <button class="btn btn-secondary" onclick="showConversionModal()">Convert Tokens</button>
-                    <button class="btn btn-secondary" onclick="showTradeModal()">Trade Tokens (CS2 ↔ Standoff2)</button>
+                    <button class="btn btn-secondary" onclick="showSection('gold-transfer'); switchTradeHubTab('convert');">Convert Tokens</button>
+                    <button class="btn btn-secondary" onclick="showSection('gold-transfer'); switchTradeHubTab('tradetokens');">Trade Tokens (CS2 ↔ Standoff2)</button>
                     <button class="btn btn-secondary" onclick="showTokenDepositModal()">Deposit Game Tokens</button>
                     <button class="btn btn-secondary" onclick="showGameAccountModal()">Link Game Accounts</button>
                     <button class="btn btn-secondary" onclick="loadEscrowTrades()">My Escrow Trades</button>
@@ -988,41 +1006,138 @@
 
     <!-- Profile Section with Avatar & Banner System -->
     <div class="section" id="gold-transfer" style="display: none; max-width: 980px;">
-        <h2 class="section-title">Standoff 2 Gold Transfer</h2>
-        <p style="color: #aaa; max-width: 760px; margin: -10px auto 22px; text-align: center;">Create a verified marketplace hand-off in a few clicks. PixelPulse prepares the listing, tracks confirmation, and keeps a dispute-ready audit trail. Transfers are free; the official marketplace fee is shown before you continue.</p>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 18px; align-items: start;">
-            <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 10px; padding: 20px;">
-                <h3 style="margin: 0 0 14px;">Send Gold to a player</h3>
-                <label style="display:block; font-size:12px; color:#aaa; margin-bottom:5px;">PixelPulse username</label>
-                <input id="goldRecipient" maxlength="80" placeholder="username" style="width:100%; box-sizing:border-box; margin-bottom:12px; padding:10px; background:#111; border:1px solid #444; color:#fff; border-radius:5px;">
-                <label style="display:block; font-size:12px; color:#aaa; margin-bottom:5px;">Item to list</label>
-                <input id="goldItemName" maxlength="120" placeholder="Glock" style="width:100%; box-sizing:border-box; margin-bottom:12px; padding:10px; background:#111; border:1px solid #444; color:#fff; border-radius:5px;">
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                    <div><label style="display:block; font-size:12px; color:#aaa; margin-bottom:5px;">Pattern number</label><input id="goldPattern" maxlength="80" placeholder="779" style="width:100%; box-sizing:border-box; padding:10px; background:#111; border:1px solid #444; color:#fff; border-radius:5px;"></div>
-                    <div><label style="display:block; font-size:12px; color:#aaa; margin-bottom:5px;">Serial (optional)</label><input id="goldSerial" maxlength="80" placeholder="#123" style="width:100%; box-sizing:border-box; padding:10px; background:#111; border:1px solid #444; color:#fff; border-radius:5px;"></div>
+        <h2 class="section-title">Trade Hub</h2>
+        <p style="color: #aaa; max-width: 760px; margin: -10px auto 22px; text-align: center;">Send Standoff 2 Gold, trade tokens with other players, or convert your tokens to crypto — all in one place.</p>
+
+        <!-- Sub-tab buttons -->
+        <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 24px; flex-wrap: wrap;">
+            <button class="btn btn-primary" id="tabBtn-sendgold" onclick="switchTradeHubTab('sendgold')" style="min-width: 140px;">⚔️ Send Gold</button>
+            <button class="btn btn-secondary" id="tabBtn-tradetokens" onclick="switchTradeHubTab('tradetokens')" style="min-width: 140px;">🔄 Trade Tokens</button>
+            <button class="btn btn-secondary" id="tabBtn-convert" onclick="switchTradeHubTab('convert')" style="min-width: 140px;">💰 Convert Tokens</button>
+        </div>
+
+        <!-- Sub-tab: Send Gold -->
+        <div id="tradehub-sendgold">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 18px; align-items: start;">
+                <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 10px; padding: 20px;">
+                    <h3 style="margin: 0 0 14px;">Send Gold to a player</h3>
+                    <label style="display:block; font-size:12px; color:#aaa; margin-bottom:5px;">PixelPulse username</label>
+                    <input id="goldRecipient" maxlength="80" placeholder="username" style="width:100%; box-sizing:border-box; margin-bottom:12px; padding:10px; background:#111; border:1px solid #444; color:#fff; border-radius:5px;">
+                    <label style="display:block; font-size:12px; color:#aaa; margin-bottom:5px;">Item to list</label>
+                    <input id="goldItemName" maxlength="120" placeholder="Glock" style="width:100%; box-sizing:border-box; margin-bottom:12px; padding:10px; background:#111; border:1px solid #444; color:#fff; border-radius:5px;">
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <div><label style="display:block; font-size:12px; color:#aaa; margin-bottom:5px;">Pattern number</label><input id="goldPattern" maxlength="80" placeholder="779" style="width:100%; box-sizing:border-box; padding:10px; background:#111; border:1px solid #444; color:#fff; border-radius:5px;"></div>
+                        <div><label style="display:block; font-size:12px; color:#aaa; margin-bottom:5px;">Serial (optional)</label><input id="goldSerial" maxlength="80" placeholder="#123" style="width:100%; box-sizing:border-box; padding:10px; background:#111; border:1px solid #444; color:#fff; border-radius:5px;"></div>
+                    </div>
+                    <label style="display:block; font-size:12px; color:#aaa; margin:12px 0 5px;">Agreed Gold amount</label>
+                    <input id="goldAmount" type="number" min="1" step="1" placeholder="620" oninput="updateGoldQuote()" style="width:100%; box-sizing:border-box; padding:10px; background:#111; border:1px solid #444; color:#fff; border-radius:5px;">
+                    <button class="btn btn-primary" onclick="createGoldTransfer()" style="width:100%; margin-top:16px;">Create verified transfer</button>
                 </div>
-                <label style="display:block; font-size:12px; color:#aaa; margin:12px 0 5px;">Agreed Gold amount</label>
-                <input id="goldAmount" type="number" min="1" step="1" placeholder="620" oninput="updateGoldQuote()" style="width:100%; box-sizing:border-box; padding:10px; background:#111; border:1px solid #444; color:#fff; border-radius:5px;">
-                <button class="btn btn-primary" onclick="createGoldTransfer()" style="width:100%; margin-top:16px;">Create verified transfer</button>
+                <div style="background: #141c16; border: 1px solid #294c30; border-radius: 10px; padding: 20px;">
+                    <h3 style="margin: 0 0 12px; color:#8cdb9a;">Confirmation preview</h3>
+                    <div id="goldQuote" style="color:#bbb; line-height:1.8;">Enter a Gold amount to see USD and BTC equivalents.</div>
+                    <div style="margin-top:16px; padding-top:14px; border-top:1px solid #294c30; color:#bbb; font-size:13px; line-height:1.6;">
+                        <strong style="color:#fff;">How it works</strong><br>
+                        1. Recipient lists the exact item at the agreed Gold amount.<br>
+                        2. Bot verifies their linked profile and sends instructions.<br>
+                        3. You buy through the official marketplace, then confirm here.
+                    </div>
+                </div>
             </div>
-            <div style="background: #141c16; border: 1px solid #294c30; border-radius: 10px; padding: 20px;">
-                <h3 style="margin: 0 0 12px; color:#8cdb9a;">Confirmation preview</h3>
-                <div id="goldQuote" style="color:#bbb; line-height:1.8;">Enter a Gold amount to see USD and BTC equivalents.</div>
-                <div style="margin-top:16px; padding-top:14px; border-top:1px solid #294c30; color:#bbb; font-size:13px; line-height:1.6;">
-                    <strong style="color:#fff;">How it works</strong><br>
-                    1. Recipient lists the exact item at the agreed Gold amount.<br>
-                    2. Bot verifies their linked profile and sends instructions.<br>
-                    3. You buy through the official marketplace, then confirm here.
+            <div style="margin-top:20px; background:#1a1a1a; border:1px solid #333; border-radius:10px; padding:20px;">
+                <h3 style="margin:0 0 12px;">Your transfer activity</h3>
+                <div id="goldTransferList" style="color:#999;">Log in to view your transfer history.</div>
+            </div>
+        </div>
+
+        <!-- Sub-tab: Trade Tokens -->
+        <div id="tradehub-tradetokens" style="display: none;">
+            <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                <h3 style="margin: 0 0 14px;">Create a Token Trade Listing</h3>
+                <div style="margin-bottom: 15px; padding: 12px; background: #2f2f2f; border-radius: 4px; font-size: 13px; color: #999;">
+                    List tokens you want to trade for the other token type. Service fee: 3% (2% for listings over 2500 units), paid by you when someone accepts your listing.
+                </div>
+                <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 200px;">
+                        <label style="display: block; margin-bottom: 5px;">You Offer</label>
+                        <select id="tradeOfferType" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                            <option value="steam">Steam Tokens</option>
+                            <option value="standoff2">Standoff 2 Tokens</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1; min-width: 200px;">
+                        <label style="display: block; margin-bottom: 5px;">Amount</label>
+                        <input type="number" id="tradeOfferAmount" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 200px;">
+                        <label style="display: block; margin-bottom: 5px;">You Want</label>
+                        <select id="tradeWantType" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                            <option value="standoff2">Standoff 2 Tokens</option>
+                            <option value="steam">Steam Tokens</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1; min-width: 200px;">
+                        <label style="display: block; margin-bottom: 5px;">Amount</label>
+                        <input type="number" id="tradeWantAmount" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="createTradeListing()" style="width: 100%; margin-bottom: 20px;">Create Listing</button>
+
+                <h4 style="margin-bottom: 10px;">Open Listings</h4>
+                <div id="openTradeListings" style="max-height: 250px; overflow-y: auto; margin-bottom: 20px;">
+                    <div class="loading">Loading listings...</div>
+                </div>
+
+                <h4 style="margin-bottom: 10px;">My Listings</h4>
+                <div id="myTradeListings" style="max-height: 250px; overflow-y: auto;">
+                    <div class="loading">Loading your listings...</div>
                 </div>
             </div>
         </div>
-        <div style="margin-top:20px; background:#1a1a1a; border:1px solid #333; border-radius:10px; padding:20px;">
-            <h3 style="margin:0 0 12px;">Your transfer activity</h3>
-            <div id="goldTransferList" style="color:#999;">Log in to view your transfer history.</div>
-        </div>
-        <div style="margin-top:20px; background:#1a1a1a; border:1px solid #333; border-radius:10px; padding:20px;">
-            <h3 style="margin:0 0 12px;">Learn by doing</h3>
-            <div id="goldRules" style="color:#aaa;">Loading rules…</div>
+
+        <!-- Sub-tab: Convert Tokens -->
+        <div id="tradehub-convert" style="display: none;">
+            <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 10px; padding: 20px; max-width: 600px; margin: 0 auto;">
+                <h3 style="margin: 0 0 14px;">Convert Tokens to Currency</h3>
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 5px;">Token Type</label>
+                    <select id="tokenType" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                        <option value="steam">Steam Tokens</option>
+                        <option value="standoff2">Standoff 2 Tokens</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 5px;">Target Currency</label>
+                    <select id="targetCurrency" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                        <option value="USD">USD ($)</option>
+                        <option value="EUR">EUR (€)</option>
+                        <option value="GBP">GBP (£)</option>
+                        <option value="ZAR">ZAR (R)</option>
+                        <option value="BTC">BTC (₿)</option>
+                        <option value="ETH">ETH (Ξ)</option>
+                        <option value="USDT">USDT (₮)</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 5px;">Amount</label>
+                    <input type="number" id="conversionAmount" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                </div>
+                <div style="margin-bottom: 20px;" id="walletAddressField">
+                    <label style="display: block; margin-bottom: 5px;">Your Wallet Address (for receiving funds)</label>
+                    <input type="text" id="walletAddress" placeholder="Enter your wallet address" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                </div>
+                <div style="margin-bottom: 20px; padding: 15px; background: #2f2f2f; border-radius: 4px;">
+                    <div style="font-size: 14px; color: #999;">Gross Amount:</div>
+                    <div id="grossAmount" style="font-size: 18px; font-weight: bold; color: #fff;">$0.00</div>
+                    <div style="font-size: 14px; color: #999; margin-top: 10px;">Fee (3%):</div>
+                    <div id="conversionFee" style="font-size: 18px; font-weight: bold; color: #e50914;">$0.00</div>
+                    <div style="font-size: 14px; color: #999; margin-top: 10px;">Net Amount (you receive):</div>
+                    <div id="netAmount" style="font-size: 24px; font-weight: bold; color: #4caf50;">$0.00</div>
+                </div>
+                <button class="btn btn-primary" onclick="convertTokens()" style="width: 100%;">Convert</button>
+            </div>
         </div>
     </div>
 
@@ -1088,104 +1203,6 @@
                     </div>
                     <button class="btn btn-primary" onclick="register()" style="width: 100%;">Register</button>
                     <p style="margin-top: 15px; text-align: center;">Already have an account? <a href="#" onclick="showLoginForm()" style="color: #e50914;">Login</a></p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal" id="conversionModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title">Convert Tokens to Currency</h3>
-                <button class="close-btn" onclick="closeConversionModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 5px;">Token Type</label>
-                    <select id="tokenType" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
-                        <option value="steam">Steam Tokens</option>
-                        <option value="standoff2">Standoff 2 Tokens</option>
-                    </select>
-                </div>
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 5px;">Target Currency</label>
-                    <select id="targetCurrency" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
-                        <option value="USD">USD ($)</option>
-                        <option value="EUR">EUR (€)</option>
-                        <option value="GBP">GBP (£)</option>
-                        <option value="ZAR">ZAR (R)</option>
-                        <option value="BTC">BTC (₿)</option>
-                        <option value="ETH">ETH (Ξ)</option>
-                        <option value="USDT">USDT (₮)</option>
-                    </select>
-                </div>
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 5px;">Amount</label>
-                    <input type="number" id="conversionAmount" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
-                </div>
-                <div style="margin-bottom: 20px;" id="walletAddressField">
-                    <label style="display: block; margin-bottom: 5px;">Your Wallet Address (for receiving funds)</label>
-                    <input type="text" id="walletAddress" placeholder="Enter your wallet address" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
-                </div>
-                <div style="margin-bottom: 20px; padding: 15px; background: #2f2f2f; border-radius: 4px;">
-                    <div style="font-size: 14px; color: #999;">Gross Amount:</div>
-                    <div id="grossAmount" style="font-size: 18px; font-weight: bold; color: #fff;">$0.00</div>
-                    <div style="font-size: 14px; color: #999; margin-top: 10px;">Fee (3%):</div>
-                    <div id="conversionFee" style="font-size: 18px; font-weight: bold; color: #e50914;">$0.00</div>
-                    <div style="font-size: 14px; color: #999; margin-top: 10px;">Net Amount (you receive):</div>
-                    <div id="netAmount" style="font-size: 24px; font-weight: bold; color: #4caf50;">$0.00</div>
-                </div>
-                <button class="btn btn-primary" onclick="convertTokens()" style="width: 100%;">Convert</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal" id="tradeModal">
-        <div class="modal-content" style="max-width: 600px;">
-            <div class="modal-header">
-                <h3 class="modal-title">Trade Tokens</h3>
-                <button class="close-btn" onclick="closeTradeModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div style="margin-bottom: 20px; padding: 12px; background: #2f2f2f; border-radius: 4px; font-size: 13px; color: #999;">
-                    List tokens you want to trade for the other token type. Service fee: 3% (2% for listings over 2500 units), paid by you when someone accepts your listing.
-                </div>
-                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                    <div style="flex: 1;">
-                        <label style="display: block; margin-bottom: 5px;">You Offer</label>
-                        <select id="tradeOfferType" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
-                            <option value="steam">Steam Tokens</option>
-                            <option value="standoff2">Standoff 2 Tokens</option>
-                        </select>
-                    </div>
-                    <div style="flex: 1;">
-                        <label style="display: block; margin-bottom: 5px;">Amount</label>
-                        <input type="number" id="tradeOfferAmount" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
-                    </div>
-                </div>
-                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                    <div style="flex: 1;">
-                        <label style="display: block; margin-bottom: 5px;">You Want</label>
-                        <select id="tradeWantType" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
-                            <option value="standoff2">Standoff 2 Tokens</option>
-                            <option value="steam">Steam Tokens</option>
-                        </select>
-                    </div>
-                    <div style="flex: 1;">
-                        <label style="display: block; margin-bottom: 5px;">Amount</label>
-                        <input type="number" id="tradeWantAmount" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
-                    </div>
-                </div>
-                <button class="btn btn-primary" onclick="createTradeListing()" style="width: 100%; margin-bottom: 20px;">Create Listing</button>
-
-                <h4 style="margin-bottom: 10px;">Open Listings</h4>
-                <div id="openTradeListings" style="max-height: 200px; overflow-y: auto; margin-bottom: 20px;">
-                    <div class="loading">Loading listings...</div>
-                </div>
-
-                <h4 style="margin-bottom: 10px;">My Listings</h4>
-                <div id="myTradeListings" style="max-height: 200px; overflow-y: auto;">
-                    <div class="loading">Loading your listings...</div>
                 </div>
             </div>
         </div>
@@ -1397,13 +1414,11 @@
         }
 
         function showConversionModal() {
-            document.getElementById('conversionModal').style.display = 'flex';
-            loadRates();
-            updateConversionEstimate();
+            showSection('gold-transfer');
+            switchTradeHubTab('convert');
         }
 
         function closeConversionModal() {
-            document.getElementById('conversionModal').style.display = 'none';
         }
 
         document.getElementById('conversionAmount')?.addEventListener('input', updateConversionEstimate);
@@ -1536,13 +1551,11 @@
                 alert('Please log in to trade tokens');
                 return;
             }
-            document.getElementById('tradeModal').style.display = 'flex';
-            loadOpenTradeListings();
-            loadMyTradeListings();
+            showSection('gold-transfer');
+            switchTradeHubTab('tradetokens');
         }
 
         function closeTradeModal() {
-            document.getElementById('tradeModal').style.display = 'none';
         }
 
         const tokenLabel = t => t === 'steam' ? 'Steam' : 'Standoff 2';
@@ -1821,6 +1834,7 @@
                 loadSkins();
             } else if (section === 'gold-transfer') {
                 loadGoldTransferWorkspace();
+                switchTradeHubTab('sendgold');
             } else if (section === 'chat') {
                 loadChatMessages();
             } else if (section === 'leaderboard') {
@@ -1829,6 +1843,27 @@
                 loadWalletData();
             } else if (section === 'profile') {
                 loadProfile();
+            }
+        }
+
+        function switchTradeHubTab(tab) {
+            const tabs = ['sendgold', 'tradetokens', 'convert'];
+            tabs.forEach(t => {
+                const panel = document.getElementById('tradehub-' + t);
+                const btn = document.getElementById('tabBtn-' + t);
+                if (panel) panel.style.display = t === tab ? 'block' : 'none';
+                if (btn) {
+                    btn.classList.remove('btn-primary');
+                    btn.classList.add('btn-secondary');
+                    if (t === tab) { btn.classList.remove('btn-secondary'); btn.classList.add('btn-primary'); }
+                }
+            });
+            if (tab === 'tradetokens') {
+                loadOpenTradeListings();
+                loadMyTradeListings();
+            } else if (tab === 'convert') {
+                loadRates();
+                updateConversionEstimate();
             }
         }
 
@@ -2469,9 +2504,25 @@
         async function loadSkins() {
             try {
                 const response = await fetch('/api/skins');
-                const skins = await response.json();
-                
+                let skins = await response.json();
+
+                const filterGame = document.getElementById('skinFilterGame')?.value || '';
+                const filterToken = document.getElementById('skinFilterToken')?.value || '';
+                const sortBy = document.getElementById('skinFilterSort')?.value || 'newest';
+                const searchTerm = (document.getElementById('skinFilterSearch')?.value || '').toLowerCase();
+
+                if (filterGame) skins = skins.filter(s => s.game_type === filterGame);
+                if (filterToken) skins = skins.filter(s => s.token_type === filterToken);
+                if (searchTerm) skins = skins.filter(s => (s.skin_name || '').toLowerCase().includes(searchTerm));
+
+                if (sortBy === 'price-low') skins.sort((a, b) => (a.price_usd || 0) - (b.price_usd || 0));
+                else if (sortBy === 'price-high') skins.sort((a, b) => (b.price_usd || 0) - (a.price_usd || 0));
+
                 const grid = document.getElementById('skinsGrid');
+                if (skins.length === 0) {
+                    grid.innerHTML = '<div class="loading" style="grid-column: 1/-1;">No skins match your filters.</div>';
+                    return;
+                }
                 grid.innerHTML = skins.map(skin => {
                     const tokenLabel = skin.token_type === 'steam' ? 'Steam' : 'Standoff 2';
                     const tokenIcon = skin.token_type === 'steam' ? '🎮' : '⚔️';
