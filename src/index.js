@@ -873,6 +873,34 @@ async function initSchema() {
   `);
 
   await dbExec(`
+    CREATE TABLE IF NOT EXISTS token_trade_listings (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      offer_token_type TEXT NOT NULL,
+      offer_amount REAL NOT NULL,
+      want_token_type TEXT NOT NULL,
+      want_amount REAL NOT NULL,
+      status TEXT DEFAULT 'open',
+      buyer_id INTEGER,
+      fee_amount REAL DEFAULT 0,
+      fee_percent REAL DEFAULT 0,
+      completed_at TEXT,
+      cancelled_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (buyer_id) REFERENCES users(id)
+    );
+  `);
+
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS platform_token_revenue (
+      token_type TEXT PRIMARY KEY,
+      accumulated_amount REAL DEFAULT 0,
+      total_collected REAL DEFAULT 0
+    );
+  `);
+
+  await dbExec(`
     CREATE TABLE IF NOT EXISTS point_conversions (
       id INTEGER PRIMARY KEY,
       user_id INTEGER,
@@ -3237,7 +3265,7 @@ app.post('/api/convert', authenticateRequest, async (req, res) => {
   const netAmount = grossAmount - fee;
   
   // Track the fee in BTC equivalent for platform revenue pool
-  const feeInBTC = trackFeeFromConversion(fee, targetCurrency);
+  const feeInBTC = await trackFeeFromConversion(fee, targetCurrency);
   trackConversion();
   
   // Deduct tokens now and queue a payout - actual crypto is sent manually by an admin
@@ -3263,6 +3291,144 @@ app.post('/api/convert', authenticateRequest, async (req, res) => {
     status: 'pending_payout',
     message: `Conversion queued. Your tokens have been deducted and ${SUPPORTED_CURRENCIES[targetCurrency].symbol}${netAmount.toFixed(8)} ${targetCurrency} will be sent to your wallet within the ${process.env.PAYOUT_FREQUENCY || 'weekly'} payout cycle.`
   });
+});
+
+// ============================================================
+// TOKEN TRADE MARKETPLACE (CS2 tokens <-> Standoff2 tokens)
+// ============================================================
+// A user lists "offer_amount of offer_token_type for want_amount of want_token_type".
+// Another user accepts and the swap executes immediately. The LISTER pays a service
+// fee (taken out of what they receive), tiered by the listed amount:
+//   - listed amount > 2500 units: 2% fee
+//   - listed amount <= 2500 units: 3% fee
+// Fee is collected in tokens (not cash) and tracked in platform_token_revenue.
+
+function getTradeFeePercent(offerAmount) {
+  return offerAmount > 2500 ? 0.02 : 0.03;
+}
+
+async function creditPlatformTokenRevenue(tokenType, amount) {
+  const existing = await dbGet('SELECT * FROM platform_token_revenue WHERE token_type = ?', [tokenType]);
+  if (existing) {
+    await dbRun('UPDATE platform_token_revenue SET accumulated_amount = accumulated_amount + ?, total_collected = total_collected + ? WHERE token_type = ?', [amount, amount, tokenType]);
+  } else {
+    await dbRun('INSERT INTO platform_token_revenue (token_type, accumulated_amount, total_collected) VALUES (?, ?, ?)', [tokenType, amount, amount]);
+  }
+}
+
+// API: Create a token trade listing (escrows the offered tokens immediately)
+app.post('/api/trades/list', authenticateRequest, async (req, res) => {
+  const { offerTokenType, offerAmount, wantTokenType, wantAmount } = req.body;
+
+  if (!['steam', 'standoff2'].includes(offerTokenType) || !['steam', 'standoff2'].includes(wantTokenType)) {
+    return res.status(400).json({ error: 'Invalid token type. Must be steam or standoff2' });
+  }
+  if (offerTokenType === wantTokenType) {
+    return res.status(400).json({ error: 'Offer and want token types must be different' });
+  }
+  if (!offerAmount || offerAmount <= 0 || !wantAmount || wantAmount <= 0) {
+    return res.status(400).json({ error: 'Invalid amount' });
+  }
+
+  const offerColumn = offerTokenType === 'steam' ? 'steam_tokens' : 'standoff2_tokens';
+  const user = await dbGet(`SELECT ${offerColumn} FROM users WHERE id = ?`, [req.userId]);
+  if (!user || user[offerColumn] < offerAmount) {
+    return res.status(400).json({ error: `Insufficient ${offerTokenType} tokens` });
+  }
+
+  // Escrow the offered tokens now so the lister can't spend them elsewhere
+  await dbRun(`UPDATE users SET ${offerColumn} = ${offerColumn} - ? WHERE id = ?`, [offerAmount, req.userId]);
+
+  const result = await dbRun(`
+    INSERT INTO token_trade_listings (user_id, offer_token_type, offer_amount, want_token_type, want_amount, fee_percent)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `, [req.userId, offerTokenType, offerAmount, wantTokenType, wantAmount, getTradeFeePercent(offerAmount)]);
+
+  logSystemEvent('info', `Trade listing created by user ${req.userId}`, `Offering ${offerAmount} ${offerTokenType} for ${wantAmount} ${wantTokenType}`);
+
+  res.json({ id: result.lastID, message: 'Listing created. Your tokens are held in escrow until this trade completes or is cancelled.' });
+});
+
+// API: Browse open trade listings
+app.get('/api/trades/listings', async (req, res) => {
+  const listings = await dbAll(`
+    SELECT ttl.*, u.username
+    FROM token_trade_listings ttl
+    JOIN users u ON ttl.user_id = u.id
+    WHERE ttl.status = 'open'
+    ORDER BY ttl.created_at DESC
+  `);
+  res.json(listings);
+});
+
+// API: Get my own trade listings
+app.get('/api/trades/my-listings', authenticateRequest, async (req, res) => {
+  const listings = await dbAll('SELECT * FROM token_trade_listings WHERE user_id = ? ORDER BY created_at DESC', [req.userId]);
+  res.json(listings);
+});
+
+// API: Cancel an open listing (refunds escrowed tokens)
+app.post('/api/trades/:id/cancel', authenticateRequest, async (req, res) => {
+  const listing = await dbGet('SELECT * FROM token_trade_listings WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
+  if (!listing) return res.status(404).json({ error: 'Listing not found' });
+  if (listing.status !== 'open') return res.status(400).json({ error: `Cannot cancel listing in ${listing.status} state` });
+
+  const offerColumn = listing.offer_token_type === 'steam' ? 'steam_tokens' : 'standoff2_tokens';
+  await dbRun(`UPDATE users SET ${offerColumn} = ${offerColumn} + ? WHERE id = ?`, [listing.offer_amount, req.userId]);
+  await dbRun('UPDATE token_trade_listings SET status = ?, cancelled_at = CURRENT_TIMESTAMP WHERE id = ?', ['cancelled', listing.id]);
+
+  res.json({ message: 'Listing cancelled. Your escrowed tokens have been returned.' });
+});
+
+// API: Accept an open trade listing
+app.post('/api/trades/:id/accept', authenticateRequest, async (req, res) => {
+  const listing = await dbGet('SELECT * FROM token_trade_listings WHERE id = ?', [req.params.id]);
+  if (!listing) return res.status(404).json({ error: 'Listing not found' });
+  if (listing.status !== 'open') return res.status(400).json({ error: `Listing is no longer open (${listing.status})` });
+  if (listing.user_id === req.userId) return res.status(400).json({ error: 'Cannot accept your own listing' });
+
+  const wantColumn = listing.want_token_type === 'steam' ? 'steam_tokens' : 'standoff2_tokens';
+  const offerColumn = listing.offer_token_type === 'steam' ? 'steam_tokens' : 'standoff2_tokens';
+
+  const acceptor = await dbGet(`SELECT ${wantColumn} FROM users WHERE id = ?`, [req.userId]);
+  if (!acceptor || acceptor[wantColumn] < listing.want_amount) {
+    return res.status(400).json({ error: `Insufficient ${listing.want_token_type} tokens` });
+  }
+
+  const feePercent = listing.fee_percent || getTradeFeePercent(listing.offer_amount);
+  const feeAmount = listing.want_amount * feePercent;
+  const listerReceives = listing.want_amount - feeAmount;
+
+  // Acceptor pays want_amount, receives the full escrowed offer_amount
+  await dbRun(`UPDATE users SET ${wantColumn} = ${wantColumn} - ? WHERE id = ?`, [listing.want_amount, req.userId]);
+  await dbRun(`UPDATE users SET ${offerColumn} = ${offerColumn} + ? WHERE id = ?`, [listing.offer_amount, req.userId]);
+
+  // Lister receives want_amount minus the service fee
+  await dbRun(`UPDATE users SET ${wantColumn} = ${wantColumn} + ? WHERE id = ?`, [listerReceives, listing.user_id]);
+
+  await creditPlatformTokenRevenue(listing.want_token_type, feeAmount);
+
+  await dbRun(`
+    UPDATE token_trade_listings
+    SET status = 'completed', buyer_id = ?, fee_amount = ?, fee_percent = ?, completed_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `, [req.userId, feeAmount, feePercent, listing.id]);
+
+  logSystemEvent('info', `Trade completed`, `Listing ${listing.id}: ${listing.offer_amount} ${listing.offer_token_type} <-> ${listing.want_amount} ${listing.want_token_type}, fee ${feeAmount.toFixed(4)} ${listing.want_token_type} (${(feePercent * 100).toFixed(0)}%)`);
+
+  res.json({
+    message: 'Trade completed successfully',
+    youReceived: listing.offer_amount,
+    youReceivedType: listing.offer_token_type,
+    youPaid: listing.want_amount,
+    youPaidType: listing.want_token_type
+  });
+});
+
+// API: Get platform token revenue (admin)
+app.get('/api/admin/token-revenue', checkAdminSession, async (req, res) => {
+  const revenue = await dbAll('SELECT * FROM platform_token_revenue');
+  res.json(revenue);
 });
 
 // BETTING API ENDPOINTS

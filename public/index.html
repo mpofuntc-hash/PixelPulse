@@ -867,6 +867,7 @@
                 <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
                     <button class="btn btn-primary" onclick="showDepositModal()">Deposit BTC</button>
                     <button class="btn btn-secondary" onclick="showConversionModal()">Convert Tokens</button>
+                    <button class="btn btn-secondary" onclick="showTradeModal()">Trade Tokens (CS2 ↔ Standoff2)</button>
                     <button class="btn btn-secondary" onclick="showTokenDepositModal()">Deposit Game Tokens</button>
                     <button class="btn btn-secondary" onclick="showGameAccountModal()">Link Game Accounts</button>
                     <button class="btn btn-secondary" onclick="loadEscrowTrades()">My Escrow Trades</button>
@@ -1116,6 +1117,57 @@
                     <div id="netAmount" style="font-size: 24px; font-weight: bold; color: #4caf50;">$0.00</div>
                 </div>
                 <button class="btn btn-primary" onclick="convertTokens()" style="width: 100%;">Convert</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="tradeModal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3 class="modal-title">Trade Tokens</h3>
+                <button class="close-btn" onclick="closeTradeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 20px; padding: 12px; background: #2f2f2f; border-radius: 4px; font-size: 13px; color: #999;">
+                    List tokens you want to trade for the other token type. Service fee: 3% (2% for listings over 2500 units), paid by you when someone accepts your listing.
+                </div>
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <div style="flex: 1;">
+                        <label style="display: block; margin-bottom: 5px;">You Offer</label>
+                        <select id="tradeOfferType" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                            <option value="steam">Steam Tokens</option>
+                            <option value="standoff2">Standoff 2 Tokens</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1;">
+                        <label style="display: block; margin-bottom: 5px;">Amount</label>
+                        <input type="number" id="tradeOfferAmount" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <div style="flex: 1;">
+                        <label style="display: block; margin-bottom: 5px;">You Want</label>
+                        <select id="tradeWantType" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                            <option value="standoff2">Standoff 2 Tokens</option>
+                            <option value="steam">Steam Tokens</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1;">
+                        <label style="display: block; margin-bottom: 5px;">Amount</label>
+                        <input type="number" id="tradeWantAmount" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="createTradeListing()" style="width: 100%; margin-bottom: 20px;">Create Listing</button>
+
+                <h4 style="margin-bottom: 10px;">Open Listings</h4>
+                <div id="openTradeListings" style="max-height: 200px; overflow-y: auto; margin-bottom: 20px;">
+                    <div class="loading">Loading listings...</div>
+                </div>
+
+                <h4 style="margin-bottom: 10px;">My Listings</h4>
+                <div id="myTradeListings" style="max-height: 200px; overflow-y: auto;">
+                    <div class="loading">Loading your listings...</div>
+                </div>
             </div>
         </div>
     </div>
@@ -1449,6 +1501,157 @@
             } catch (error) {
                 console.error('Conversion error:', error);
                 alert('Conversion failed');
+            }
+        }
+
+        // Token trade marketplace functions
+        function authHeaders() {
+            const headers = { 'Content-Type': 'application/json' };
+            if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
+            return headers;
+        }
+
+        function showTradeModal() {
+            if (!sessionToken) {
+                alert('Please log in to trade tokens');
+                return;
+            }
+            document.getElementById('tradeModal').style.display = 'flex';
+            loadOpenTradeListings();
+            loadMyTradeListings();
+        }
+
+        function closeTradeModal() {
+            document.getElementById('tradeModal').style.display = 'none';
+        }
+
+        const tokenLabel = t => t === 'steam' ? 'Steam' : 'Standoff 2';
+
+        async function createTradeListing() {
+            const offerTokenType = document.getElementById('tradeOfferType').value;
+            const wantTokenType = document.getElementById('tradeWantType').value;
+            const offerAmount = parseFloat(document.getElementById('tradeOfferAmount').value);
+            const wantAmount = parseFloat(document.getElementById('tradeWantAmount').value);
+
+            if (offerTokenType === wantTokenType) {
+                alert('Offer and want token types must be different');
+                return;
+            }
+            if (!offerAmount || offerAmount <= 0 || !wantAmount || wantAmount <= 0) {
+                alert('Please enter valid amounts');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/trades/list', {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ offerTokenType, offerAmount, wantTokenType, wantAmount })
+                });
+                const data = await response.json();
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+                alert(data.message);
+                document.getElementById('tradeOfferAmount').value = '';
+                document.getElementById('tradeWantAmount').value = '';
+                loadOpenTradeListings();
+                loadMyTradeListings();
+                if (sessionToken) loadWalletData();
+            } catch (error) {
+                console.error('Create listing error:', error);
+                alert('Failed to create listing');
+            }
+        }
+
+        async function loadOpenTradeListings() {
+            try {
+                const response = await fetch('/api/trades/listings');
+                const listings = await response.json();
+                const container = document.getElementById('openTradeListings');
+
+                const otherListings = listings.filter(l => !currentUser || l.user_id !== currentUser.id);
+
+                if (otherListings.length === 0) {
+                    container.innerHTML = '<div style="color: #999; padding: 10px;">No open listings from other users</div>';
+                } else {
+                    container.innerHTML = otherListings.map(l => `
+                        <div style="padding: 10px; background: #2f2f2f; border-radius: 4px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div><strong>${l.username}</strong>: ${l.offer_amount} ${tokenLabel(l.offer_token_type)} → ${l.want_amount} ${tokenLabel(l.want_token_type)}</div>
+                                <div style="font-size: 11px; color: #999;">${l.created_at}</div>
+                            </div>
+                            <button class="btn btn-primary" onclick="acceptTradeListing(${l.id})" ${sessionToken ? '' : 'disabled'}>Accept</button>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Failed to load listings:', error);
+            }
+        }
+
+        async function loadMyTradeListings() {
+            if (!sessionToken) return;
+            try {
+                const response = await fetch('/api/trades/my-listings', { headers: authHeaders() });
+                const listings = await response.json();
+                const container = document.getElementById('myTradeListings');
+
+                if (listings.length === 0) {
+                    container.innerHTML = '<div style="color: #999; padding: 10px;">You have no listings</div>';
+                    return;
+                }
+
+                container.innerHTML = listings.map(l => `
+                    <div style="padding: 10px; background: #2f2f2f; border-radius: 4px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div>${l.offer_amount} ${tokenLabel(l.offer_token_type)} → ${l.want_amount} ${tokenLabel(l.want_token_type)}</div>
+                            <div style="font-size: 11px; color: #999;">Status: ${l.status}</div>
+                        </div>
+                        ${l.status === 'open' ? `<button class="btn btn-secondary" onclick="cancelTradeListing(${l.id})">Cancel</button>` : ''}
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load my listings:', error);
+            }
+        }
+
+        async function acceptTradeListing(id) {
+            if (!confirm('Accept this trade?')) return;
+            try {
+                const response = await fetch(`/api/trades/${id}/accept`, { method: 'POST', headers: authHeaders() });
+                const data = await response.json();
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+                alert(`Trade completed! You received ${data.youReceived} ${tokenLabel(data.youReceivedType)} for ${data.youPaid} ${tokenLabel(data.youPaidType)}`);
+                loadOpenTradeListings();
+                loadMyTradeListings();
+                loadWalletData();
+            } catch (error) {
+                console.error('Accept trade error:', error);
+                alert('Failed to accept trade');
+            }
+        }
+
+        async function cancelTradeListing(id) {
+            if (!confirm('Cancel this listing? Your escrowed tokens will be returned.')) return;
+            try {
+                const response = await fetch(`/api/trades/${id}/cancel`, { method: 'POST', headers: authHeaders() });
+                const data = await response.json();
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+                alert(data.message);
+                loadOpenTradeListings();
+                loadMyTradeListings();
+                loadWalletData();
+            } catch (error) {
+                console.error('Cancel listing error:', error);
+                alert('Failed to cancel listing');
             }
         }
 
