@@ -95,7 +95,11 @@ async function ensureLegacySchema() {
     ['user_profiles', 'banner_id', "TEXT DEFAULT 'bronze_cloth'"],
     ['user_points', 'points', 'INTEGER DEFAULT 0'],
     ['sessions', 'session_token', 'TEXT'],
-    ['sessions', 'expires_at', 'TEXT']
+    ['sessions', 'expires_at', 'TEXT'],
+    ['token_conversions', 'wallet_address', 'TEXT'],
+    ['token_conversions', 'target_currency', 'TEXT'],
+    ['token_conversions', 'tx_hash', 'TEXT'],
+    ['token_conversions', 'paid_at', 'TEXT']
   ];
 
   for (const [tableName, columnName, definition] of requiredColumns) {
@@ -2356,21 +2360,21 @@ app.get('/api/rates', async (req, res) => {
 });
 
 // API: Manual sync esports matches
-app.post('/api/admin/sync-esports', (req, res) => {
+app.post('/api/admin/sync-esports', checkAdminSession, (req, res) => {
   syncEsportsMatches()
     .then(() => res.json({ message: 'Esports matches synced successfully' }))
     .catch(err => res.status(500).json({ error: err.message }));
 });
 
 // API: Manual resolve betting markets
-app.post('/api/admin/resolve-bets', (req, res) => {
+app.post('/api/admin/resolve-bets', checkAdminSession, (req, res) => {
   resolveBettingMarkets()
     .then(() => res.json({ message: 'Betting markets resolved successfully' }))
     .catch(err => res.status(500).json({ error: err.message }));
 });
 
 // API: Get esports sync status
-app.get('/api/admin/esports-status', async (req, res) => {
+app.get('/api/admin/esports-status', checkAdminSession, async (req, res) => {
   const totalMarkets = (await dbGet('SELECT COUNT(*) as count FROM betting_markets')).count;
   const activeMarkets = (await dbGet('SELECT COUNT(*) as count FROM betting_markets WHERE status = ?', ['active'])).count;
   const apiMarkets = (await dbGet('SELECT COUNT(*) as count FROM betting_markets WHERE api_event_id IS NOT NULL')).count;
@@ -2449,7 +2453,7 @@ app.get('/api/predictions/feed', async (req, res) => {
 });
 
 // API: Manual sync anime data
-app.post('/api/admin/sync-anime', (req, res) => {
+app.post('/api/admin/sync-anime', checkAdminSession, (req, res) => {
   syncAnimeData()
     .then(() => res.json({ message: 'Anime data synced successfully' }))
     .catch(err => res.status(500).json({ error: err.message }));
@@ -3007,7 +3011,7 @@ app.get('/api/profile/streak-history', authenticateRequest, async (req, res) => 
 });
 
 // API: Award Royal Coins (admin API)
-app.post('/api/admin/award-points', (req, res) => {
+app.post('/api/admin/award-points', checkAdminSession, (req, res) => {
   const { userId, points, reason } = req.body;
   if (!userId || !points) return res.status(400).json({ error: 'userId and points required' });
   
@@ -3019,7 +3023,7 @@ app.post('/api/admin/award-points', (req, res) => {
 // ADMIN DASHBOARD API ENDPOINTS
 
 // API: Get analytics overview
-app.get('/api/admin/analytics/overview', async (req, res) => {
+app.get('/api/admin/analytics/overview', checkAdminSession, async (req, res) => {
   const today = new Date().toISOString().split('T')[0];
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   
@@ -3037,7 +3041,7 @@ app.get('/api/admin/analytics/overview', async (req, res) => {
 });
 
 // API: Get analytics chart data
-app.get('/api/admin/analytics/chart', async (req, res) => {
+app.get('/api/admin/analytics/chart', checkAdminSession, async (req, res) => {
   const days = parseInt(req.query.days) || 30;
   const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   
@@ -3046,7 +3050,7 @@ app.get('/api/admin/analytics/chart', async (req, res) => {
 });
 
 // API: Get IT tickets
-app.get('/api/admin/tickets', async (req, res) => {
+app.get('/api/admin/tickets', checkAdminSession, async (req, res) => {
   const status = req.query.status;
   let query = 'SELECT * FROM it_tickets';
   const params = [];
@@ -3063,7 +3067,7 @@ app.get('/api/admin/tickets', async (req, res) => {
 });
 
 // API: Create IT ticket
-app.post('/api/admin/tickets', async (req, res) => {
+app.post('/api/admin/tickets', checkAdminSession, async (req, res) => {
   const { title, description, priority, category, createdBy } = req.body;
   
   if (!title || !description) {
@@ -3075,7 +3079,7 @@ app.post('/api/admin/tickets', async (req, res) => {
 });
 
 // API: Update IT ticket
-app.put('/api/admin/tickets/:id', async (req, res) => {
+app.put('/api/admin/tickets/:id', checkAdminSession, async (req, res) => {
   const { status, assignedTo } = req.body;
   
   await updateITTicketStatus(req.params.id, status, assignedTo);
@@ -3083,14 +3087,14 @@ app.put('/api/admin/tickets/:id', async (req, res) => {
 });
 
 // API: Get system logs
-app.get('/api/admin/logs', async (req, res) => {
+app.get('/api/admin/logs', checkAdminSession, async (req, res) => {
   const limit = parseInt(req.query.limit) || 100;
   const logs = await dbAll('SELECT * FROM system_logs ORDER BY created_at DESC LIMIT ?', [limit]);
   res.json(logs);
 });
 
 // API: Get revenue breakdown
-app.get('/api/admin/revenue', async (req, res) => {
+app.get('/api/admin/revenue', checkAdminSession, async (req, res) => {
   const days = parseInt(req.query.days) || 30;
   const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   
@@ -3185,26 +3189,11 @@ async function checkAdminSession(req, res, next) {
   next();
 }
 
-// Protect admin dashboard endpoints
-app.get('/api/admin/analytics/overview', checkAdminSession, async (req, res) => {
-  const today = new Date().toISOString().split('T')[0];
-  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  
-  const todayStats = await dbGet('SELECT * FROM site_analytics WHERE date = ?', [today]) || {};
-  const weekStats = await dbGet('SELECT SUM(unique_visitors) as visitors, SUM(page_views) as views, SUM(total_bets) as bets, SUM(total_volume) as volume, SUM(total_revenue) as revenue FROM site_analytics WHERE date >= ?', [weekAgo]);
-  const totalUsers = (await dbGet('SELECT COUNT(*) as count FROM users')).count;
-  const activeMarkets = (await dbGet('SELECT COUNT(*) as count FROM betting_markets WHERE status = ?', ['active'])).count;
-  
-  res.json({
-    today: todayStats,
-    week: weekStats,
-    totalUsers,
-    activeMarkets
-  });
-});
+// Only real payout rails we can actually fulfil (manually, by admin) - no fiat/bank payout exists
+const CONVERTIBLE_CURRENCIES = ['BTC', 'ETH', 'USDT'];
 
-// API: Convert tokens to any supported currency
-app.post('/api/convert', async (req, res) => {
+// API: Convert game tokens to crypto (queues a payout for manual admin processing - see /api/admin/token-conversions)
+app.post('/api/convert', authenticateRequest, async (req, res) => {
   const { tokenType, amount, targetCurrency, walletAddress } = req.body;
   
   if (!tokenType || !['steam', 'standoff2'].includes(tokenType)) {
@@ -3215,12 +3204,12 @@ app.post('/api/convert', async (req, res) => {
     return res.status(400).json({ error: 'Invalid amount' });
   }
   
-  if (!targetCurrency || !SUPPORTED_CURRENCIES[targetCurrency]) {
-    return res.status(400).json({ error: 'Invalid target currency' });
+  if (!targetCurrency || !CONVERTIBLE_CURRENCIES.includes(targetCurrency)) {
+    return res.status(400).json({ error: `Invalid target currency. Supported: ${CONVERTIBLE_CURRENCIES.join(', ')}` });
   }
   
-  if (!walletAddress) {
-    return res.status(400).json({ error: 'Wallet address required for crypto/fiat withdrawal' });
+  if (!walletAddress || typeof walletAddress !== 'string' || walletAddress.trim().length < 10) {
+    return res.status(400).json({ error: 'Valid wallet address required' });
   }
   
   // Get token rate
@@ -3235,6 +3224,12 @@ app.post('/api/convert', async (req, res) => {
     return res.status(500).json({ error: 'Currency rate not available' });
   }
   
+  const tokenColumn = tokenType === 'steam' ? 'steam_tokens' : 'standoff2_tokens';
+  const user = await dbGet(`SELECT ${tokenColumn} FROM users WHERE id = ?`, [req.userId]);
+  if (!user || user[tokenColumn] < amount) {
+    return res.status(400).json({ error: `Insufficient ${tokenType} tokens` });
+  }
+  
   // Calculate conversion
   const usdValue = amount * tokenRate.rate_to_usd;
   const grossAmount = usdValue / currencyRate.rate_to_usd;
@@ -3245,52 +3240,29 @@ app.post('/api/convert', async (req, res) => {
   const feeInBTC = trackFeeFromConversion(fee, targetCurrency);
   trackConversion();
   
-  if (req.userId) {
-    const tokenColumn = tokenType === 'steam' ? 'steam_tokens' : 'standoff2_tokens';
-    const user = await dbGet(`SELECT ${tokenColumn} FROM users WHERE id = ?`, [req.userId]);
-    if (!user || user[tokenColumn] < amount) {
-      return res.status(400).json({ error: `Insufficient ${tokenType} tokens` });
-    }
-    
-    await dbRun(`UPDATE users SET ${tokenColumn} = ${tokenColumn} - ? WHERE id = ?`, [amount, req.userId]);
-    
-    const result = await dbRun(`
-      INSERT INTO token_conversions (user_id, token_type, amount, btc_received, status)
-      VALUES (?, ?, ?, ?, 'completed')
-    `, [req.userId, tokenType, amount, netAmount]);
-    
-    await logSystemEvent('info', `Token conversion by user ${req.userId}`, `Converted ${amount} ${tokenType} tokens to ${netAmount.toFixed(8)} ${targetCurrency}. Fee: ${fee.toFixed(8)} ${targetCurrency} (${feeInBTC.toFixed(8)} BTC)`);
-    
-    res.json({ 
-      id: result.lastID, 
-      amountReceived: netAmount,
-      currency: targetCurrency,
-      symbol: SUPPORTED_CURRENCIES[targetCurrency].symbol,
-      fee: fee,
-      feeInBTC: feeInBTC,
-      feePercentage: CONVERSION_FEE * 100,
-      message: 'Conversion successful' 
-    });
-  } else {
-    const result = await dbRun(`
-      INSERT INTO token_conversions (user_id, token_type, amount, btc_received, status)
-      VALUES (?, ?, ?, ?, 'pending')
-    `, [null, tokenType, amount, netAmount]);
-    
-    await logSystemEvent('info', `Guest token conversion`, `Converted ${amount} ${tokenType} to ${netAmount.toFixed(8)} ${targetCurrency}. Fee: ${fee.toFixed(8)} ${targetCurrency} (${feeInBTC.toFixed(8)} BTC)`);
-    
-    res.json({ 
-      id: result.lastID, 
-      amountReceived: netAmount,
-      currency: targetCurrency,
-      symbol: SUPPORTED_CURRENCIES[targetCurrency].symbol,
-      fee: fee,
-      feeInBTC: feeInBTC,
-      feePercentage: CONVERSION_FEE * 100,
-      message: `Conversion request submitted. You will receive ${SUPPORTED_CURRENCIES[targetCurrency].symbol}${netAmount.toFixed(8)} ${targetCurrency} after sending your ${tokenType} tokens.`,
-      walletAddress: walletAddress
-    });
-  }
+  // Deduct tokens now and queue a payout - actual crypto is sent manually by an admin
+  // (see /api/admin/token-conversions and /api/admin/confirm-conversion-payout), matching
+  // the same manual PAYOUT_FREQUENCY/PAYOUT_MINIMUM_BTC process already used for bet winnings.
+  await dbRun(`UPDATE users SET ${tokenColumn} = ${tokenColumn} - ? WHERE id = ?`, [amount, req.userId]);
+  
+  const result = await dbRun(`
+    INSERT INTO token_conversions (user_id, token_type, amount, btc_received, status, wallet_address, target_currency)
+    VALUES (?, ?, ?, ?, 'pending_payout', ?, ?)
+  `, [req.userId, tokenType, amount, netAmount, walletAddress.trim(), targetCurrency]);
+  
+  await logSystemEvent('info', `Token conversion queued for user ${req.userId}`, `Converting ${amount} ${tokenType} tokens to ${netAmount.toFixed(8)} ${targetCurrency} at ${walletAddress.trim()}. Fee: ${fee.toFixed(8)} ${targetCurrency} (${feeInBTC.toFixed(8)} BTC)`);
+  
+  res.json({ 
+    id: result.lastID, 
+    amountReceived: netAmount,
+    currency: targetCurrency,
+    symbol: SUPPORTED_CURRENCIES[targetCurrency].symbol,
+    fee: fee,
+    feeInBTC: feeInBTC,
+    feePercentage: CONVERSION_FEE * 100,
+    status: 'pending_payout',
+    message: `Conversion queued. Your tokens have been deducted and ${SUPPORTED_CURRENCIES[targetCurrency].symbol}${netAmount.toFixed(8)} ${targetCurrency} will be sent to your wallet within the ${process.env.PAYOUT_FREQUENCY || 'weekly'} payout cycle.`
+  });
 });
 
 // BETTING API ENDPOINTS
@@ -4008,7 +3980,7 @@ app.get('/api/tokens/deposits', authenticateRequest, async (req, res) => {
 });
 
 // API: Admin verify token deposit (approves and credits tokens)
-app.post('/api/admin/verify-deposit', async (req, res) => {
+app.post('/api/admin/verify-deposit', checkAdminSession, async (req, res) => {
   const { depositId, approved } = req.body;
   
   const deposit = await dbGet('SELECT * FROM token_deposits WHERE id = ?', [depositId]);
@@ -4029,7 +4001,7 @@ app.post('/api/admin/verify-deposit', async (req, res) => {
 });
 
 // API: Get pending token deposits (admin)
-app.get('/api/admin/pending-deposits', async (req, res) => {
+app.get('/api/admin/pending-deposits', checkAdminSession, async (req, res) => {
   const deposits = await dbAll(`
     SELECT td.*, u.username 
     FROM token_deposits td 
@@ -4229,7 +4201,7 @@ app.post('/api/escrow/:id/cancel', authenticateRequest, async (req, res) => {
 });
 
 // API: Admin resolve disputed trade
-app.post('/api/admin/resolve-escrow', async (req, res) => {
+app.post('/api/admin/resolve-escrow', checkAdminSession, async (req, res) => {
   const { tradeId, resolution } = req.body;
   // resolution: 'complete' (release tokens) or 'cancel' (refund)
   
@@ -4248,7 +4220,7 @@ app.post('/api/admin/resolve-escrow', async (req, res) => {
 });
 
 // API: Get pending disputed trades (admin)
-app.get('/api/admin/disputed-trades', async (req, res) => {
+app.get('/api/admin/disputed-trades', checkAdminSession, async (req, res) => {
   const trades = await dbAll(`
     SELECT et.*, s.skin_name, s.game_type,
            seller.username as seller_name, buyer.username as buyer_name
@@ -4918,7 +4890,7 @@ async function sweepFeesToWallet() {
 }
 
 // API: Get platform fee pool status
-app.get('/api/admin/fee-pool', async (req, res) => {
+app.get('/api/admin/fee-pool', checkAdminSession, async (req, res) => {
   const pool = await dbGet('SELECT * FROM platform_fee_pool WHERE id = 1');
   const payouts = await dbAll('SELECT * FROM payout_history ORDER BY created_at DESC LIMIT 20');
   
@@ -4929,7 +4901,7 @@ app.get('/api/admin/fee-pool', async (req, res) => {
 });
 
 // API: Manual trigger fee sweep
-app.post('/api/admin/sweep-fees', async (req, res) => {
+app.post('/api/admin/sweep-fees', checkAdminSession, async (req, res) => {
   const pool = await dbGet('SELECT * FROM platform_fee_pool WHERE id = 1');
   if (!pool || pool.accumulated_btc <= 0) {
     return res.json({ message: 'No fees to sweep' });
@@ -4941,7 +4913,7 @@ app.post('/api/admin/sweep-fees', async (req, res) => {
 });
 
 // API: Confirm payout (mark as confirmed with tx hash)
-app.post('/api/admin/confirm-payout', async (req, res) => {
+app.post('/api/admin/confirm-payout', checkAdminSession, async (req, res) => {
   const { payoutId, txHash } = req.body;
   
   if (!payoutId || !txHash) {
@@ -4953,6 +4925,37 @@ app.post('/api/admin/confirm-payout', async (req, res) => {
   logSystemEvent('info', `BTC payout confirmed`, `Payout ID: ${payoutId}, TX: ${txHash}`);
   
   res.json({ message: 'Payout confirmed successfully' });
+});
+
+// API: Get pending token conversion payouts (admin) - see /api/convert
+app.get('/api/admin/token-conversions', checkAdminSession, async (req, res) => {
+  const conversions = await dbAll(`
+    SELECT tc.*, u.username
+    FROM token_conversions tc
+    LEFT JOIN users u ON tc.user_id = u.id
+    WHERE tc.status = 'pending_payout'
+    ORDER BY tc.created_at ASC
+  `);
+  res.json(conversions);
+});
+
+// API: Confirm a token conversion payout (mark as paid with tx hash)
+app.post('/api/admin/confirm-conversion-payout', checkAdminSession, async (req, res) => {
+  const { conversionId, txHash } = req.body;
+  
+  if (!conversionId || !txHash) {
+    return res.status(400).json({ error: 'Conversion ID and transaction hash required' });
+  }
+  
+  const conversion = await dbGet('SELECT * FROM token_conversions WHERE id = ?', [conversionId]);
+  if (!conversion) return res.status(404).json({ error: 'Conversion not found' });
+  if (conversion.status !== 'pending_payout') return res.status(400).json({ error: 'Conversion already processed' });
+  
+  await dbRun('UPDATE token_conversions SET status = ?, tx_hash = ?, paid_at = CURRENT_TIMESTAMP WHERE id = ?', ['paid', txHash, conversionId]);
+  
+  logSystemEvent('info', `Token conversion payout confirmed`, `Conversion ID: ${conversionId}, TX: ${txHash}`);
+  
+  res.json({ message: 'Conversion payout confirmed successfully' });
 });
 
 // Start the HTTP server only after tables and default rates exist.

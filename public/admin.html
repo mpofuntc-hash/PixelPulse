@@ -588,6 +588,14 @@
                         <div class="loading">Loading payout history...</div>
                     </div>
                 </div>
+                <div class="tickets-section" style="margin-top: 20px;">
+                    <div class="tickets-header">
+                        <h3>Pending Token Conversions (CS2 / Standoff2 tokens → crypto)</h3>
+                    </div>
+                    <div class="ticket-list" id="tokenConversionList">
+                        <div class="loading">Loading pending conversions...</div>
+                    </div>
+                </div>
             </div>
 
             <!-- Settings Section -->
@@ -1074,6 +1082,7 @@
             loadAllTickets();
             loadSystemLogs();
             loadFeePool();
+            loadTokenConversions();
             loadSettingsInfo();
         }
 
@@ -1104,6 +1113,47 @@
                 }
             } catch (error) {
                 console.error('Failed to load fee pool:', error);
+            }
+        }
+
+        // Load pending token conversion payouts (CS2/Standoff2 tokens -> crypto)
+        async function loadTokenConversions() {
+            try {
+                const response = await fetch('/api/admin/token-conversions');
+                const conversions = await response.json();
+
+                if (conversions && conversions.length > 0) {
+                    document.getElementById('tokenConversionList').innerHTML = conversions.map(c => `
+                        <div class="ticket-item">
+                            <div><strong>${c.username || 'User #' + c.user_id}</strong> — ${c.amount} ${c.token_type} tokens → ${(c.btc_received || 0).toFixed(8)} ${c.target_currency || ''}</div>
+                            <div style="color: #999; font-size: 12px; word-break: break-all;">Wallet: ${c.wallet_address || 'N/A'}</div>
+                            <div style="color: #999; font-size: 12px;">${c.created_at || ''}</div>
+                            <button class="btn btn-primary" style="margin-top: 8px;" onclick="confirmConversionPayout(${c.id})">✅ Mark Paid</button>
+                        </div>
+                    `).join('');
+                } else {
+                    document.getElementById('tokenConversionList').innerHTML = '<div style="color: #999; padding: 20px;">No pending conversions</div>';
+                }
+            } catch (error) {
+                console.error('Failed to load token conversions:', error);
+            }
+        }
+
+        // Confirm a token conversion payout with a tx hash
+        async function confirmConversionPayout(conversionId) {
+            const txHash = prompt('Enter the transaction hash / reference for this payout:');
+            if (!txHash) return;
+            try {
+                const response = await fetch('/api/admin/confirm-conversion-payout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ conversionId, txHash })
+                });
+                const data = await response.json();
+                alert(data.message || data.error || 'Done');
+                loadTokenConversions();
+            } catch (error) {
+                alert('Failed to confirm conversion payout');
             }
         }
 
