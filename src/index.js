@@ -77,6 +77,12 @@ async function ensureLegacySchema() {
     ['users', 'game_points', 'INTEGER DEFAULT 0'],
     ['users', 'steam_tokens', 'REAL DEFAULT 0'],
     ['users', 'standoff2_tokens', 'REAL DEFAULT 0'],
+    ['users', 'robux_tokens', 'REAL DEFAULT 0'],
+    ['users', 'vbucks_tokens', 'REAL DEFAULT 0'],
+    ['users', 'pubg_uc_tokens', 'REAL DEFAULT 0'],
+    ['users', 'valorant_vp_tokens', 'REAL DEFAULT 0'],
+    ['users', 'genshin_crystals_tokens', 'REAL DEFAULT 0'],
+    ['users', 'freefire_diamonds_tokens', 'REAL DEFAULT 0'],
     ['admin_users', 'email', 'TEXT'],
     ['admin_users', 'password_hash', 'TEXT'],
     ['admin_users', 'is_one_time_password', 'INTEGER DEFAULT 1'],
@@ -154,6 +160,27 @@ const SUPPORTED_CURRENCIES = {
   'USDT': { symbol: '₮', type: 'crypto' }
 };
 
+const TOKEN_TYPES = {
+  'steam':         { column: 'steam_tokens',           label: 'Steam',              icon: '🎮', game: 'CS2' },
+  'standoff2':     { column: 'standoff2_tokens',       label: 'Standoff 2',         icon: '⚔️', game: 'Standoff 2' },
+  'roblox':        { column: 'robux_tokens',           label: 'Roblox (Robux)',     icon: '🟢', game: 'Roblox' },
+  'fortnite':      { column: 'vbucks_tokens',          label: 'Fortnite (V-Bucks)', icon: '🔵', game: 'Fortnite' },
+  'pubgmobile':    { column: 'pubg_uc_tokens',         label: 'PUBG Mobile (UC)',   icon: '🪙', game: 'PUBG Mobile' },
+  'valorant':      { column: 'valorant_vp_tokens',     label: 'Valorant (VP)',      icon: '🔴', game: 'Valorant' },
+  'genshin':       { column: 'genshin_crystals_tokens',label: 'Genshin (Crystals)', icon: '💎', game: 'Genshin Impact' },
+  'freefire':      { column: 'freefire_diamonds_tokens',label:'Free Fire (Diamonds)',icon: '🔶', game: 'Free Fire' }
+};
+
+function getTokenColumn(tokenType) {
+  const t = TOKEN_TYPES[tokenType];
+  return t ? t.column : null;
+}
+
+function getTokenLabel(tokenType) {
+  const t = TOKEN_TYPES[tokenType];
+  return t ? t.label : tokenType;
+}
+
 // Initialize exchange rates
 async function initializeExchangeRates() {
   // Seed default rates (will be updated from API)
@@ -174,16 +201,20 @@ async function initializeExchangeRates() {
     `, [rate.currency, rate.rate_to_usd, rate.rate_to_btc]);
   }
 
-  // Seed token rates
-  await dbRun(`
-    INSERT OR IGNORE INTO token_rates (token_type, rate_to_usd, rate_to_btc)
-    VALUES ('steam', 0.0001, 0.0000000015)
-  `);
-  
-  await dbRun(`
-    INSERT OR IGNORE INTO token_rates (token_type, rate_to_usd, rate_to_btc)
-    VALUES ('standoff2', 0.0001, 0.0000000015)
-  `);
+  // Seed token rates for all supported game tokens
+  const defaultTokenRates = [
+    { type: 'steam',       rate_to_usd: 0.0001, rate_to_btc: 0.0000000015 },
+    { type: 'standoff2',   rate_to_usd: 0.0001, rate_to_btc: 0.0000000015 },
+    { type: 'roblox',      rate_to_usd: 0.0125, rate_to_btc: 0.00000000019 },
+    { type: 'fortnite',    rate_to_usd: 0.01,   rate_to_btc: 0.00000000015 },
+    { type: 'pubgmobile',  rate_to_usd: 0.016,  rate_to_btc: 0.00000000024 },
+    { type: 'valorant',    rate_to_usd: 0.01,   rate_to_btc: 0.00000000015 },
+    { type: 'genshin',     rate_to_usd: 0.014,  rate_to_btc: 0.00000000021 },
+    { type: 'freefire',    rate_to_usd: 0.01,   rate_to_btc: 0.00000000015 }
+  ];
+  for (const r of defaultTokenRates) {
+    await dbRun('INSERT OR IGNORE INTO token_rates (token_type, rate_to_usd, rate_to_btc) VALUES (?, ?, ?)', [r.type, r.rate_to_usd, r.rate_to_btc]);
+  }
 }
 
 // Fetch real-time crypto prices from CoinGecko API
@@ -2128,10 +2159,16 @@ app.get('/api/auth/me', async (req, res) => {
     return res.status(401).json({ error: 'Invalid or expired session' });
   }
 
-  const user = await dbGet('SELECT id, username, email, steam_tokens, standoff2_tokens FROM users WHERE id = ?', [session.user_id]);
+  const tokenColumns = Object.values(TOKEN_TYPES).map(t => t.column).join(', ');
+  const user = await dbGet(`SELECT id, username, email, ${tokenColumns} FROM users WHERE id = ?`, [session.user_id]);
   const balance = await dbGet('SELECT * FROM user_balances WHERE user_id = ?', [session.user_id]);
 
-  res.json({ user, balance });
+  const tokens = {};
+  for (const [key, info] of Object.entries(TOKEN_TYPES)) {
+    tokens[key] = { label: info.label, icon: info.icon, game: info.game, balance: user[info.column] || 0 };
+  }
+
+  res.json({ user, balance, tokens });
 });
 
 // Middleware: Authenticate requests
@@ -2430,7 +2467,13 @@ const CONVERSION_FEE = 0.03;
 app.get('/api/rates', async (req, res) => {
   const rates = await dbAll('SELECT * FROM exchange_rates');
   const tokenRates = await dbAll('SELECT * FROM token_rates');
-  res.json({ currencies: rates, tokens: tokenRates });
+  const tokenTypes = Object.entries(TOKEN_TYPES).map(([key, info]) => ({
+    key,
+    label: info.label,
+    icon: info.icon,
+    game: info.game
+  }));
+  res.json({ currencies: rates, tokens: tokenRates, tokenTypes });
 });
 
 // API: Manual sync esports matches
@@ -3387,7 +3430,8 @@ app.post('/api/convert', authenticateRequest, async (req, res) => {
     return res.status(500).json({ error: 'Currency rate not available' });
   }
   
-  const tokenColumn = tokenType === 'steam' ? 'steam_tokens' : 'standoff2_tokens';
+  const tokenColumn = getTokenColumn(tokenType);
+  if (!tokenColumn) return res.status(400).json({ error: 'Invalid token type' });
   const user = await dbGet(`SELECT ${tokenColumn} FROM users WHERE id = ?`, [req.userId]);
   if (!user || user[tokenColumn] < amount) {
     return res.status(400).json({ error: `Insufficient ${tokenType} tokens` });
@@ -3455,8 +3499,8 @@ async function creditPlatformTokenRevenue(tokenType, amount) {
 app.post('/api/trades/list', authenticateRequest, async (req, res) => {
   const { offerTokenType, offerAmount, wantTokenType, wantAmount } = req.body;
 
-  if (!['steam', 'standoff2'].includes(offerTokenType) || !['steam', 'standoff2'].includes(wantTokenType)) {
-    return res.status(400).json({ error: 'Invalid token type. Must be steam or standoff2' });
+  if (!TOKEN_TYPES[offerTokenType] || !TOKEN_TYPES[wantTokenType]) {
+    return res.status(400).json({ error: 'Invalid token type. Supported: ' + Object.keys(TOKEN_TYPES).join(', ') });
   }
   if (offerTokenType === wantTokenType) {
     return res.status(400).json({ error: 'Offer and want token types must be different' });
@@ -3465,7 +3509,8 @@ app.post('/api/trades/list', authenticateRequest, async (req, res) => {
     return res.status(400).json({ error: 'Invalid amount' });
   }
 
-  const offerColumn = offerTokenType === 'steam' ? 'steam_tokens' : 'standoff2_tokens';
+  const offerColumn = getTokenColumn(offerTokenType);
+  if (!offerColumn) return res.status(400).json({ error: 'Invalid token type' });
   const user = await dbGet(`SELECT ${offerColumn} FROM users WHERE id = ?`, [req.userId]);
   if (!user || user[offerColumn] < offerAmount) {
     return res.status(400).json({ error: `Insufficient ${offerTokenType} tokens` });
@@ -3522,8 +3567,8 @@ app.post('/api/trades/:id/accept', authenticateRequest, async (req, res) => {
   if (listing.status !== 'open') return res.status(400).json({ error: `Listing is no longer open (${listing.status})` });
   if (listing.user_id === req.userId) return res.status(400).json({ error: 'Cannot accept your own listing' });
 
-  const wantColumn = listing.want_token_type === 'steam' ? 'steam_tokens' : 'standoff2_tokens';
-  const offerColumn = listing.offer_token_type === 'steam' ? 'steam_tokens' : 'standoff2_tokens';
+  const wantColumn = getTokenColumn(listing.want_token_type);
+  const offerColumn = getTokenColumn(listing.offer_token_type);
 
   const acceptor = await dbGet(`SELECT ${wantColumn} FROM users WHERE id = ?`, [req.userId]);
   if (!acceptor || acceptor[wantColumn] < listing.want_amount) {
@@ -4297,7 +4342,7 @@ app.post('/api/admin/verify-deposit', checkAdminSession, async (req, res) => {
   if (deposit.status !== 'pending') return res.status(400).json({ error: 'Deposit already processed' });
   
   if (approved) {
-    const tokenColumn = deposit.token_type === 'steam' ? 'steam_tokens' : 'standoff2_tokens';
+    const tokenColumn = getTokenColumn(deposit.token_type);
     await dbRun(`UPDATE users SET ${tokenColumn} = ${tokenColumn} + ? WHERE id = ?`, [deposit.amount, deposit.user_id]);
     await dbRun('UPDATE token_deposits SET status = ?, verified_at = CURRENT_TIMESTAMP WHERE id = ?', ['verified', depositId]);
     
@@ -4342,7 +4387,7 @@ async function completeEscrowTrade(tradeId) {
   const trade = await dbGet('SELECT * FROM escrow_trades WHERE id = ?', [tradeId]);
   if (!trade || trade.status !== 'buyer_confirmed') return;
   
-  const tokenColumn = trade.token_type === 'steam' ? 'steam_tokens' : 'standoff2_tokens';
+  const tokenColumn = getTokenColumn(trade.token_type);
   
   await dbRun(`UPDATE users SET ${tokenColumn} = ${tokenColumn} - ? WHERE id = ?`, [trade.price_tokens, trade.buyer_id]);
   await dbRun(`UPDATE users SET ${tokenColumn} = ${tokenColumn} + ? WHERE id = ?`, [trade.price_tokens, trade.seller_id]);
@@ -4390,11 +4435,10 @@ app.post('/api/skins/:id/purchase', authenticateRequest, async (req, res) => {
   if (!skin) return res.status(404).json({ error: 'Skin not available' });
   if (skin.user_id === req.userId) return res.status(400).json({ error: 'Cannot purchase your own skin' });
   
-  const tokenColumn = skin.token_type === 'steam' ? 'steam_tokens' : 'standoff2_tokens';
+  const tokenColumn = getTokenColumn(skin.token_type);
   const buyer = await dbGet(`SELECT ${tokenColumn} FROM users WHERE id = ?`, [req.userId]);
   if (!buyer || buyer[tokenColumn] < skin.price_tokens) {
-    const tokenName = skin.token_type === 'steam' ? 'Steam' : 'Standoff 2';
-    return res.status(400).json({ error: `Insufficient ${tokenName} tokens` });
+    return res.status(400).json({ error: `Insufficient ${getTokenLabel(skin.token_type)} tokens` });
   }
   
   const tradeType = skin.game_type === 'CS2' ? 'steam_bot' : 'manual';

@@ -837,8 +837,6 @@
                 </select>
                 <select id="skinFilterToken" onchange="loadSkins()" style="padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
                     <option value="">All Token Types</option>
-                    <option value="steam">Steam Tokens</option>
-                    <option value="standoff2">Standoff2 Tokens</option>
                 </select>
                 <select id="skinFilterSort" onchange="loadSkins()" style="padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
                     <option value="newest">Newest First</option>
@@ -892,6 +890,8 @@
                         <span class="stat-label">Royal Coins:</span>
                         <span class="stat-value" id="royalCoins">0</span>
                     </div>
+                </div>
+                <div class="balance-stats" id="tokenBalancesContainer">
                     <div class="stat">
                         <span class="stat-label">Steam Tokens:</span>
                         <span class="stat-value" id="steamTokens">0</span>
@@ -903,8 +903,7 @@
                 </div>
                 <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
                     <button class="btn btn-primary" onclick="showDepositModal()">Deposit BTC</button>
-                    <button class="btn btn-secondary" onclick="showSection('gold-transfer'); switchTradeHubTab('convert');">Convert Tokens</button>
-                    <button class="btn btn-secondary" onclick="showSection('gold-transfer'); switchTradeHubTab('tradetokens');">Trade Tokens (CS2 ↔ Standoff2)</button>
+                    <button class="btn btn-secondary" onclick="showSection('gold-transfer'); switchTradeHubTab('tradetokens');">Trade Tokens</button>
                     <button class="btn btn-secondary" onclick="showTokenDepositModal()">Deposit Game Tokens</button>
                     <button class="btn btn-secondary" onclick="showGameAccountModal()">Link Game Accounts</button>
                     <button class="btn btn-secondary" onclick="loadEscrowTrades()">My Escrow Trades</button>
@@ -930,8 +929,7 @@
                 <div style="margin-bottom: 20px;">
                     <label style="display: block; margin-bottom: 5px;">Token Type</label>
                     <select id="depositTokenType" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
-                        <option value="steam">Steam Tokens</option>
-                        <option value="standoff2">Standoff 2 Tokens</option>
+                        <option value="">Select token type...</option>
                     </select>
                 </div>
                 <div style="margin-bottom: 20px;">
@@ -1007,13 +1005,12 @@
     <!-- Profile Section with Avatar & Banner System -->
     <div class="section" id="gold-transfer" style="display: none; max-width: 980px;">
         <h2 class="section-title">Trade Hub</h2>
-        <p style="color: #aaa; max-width: 760px; margin: -10px auto 22px; text-align: center;">Send Standoff 2 Gold, trade tokens with other players, or convert your tokens to crypto — all in one place.</p>
+        <p style="color: #aaa; max-width: 760px; margin: -10px auto 22px; text-align: center;">Send Standoff 2 Gold or trade game tokens with other players across all supported platforms.</p>
 
         <!-- Sub-tab buttons -->
         <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 24px; flex-wrap: wrap;">
             <button class="btn btn-primary" id="tabBtn-sendgold" onclick="switchTradeHubTab('sendgold')" style="min-width: 140px;">⚔️ Send Gold</button>
             <button class="btn btn-secondary" id="tabBtn-tradetokens" onclick="switchTradeHubTab('tradetokens')" style="min-width: 140px;">🔄 Trade Tokens</button>
-            <button class="btn btn-secondary" id="tabBtn-convert" onclick="switchTradeHubTab('convert')" style="min-width: 140px;">💰 Convert Tokens</button>
         </div>
 
         <!-- Sub-tab: Send Gold -->
@@ -1061,8 +1058,7 @@
                     <div style="flex: 1; min-width: 200px;">
                         <label style="display: block; margin-bottom: 5px;">You Offer</label>
                         <select id="tradeOfferType" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
-                            <option value="steam">Steam Tokens</option>
-                            <option value="standoff2">Standoff 2 Tokens</option>
+                            <option value="">Select token type...</option>
                         </select>
                     </div>
                     <div style="flex: 1; min-width: 200px;">
@@ -1074,8 +1070,7 @@
                     <div style="flex: 1; min-width: 200px;">
                         <label style="display: block; margin-bottom: 5px;">You Want</label>
                         <select id="tradeWantType" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
-                            <option value="standoff2">Standoff 2 Tokens</option>
-                            <option value="steam">Steam Tokens</option>
+                            <option value="">Select token type...</option>
                         </select>
                     </div>
                     <div style="flex: 1; min-width: 200px;">
@@ -1094,49 +1089,6 @@
                 <div id="myTradeListings" style="max-height: 250px; overflow-y: auto;">
                     <div class="loading">Loading your listings...</div>
                 </div>
-            </div>
-        </div>
-
-        <!-- Sub-tab: Convert Tokens -->
-        <div id="tradehub-convert" style="display: none;">
-            <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 10px; padding: 20px; max-width: 600px; margin: 0 auto;">
-                <h3 style="margin: 0 0 14px;">Convert Tokens to Currency</h3>
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 5px;">Token Type</label>
-                    <select id="tokenType" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
-                        <option value="steam">Steam Tokens</option>
-                        <option value="standoff2">Standoff 2 Tokens</option>
-                    </select>
-                </div>
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 5px;">Target Currency</label>
-                    <select id="targetCurrency" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
-                        <option value="USD">USD ($)</option>
-                        <option value="EUR">EUR (€)</option>
-                        <option value="GBP">GBP (£)</option>
-                        <option value="ZAR">ZAR (R)</option>
-                        <option value="BTC">BTC (₿)</option>
-                        <option value="ETH">ETH (Ξ)</option>
-                        <option value="USDT">USDT (₮)</option>
-                    </select>
-                </div>
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 5px;">Amount</label>
-                    <input type="number" id="conversionAmount" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
-                </div>
-                <div style="margin-bottom: 20px;" id="walletAddressField">
-                    <label style="display: block; margin-bottom: 5px;">Your Wallet Address (for receiving funds)</label>
-                    <input type="text" id="walletAddress" placeholder="Enter your wallet address" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
-                </div>
-                <div style="margin-bottom: 20px; padding: 15px; background: #2f2f2f; border-radius: 4px;">
-                    <div style="font-size: 14px; color: #999;">Gross Amount:</div>
-                    <div id="grossAmount" style="font-size: 18px; font-weight: bold; color: #fff;">$0.00</div>
-                    <div style="font-size: 14px; color: #999; margin-top: 10px;">Fee (3%):</div>
-                    <div id="conversionFee" style="font-size: 18px; font-weight: bold; color: #e50914;">$0.00</div>
-                    <div style="font-size: 14px; color: #999; margin-top: 10px;">Net Amount (you receive):</div>
-                    <div id="netAmount" style="font-size: 24px; font-weight: bold; color: #4caf50;">$0.00</div>
-                </div>
-                <button class="btn btn-primary" onclick="convertTokens()" style="width: 100%;">Convert</button>
             </div>
         </div>
     </div>
@@ -1402,20 +1354,41 @@
 
         // Token conversion functions
         let currentRates = null;
+        let tokenTypesList = [];
 
         async function loadRates() {
             try {
                 const response = await fetch('/api/rates');
                 const data = await response.json();
                 currentRates = data;
+                if (data.tokenTypes) {
+                    tokenTypesList = data.tokenTypes;
+                    populateTokenDropdowns();
+                }
             } catch (error) {
                 console.error('Failed to load rates:', error);
             }
         }
 
+        function populateTokenDropdowns() {
+            const offerSelect = document.getElementById('tradeOfferType');
+            const wantSelect = document.getElementById('tradeWantType');
+            const optionsHtml = tokenTypesList.map(t => `<option value="${t.key}">${t.icon} ${t.label}</option>`).join('');
+            if (offerSelect) offerSelect.innerHTML = optionsHtml;
+            if (wantSelect) wantSelect.innerHTML = optionsHtml;
+            const filterToken = document.getElementById('skinFilterToken');
+            if (filterToken) {
+                filterToken.innerHTML = '<option value="">All Token Types</option>' + optionsHtml;
+            }
+            const depositToken = document.getElementById('depositTokenType');
+            if (depositToken) {
+                depositToken.innerHTML = '<option value="">Select token type...</option>' + optionsHtml;
+            }
+        }
+
         function showConversionModal() {
             showSection('gold-transfer');
-            switchTradeHubTab('convert');
+            switchTradeHubTab('tradetokens');
         }
 
         function closeConversionModal() {
@@ -1558,7 +1531,14 @@
         function closeTradeModal() {
         }
 
-        const tokenLabel = t => t === 'steam' ? 'Steam' : 'Standoff 2';
+        const tokenLabel = t => {
+            const info = tokenTypesList.find(x => x.key === t);
+            return info ? info.label : t;
+        };
+        const tokenIcon = t => {
+            const info = tokenTypesList.find(x => x.key === t);
+            return info ? info.icon : '';
+        };
 
         async function createTradeListing() {
             const offerTokenType = document.getElementById('tradeOfferType').value;
@@ -1847,7 +1827,7 @@
         }
 
         function switchTradeHubTab(tab) {
-            const tabs = ['sendgold', 'tradetokens', 'convert'];
+            const tabs = ['sendgold', 'tradetokens'];
             tabs.forEach(t => {
                 const panel = document.getElementById('tradehub-' + t);
                 const btn = document.getElementById('tabBtn-' + t);
@@ -1861,9 +1841,6 @@
             if (tab === 'tradetokens') {
                 loadOpenTradeListings();
                 loadMyTradeListings();
-            } else if (tab === 'convert') {
-                loadRates();
-                updateConversionEstimate();
             }
         }
 
@@ -2524,8 +2501,8 @@
                     return;
                 }
                 grid.innerHTML = skins.map(skin => {
-                    const tokenLabel = skin.token_type === 'steam' ? 'Steam' : 'Standoff 2';
-                    const tokenIcon = skin.token_type === 'steam' ? '🎮' : '⚔️';
+                    const tLabel = tokenLabel(skin.token_type);
+                    const tIcon = tokenIcon(skin.token_type);
                     const usdPrice = skin.price_usd || 0;
                     const localPrice = formatLocalPrice(usdPrice);
                     const priceDisplay = localPrice
@@ -2543,7 +2520,7 @@
                             <div class="anime-title">${skin.skin_name}</div>
                             <div class="anime-meta">${skin.weapon} • ${skin.rarity}</div>
                             <div class="anime-meta" style="color: #4caf50; font-weight: bold;">${priceDisplay}</div>
-                            <div class="anime-meta" style="color: #e50914;">${tokenIcon} ${skin.price_tokens} ${tokenLabel} Tokens</div>
+                            <div class="anime-meta" style="color: #e50914;">${tIcon} ${skin.price_tokens} ${tLabel} Tokens</div>
                             <button class="btn btn-primary" style="width: 100%; margin-top: 8px; padding: 6px;" onclick="purchaseSkin(${skin.id})">Buy Now</button>
                         </div>
                     </div>
@@ -2599,12 +2576,24 @@
             }
         }
 
+        function renderTokenBalances(tokens) {
+            const container = document.getElementById('tokenBalancesContainer');
+            if (!container) return;
+            if (!tokens || !tokenTypesList.length) {
+                container.innerHTML = '<div class="stat"><span class="stat-label" style="color:#666;">No token data</span></div>';
+                return;
+            }
+            container.innerHTML = tokenTypesList.map(t => {
+                const bal = tokens[t.key]?.balance || 0;
+                return `<div class="stat"><span class="stat-label">${t.icon} ${t.label}:</span><span class="stat-value">${bal.toLocaleString()}</span></div>`;
+            }).join('');
+        }
+
         async function loadWalletData() {
             if (!sessionToken) {
                 document.getElementById('btcBalance').textContent = '0.00000000 BTC';
                 document.getElementById('royalCoins').textContent = '0';
-                document.getElementById('steamTokens').textContent = '0';
-                document.getElementById('standoff2Tokens').textContent = '0';
+                renderTokenBalances(null);
                 return;
             }
             
@@ -2615,8 +2604,7 @@
                 const data = await response.json();
                 
                 if (data.user) {
-                    document.getElementById('steamTokens').textContent = data.user.steam_tokens || 0;
-                    document.getElementById('standoff2Tokens').textContent = data.user.standoff2_tokens || 0;
+                    renderTokenBalances(data.tokens || null);
                     // Fetch Royal Coins separately
                     fetch('/api/user/royal-coins', { headers: { 'Authorization': `Bearer ${sessionToken}` } })
                         .then(r => r.json())
@@ -2692,10 +2680,16 @@
             if (!skinName) return;
             
             const weapon = prompt('Weapon:');
-            const gameType = prompt('Game type (CS2 or Standoff2):');
+            const gameType = prompt('Game type (e.g. CS2, Standoff2, Valorant, PUBG Mobile, Fortnite, Roblox, Genshin Impact, Free Fire):');
             const rarity = prompt('Rarity:');
-            const tokenLabel = gameType === 'CS2' ? 'Steam' : 'Standoff 2';
-            const priceTokens = prompt(`Price in ${tokenLabel} tokens:`);
+            const tokenOptions = tokenTypesList.map(t => `${t.key} (${t.label})`).join(', ');
+            const tokenType = prompt(`Token type (${tokenOptions}):`);
+            if (!tokenType || !tokenTypesList.find(t => t.key === tokenType)) {
+                alert('Invalid token type');
+                return;
+            }
+            const tLabel = tokenLabel(tokenType);
+            const priceTokens = prompt(`Price in ${tLabel} tokens:`);
             
             fetch('/api/skins', {
                 method: 'POST',
@@ -2710,6 +2704,7 @@
                     rarity,
                     float_value: 0,
                     price_tokens: parseFloat(priceTokens),
+                    token_type: tokenType,
                     image_url: ''
                 })
             }).then(res => res.json()).then(data => {
