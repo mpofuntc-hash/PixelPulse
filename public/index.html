@@ -1235,10 +1235,11 @@
             }
 
             try {
+                const refCode = new URLSearchParams(window.location.search).get('ref') || '';
                 const response = await fetch('/api/auth/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password, username, isAdult })
+                    body: JSON.stringify({ email, password, username, isAdult, referralCode: refCode })
                 });
                 const data = await response.json();
 

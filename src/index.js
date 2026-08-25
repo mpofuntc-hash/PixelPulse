@@ -85,6 +85,7 @@ async function ensureLegacySchema() {
     ['users', 'genshin_crystals_tokens', 'REAL DEFAULT 0'],
     ['users', 'freefire_diamonds_tokens', 'REAL DEFAULT 0'],
     ['users', 'discord_id', 'TEXT'],
+    ['users', 'referred_by', 'TEXT'],
     ['chat_messages', 'source', "TEXT DEFAULT 'webapp'"],
     ['skins', 'price_fiat', 'REAL DEFAULT 0'],
     ['skins', 'fiat_currency', "TEXT DEFAULT ''"],
@@ -1500,6 +1501,47 @@ async function initSchema() {
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
   `);
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS referral_agents (
+      id INTEGER PRIMARY KEY,
+      agent_name TEXT NOT NULL,
+      agent_email TEXT,
+      referral_code TEXT UNIQUE NOT NULL,
+      commission_percent REAL DEFAULT 5,
+      is_active INTEGER DEFAULT 1,
+      total_referrals INTEGER DEFAULT 0,
+      total_earned_usd REAL DEFAULT 0,
+      total_paid_out_usd REAL DEFAULT 0,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS referral_tracking (
+      id INTEGER PRIMARY KEY,
+      agent_id INTEGER NOT NULL,
+      referred_user_id INTEGER NOT NULL,
+      first_purchase_made INTEGER DEFAULT 0,
+      commission_earned_usd REAL DEFAULT 0,
+      commission_status TEXT DEFAULT 'none',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      first_purchase_at TEXT,
+      FOREIGN KEY (agent_id) REFERENCES referral_agents(id),
+      FOREIGN KEY (referred_user_id) REFERENCES users(id)
+    );
+  `);
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS referral_payouts (
+      id INTEGER PRIMARY KEY,
+      agent_id INTEGER NOT NULL,
+      amount_usd REAL NOT NULL,
+      tx_hash TEXT,
+      status TEXT DEFAULT 'pending',
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (agent_id) REFERENCES referral_agents(id)
+    );
+  `);
 }
 
 // Initialize database schema and exchange rates
@@ -2277,7 +2319,7 @@ function ensureOwnsResource(req, res, resourceUserId, label = 'resource') {
 
 // API: Register user
 app.post('/api/auth/register', rateLimit({ windowMs: 60 * 1000, max: 5, key: req => `register:${req.ip || 'unknown'}` }), async (req, res) => {
-  const { email, password, username, isAdult } = req.body;
+  const { email, password, username, isAdult, referralCode } = req.body;
 
   if (!validateEmail(email) || !validateText(password, { maxLength: 128, required: true }) || !validateText(username, { maxLength: 50, required: true })) {
     return res.status(400).json({ error: 'Invalid email, password, or username.' });
@@ -2298,15 +2340,34 @@ app.post('/api/auth/register', rateLimit({ windowMs: 60 * 1000, max: 5, key: req
   }
 
   const passwordHash = await hashPassword(String(password));
+
+  // Validate referral code if provided
+  let validReferralCode = null;
+  if (referralCode && String(referralCode).trim().length > 0) {
+    const agent = await dbGet('SELECT id, is_active FROM referral_agents WHERE referral_code = ?', [String(referralCode).trim()]);
+    if (agent && agent.is_active === 1) {
+      validReferralCode = String(referralCode).trim();
+    }
+  }
+
   const result = await dbRun(`
-    INSERT INTO users (email, password_hash, username, is_adult)
-    VALUES (?, ?, ?, ?)
-  `, [normalizedEmail, passwordHash, String(username).trim(), 1]);
+    INSERT INTO users (email, password_hash, username, is_adult, referred_by)
+    VALUES (?, ?, ?, ?, ?)
+  `, [normalizedEmail, passwordHash, String(username).trim(), 1, validReferralCode]);
 
   const userId = result.lastID;
   await dbRun('INSERT INTO user_balances (user_id, btc_balance) VALUES (?, 0)', [userId]);
   await dbRun('INSERT INTO user_profiles (user_id, username, avatar_id, banner_id, pixelation_level, weekly_streak, max_streak, clip_wins) VALUES (?, ?, ?, ?, 8, 0, 0, 0)', [userId, String(username).trim(), 'male_default', 'bronze_cloth']);
   await dbRun('INSERT INTO user_points (user_id, points, total_earned, total_spent) VALUES (?, 0, 0, 0)', [userId]);
+
+  // Create referral tracking record if valid referral code was used
+  if (validReferralCode) {
+    const agent = await dbGet('SELECT id FROM referral_agents WHERE referral_code = ?', [validReferralCode]);
+    if (agent) {
+      await dbRun('INSERT INTO referral_tracking (agent_id, referred_user_id) VALUES (?, ?)', [agent.id, userId]);
+      await dbRun('UPDATE referral_agents SET total_referrals = total_referrals + 1 WHERE id = ?', [agent.id]);
+    }
+  }
 
   res.json({ message: 'Registration successful', userId });
 });
@@ -4696,7 +4757,24 @@ async function completeEscrowTrade(tradeId) {
     SET status = 'completed', price_usd = ?, buyer_currency = ?, price_in_buyer_currency = ?
     WHERE skin_id = ? AND seller_id = ? AND buyer_id = ? AND status = 'pending'
   `, [priceUsd, buyerCurrency, priceInBuyerCurrency, trade.skin_id, trade.seller_id, trade.buyer_id]);
-  
+
+  // Referral commission: credit agent on buyer's first completed purchase
+  if (priceUsd > 0) {
+    const buyerRecord = await dbGet('SELECT referred_by FROM users WHERE id = ?', [trade.buyer_id]);
+    if (buyerRecord && buyerRecord.referred_by) {
+      const referral = await dbGet('SELECT * FROM referral_tracking WHERE referred_user_id = ? AND first_purchase_made = 0', [trade.buyer_id]);
+      if (referral) {
+        const agent = await dbGet('SELECT * FROM referral_agents WHERE id = ? AND is_active = 1', [referral.agent_id]);
+        if (agent) {
+          const commission = priceUsd * (agent.commission_percent / 100);
+          await dbRun('UPDATE referral_tracking SET first_purchase_made = 1, commission_earned_usd = ?, commission_status = ?, first_purchase_at = CURRENT_TIMESTAMP WHERE id = ?', [commission, 'earned', referral.id]);
+          await dbRun('UPDATE referral_agents SET total_earned_usd = total_earned_usd + ? WHERE id = ?', [commission, agent.id]);
+          logSystemEvent('info', `Referral commission credited`, `Agent: ${agent.agent_name} (${agent.referral_code}), Commission: $${commission.toFixed(2)} on sale of $${priceUsd.toFixed(2)}`);
+        }
+      }
+    }
+  }
+
   logSystemEvent('info', `Escrow trade completed`, `Trade ID: ${tradeId}, Skin ID: ${trade.skin_id}`);
 }
 
@@ -5666,6 +5744,146 @@ app.post('/api/admin/confirm-conversion-payout', checkAdminSession, async (req, 
   logSystemEvent('info', `Token conversion payout confirmed`, `Conversion ID: ${conversionId}, TX: ${txHash}`);
   
   res.json({ message: 'Conversion payout confirmed successfully' });
+});
+
+// ============================================================
+// REFERRAL AGENT MANAGEMENT (Admin)
+// ============================================================
+
+// API: Create a referral agent
+app.post('/api/admin/referrals/agents', checkAdminSession, async (req, res) => {
+  const { agentName, agentEmail, commissionPercent, notes } = req.body;
+  if (!agentName || String(agentName).trim().length < 2) {
+    return res.status(400).json({ error: 'Agent name is required' });
+  }
+  const commission = parseFloat(commissionPercent) || 5;
+  if (commission < 0 || commission > 50) {
+    return res.status(400).json({ error: 'Commission must be between 0 and 50%' });
+  }
+  // Generate unique referral code
+  const crypto = require('crypto');
+  let code = '';
+  let attempts = 0;
+  while (attempts < 10) {
+    code = crypto.randomBytes(4).toString('hex').toUpperCase();
+    const existing = await dbGet('SELECT id FROM referral_agents WHERE referral_code = ?', [code]);
+    if (!existing) break;
+    attempts++;
+  }
+  const result = await dbRun(
+    'INSERT INTO referral_agents (agent_name, agent_email, referral_code, commission_percent, notes) VALUES (?, ?, ?, ?, ?)',
+    [String(agentName).trim(), agentEmail ? String(agentEmail).trim().toLowerCase() : null, code, commission, notes || null]
+  );
+  logSystemEvent('info', `Referral agent created`, `Agent: ${agentName}, Code: ${code}, Commission: ${commission}%`);
+  res.json({ id: result.lastID, referralCode: code, message: 'Referral agent created successfully' });
+});
+
+// API: List all referral agents with stats
+app.get('/api/admin/referrals/agents', checkAdminSession, async (req, res) => {
+  const agents = await dbAll(`
+    SELECT a.*,
+      (SELECT COUNT(*) FROM referral_tracking t WHERE t.agent_id = a.id AND t.first_purchase_made = 1) as converted_referrals,
+      (SELECT COUNT(*) FROM referral_tracking t WHERE t.agent_id = a.id AND t.first_purchase_made = 0) as pending_referrals
+    FROM referral_agents a
+    ORDER BY a.created_at DESC
+  `);
+  res.json(agents);
+});
+
+// API: Get agent details with referral list
+app.get('/api/admin/referrals/agents/:id', checkAdminSession, async (req, res) => {
+  const agentId = parseInt(req.params.id);
+  const agent = await dbGet('SELECT * FROM referral_agents WHERE id = ?', [agentId]);
+  if (!agent) return res.status(404).json({ error: 'Agent not found' });
+
+  const referrals = await dbAll(`
+    SELECT t.*, u.username, u.email, u.created_at as user_joined_at
+    FROM referral_tracking t
+    JOIN users u ON t.referred_user_id = u.id
+    WHERE t.agent_id = ?
+    ORDER BY t.created_at DESC
+  `, [agentId]);
+
+  const payouts = await dbAll('SELECT * FROM referral_payouts WHERE agent_id = ? ORDER BY created_at DESC', [agentId]);
+
+  res.json({ agent, referrals, payouts });
+});
+
+// API: Update agent (commission, active status, notes)
+app.put('/api/admin/referrals/agents/:id', checkAdminSession, async (req, res) => {
+  const agentId = parseInt(req.params.id);
+  const { commissionPercent, isActive, notes } = req.body;
+  const agent = await dbGet('SELECT * FROM referral_agents WHERE id = ?', [agentId]);
+  if (!agent) return res.status(404).json({ error: 'Agent not found' });
+
+  const updates = [];
+  const params = [];
+  if (commissionPercent !== undefined) {
+    const c = parseFloat(commissionPercent);
+    if (c < 0 || c > 50) return res.status(400).json({ error: 'Commission must be between 0 and 50%' });
+    updates.push('commission_percent = ?');
+    params.push(c);
+  }
+  if (isActive !== undefined) {
+    updates.push('is_active = ?');
+    params.push(isActive ? 1 : 0);
+  }
+  if (notes !== undefined) {
+    updates.push('notes = ?');
+    params.push(notes);
+  }
+  if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+  params.push(agentId);
+  await dbRun(`UPDATE referral_agents SET ${updates.join(', ')} WHERE id = ?`, params);
+  logSystemEvent('info', `Referral agent updated`, `Agent ID: ${agentId}`);
+  res.json({ message: 'Agent updated successfully' });
+});
+
+// API: Record a payout to an agent
+app.post('/api/admin/referrals/agents/:id/payout', checkAdminSession, async (req, res) => {
+  const agentId = parseInt(req.params.id);
+  const { amountUsd, txHash, notes } = req.body;
+  if (!amountUsd || parseFloat(amountUsd) <= 0) {
+    return res.status(400).json({ error: 'Valid payout amount required' });
+  }
+  const agent = await dbGet('SELECT * FROM referral_agents WHERE id = ?', [agentId]);
+  if (!agent) return res.status(404).json({ error: 'Agent not found' });
+
+  const amt = parseFloat(amountUsd);
+  const result = await dbRun(
+    'INSERT INTO referral_payouts (agent_id, amount_usd, tx_hash, notes, status) VALUES (?, ?, ?, ?, ?)',
+    [agentId, amt, txHash || null, notes || null, txHash ? 'confirmed' : 'pending']
+  );
+
+  if (txHash) {
+    await dbRun('UPDATE referral_agents SET total_paid_out_usd = total_paid_out_usd + ? WHERE id = ?', [amt, agentId]);
+  }
+
+  logSystemEvent('info', `Referral payout recorded`, `Agent: ${agent.agent_name}, Amount: $${amt.toFixed(2)}, TX: ${txHash || 'pending'}`);
+  res.json({ id: result.lastID, message: 'Payout recorded successfully' });
+});
+
+// API: Get referral overview stats
+app.get('/api/admin/referrals/overview', checkAdminSession, async (req, res) => {
+  const totalAgents = (await dbGet('SELECT COUNT(*) as count FROM referral_agents')).count;
+  const activeAgents = (await dbGet('SELECT COUNT(*) as count FROM referral_agents WHERE is_active = 1')).count;
+  const totalReferrals = (await dbGet('SELECT COUNT(*) as count FROM referral_tracking')).count;
+  const convertedReferrals = (await dbGet('SELECT COUNT(*) as count FROM referral_tracking WHERE first_purchase_made = 1')).count;
+  const totalCommission = (await dbGet('SELECT COALESCE(SUM(total_earned_usd), 0) as total FROM referral_agents')).total;
+  const totalPaidOut = (await dbGet('SELECT COALESCE(SUM(total_paid_out_usd), 0) as total FROM referral_agents')).total;
+  const pendingPayouts = (await dbGet('SELECT COALESCE(SUM(total_earned_usd - total_paid_out_usd), 0) as total FROM referral_agents')).total;
+
+  res.json({
+    totalAgents,
+    activeAgents,
+    totalReferrals,
+    convertedReferrals,
+    conversionRate: totalReferrals > 0 ? (convertedReferrals / totalReferrals * 100).toFixed(1) : 0,
+    totalCommission,
+    totalPaidOut,
+    pendingPayouts
+  });
 });
 
 // Start the HTTP server only after tables and default rates exist.
