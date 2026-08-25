@@ -4267,23 +4267,54 @@ app.get('/api/admin/disputed-trades', async (req, res) => {
 // ============================================================
 
 // API: Check if a trade offer is associated with an escrow trade
+// SECURITY: Only matches a trade whose linked seller's Steam ID equals the offer sender,
+// requires the offer to be giving exactly the expected number of items and nothing to the bot,
+// and atomically claims the trade (steam_trade_offer_id IS NULL) to prevent double-matching/race abuse.
 app.post('/api/steam/check-offer', async (req, res) => {
-  const { offerId } = req.body;
+  const { offerId, senderSteamId, itemsToReceiveCount, itemsToGiveCount } = req.body;
   
-  const escrowTrade = await dbGet(`
+  if (!offerId || !senderSteamId) {
+    return res.json({ escrowTrade: null, reason: 'Missing offerId or senderSteamId' });
+  }
+  
+  // Reject if the sender is asking the bot to give anything away, or isn't sending exactly 1 item
+  if (Number(itemsToGiveCount) !== 0) {
+    logSystemEvent('warn', 'Rejected Steam offer', `Offer ${offerId} from ${senderSteamId} requested items back from bot`);
+    return res.json({ escrowTrade: null, reason: 'Offer requests items from bot' });
+  }
+  if (Number(itemsToReceiveCount) !== 1) {
+    logSystemEvent('warn', 'Rejected Steam offer', `Offer ${offerId} from ${senderSteamId} had ${itemsToReceiveCount} items, expected 1`);
+    return res.json({ escrowTrade: null, reason: 'Unexpected item count' });
+  }
+  
+  const candidate = await dbGet(`
     SELECT et.*, s.skin_name, sa.steam_id as seller_steam_id
     FROM escrow_trades et
     JOIN skins s ON et.skin_id = s.id
-    LEFT JOIN steam_accounts sa ON et.seller_id = sa.user_id
-    WHERE (et.steam_trade_offer_id = ? OR (et.status = 'pending' AND et.trade_type = 'steam_bot'))
-    AND et.status = 'pending'
-  `, [offerId]);
+    JOIN steam_accounts sa ON et.seller_id = sa.user_id
+    WHERE et.status = 'pending'
+      AND et.trade_type = 'steam_bot'
+      AND et.steam_trade_offer_id IS NULL
+      AND sa.steam_id = ?
+    ORDER BY et.created_at ASC
+    LIMIT 1
+  `, [senderSteamId]);
   
-  if (!escrowTrade) {
-    return res.json({ escrowTrade: null });
+  if (!candidate) {
+    logSystemEvent('warn', 'Rejected Steam offer', `Offer ${offerId} from ${senderSteamId} matched no pending escrow trade for that seller`);
+    return res.json({ escrowTrade: null, reason: 'No matching pending trade for this seller' });
   }
   
-  res.json({ escrowTrade });
+  // Atomic claim: only succeeds if still unclaimed, prevents race conditions from concurrent offers
+  const claim = await dbRun(
+    `UPDATE escrow_trades SET steam_trade_offer_id = ? WHERE id = ? AND steam_trade_offer_id IS NULL`,
+    [offerId, candidate.id]
+  );
+  if (!claim.changes) {
+    return res.json({ escrowTrade: null, reason: 'Trade already claimed by another offer' });
+  }
+  
+  res.json({ escrowTrade: candidate });
 });
 
 // API: Get buyer trade URL for an escrow trade
@@ -4336,14 +4367,17 @@ app.post('/api/steam/offer-status', async (req, res) => {
     return res.json({ success: false });
   }
   
-  // Handle different states
+  // SteamTradeOfferManager.ETradeOfferState values: 3=Accepted, 6=Canceled, 7=Declined, 8=InvalidItems
   if (state === 3) { // Accepted
     logSystemEvent('info', `Buyer accepted Steam offer`, `Offer ID: ${offerId}`);
-  } else if (state === 4) { // Declined
+  } else if (state === 7) { // Declined
     await dbRun('UPDATE escrow_trades SET status = ?, dispute_reason = ? WHERE id = ?',
       ['disputed', 'Buyer declined the trade offer', escrowTrade.id]);
   } else if (state === 6) { // Canceled
     await dbRun('UPDATE escrow_trades SET status = ? WHERE id = ?', ['cancelled', escrowTrade.id]);
+  } else if (state === 8) { // InvalidItems
+    await dbRun('UPDATE escrow_trades SET status = ?, dispute_reason = ? WHERE id = ?',
+      ['disputed', 'Trade offer items became invalid', escrowTrade.id]);
   }
   
   res.json({ success: true });

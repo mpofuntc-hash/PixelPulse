@@ -7,6 +7,28 @@ const readline = require('readline');
 // Main server API endpoint
 const API_BASE = `http://localhost:${process.env.PORT || 3000}`;
 
+// CS2 app ID - the only game this bot handles skins for
+const CS2_APP_ID = 730;
+
+// Telegram alerting (no shared/identity secret means confirmations require
+// manually opening the Steam mobile app - alert the admin the instant one is needed)
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+const TELEGRAM_ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID || '';
+
+async function alertAdmin(message) {
+  console.log('[ADMIN ALERT]', message);
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_ADMIN_CHAT_ID) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: TELEGRAM_ADMIN_CHAT_ID, text: message })
+    });
+  } catch (error) {
+    console.error('Failed to send Telegram admin alert:', error.message);
+  }
+}
+
 // Steam bot configuration
 const botConfig = {
   accountName: process.env.STEAM_BOT_USERNAME,
@@ -94,18 +116,48 @@ user.on('webSession', (sessionID, cookies) => {
 // Handle new trade offers
 manager.on('newOffer', async (offer) => {
   console.log('New trade offer received:', offer.id);
-  
+
+  // --- Basic order screening (defense in depth, server re-validates all of this) ---
+  const itemsToGive = offer.itemsToGive || [];
+  const itemsToReceive = offer.itemsToReceive || [];
+  const senderSteamId = offer.partner.getSteamID64();
+
+  if (itemsToGive.length !== 0) {
+    console.log(`Rejecting offer ${offer.id}: sender ${senderSteamId} is requesting items from the bot`);
+    await alertAdmin(`⚠️ Rejected suspicious Steam offer ${offer.id} from ${senderSteamId}: requested ${itemsToGive.length} item(s) FROM the bot.`);
+    offer.decline(err => { if (err) console.error('Error declining offer:', err); });
+    return;
+  }
+  if (itemsToReceive.length !== 1) {
+    console.log(`Rejecting offer ${offer.id}: expected exactly 1 item, got ${itemsToReceive.length}`);
+    offer.decline(err => { if (err) console.error('Error declining offer:', err); });
+    return;
+  }
+  const item = itemsToReceive[0];
+  if (String(item.appid) !== String(CS2_APP_ID)) {
+    console.log(`Rejecting offer ${offer.id}: item is not from CS2 (appid ${item.appid})`);
+    offer.decline(err => { if (err) console.error('Error declining offer:', err); });
+    return;
+  }
+
   try {
-    // Check if this offer is related to an escrow trade via API
+    // Check if this offer is related to an escrow trade via API.
+    // The server independently verifies senderSteamId matches the seller on file
+    // and atomically claims the trade to prevent race conditions / mismatched items.
     const response = await fetch(`${API_BASE}/api/steam/check-offer`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ offerId: offer.id })
+      body: JSON.stringify({
+        offerId: offer.id,
+        senderSteamId,
+        itemsToGiveCount: itemsToGive.length,
+        itemsToReceiveCount: itemsToReceive.length
+      })
     });
     const data = await response.json();
     
     if (!data.escrowTrade) {
-      console.log('Offer not associated with any escrow trade, ignoring');
+      console.log('Offer not associated with any escrow trade, ignoring:', data.reason || 'no reason given');
       offer.decline(err => {
         if (err) console.error('Error declining offer:', err);
       });
@@ -209,6 +261,8 @@ async function forwardSkinToBuyer(escrowTrade, originalOffer) {
           body: JSON.stringify({ offerId: offer.id, escrowId: escrowTrade.id })
         });
 
+        // Without an identity_secret the bot can't auto-confirm; the 'sentOfferChanged'
+        // handler below alerts the admin if this offer needs manual confirmation.
         console.log('Waiting for buyer to confirm receipt in the web UI');
       });
     });
@@ -219,7 +273,20 @@ async function forwardSkinToBuyer(escrowTrade, originalOffer) {
 
 // Monitor trade offer status
 manager.on('sentOfferChanged', async (offer, oldState) => {
-  console.log('Sent offer changed:', offer.id, 'State:', offer.state);
+  console.log('Sent offer changed:', offer.id, 'State:', offer.state, '(was', oldState + ')');
+
+  if (offer.state === SteamTradeOfferManager.ETradeOfferState.CreatedNeedsConfirmation
+      && oldState !== SteamTradeOfferManager.ETradeOfferState.CreatedNeedsConfirmation) {
+    await alertAdmin(`📱 Steam trade offer ${offer.id} needs manual confirmation in the Steam mobile app.`);
+  } else if (offer.state === SteamTradeOfferManager.ETradeOfferState.Declined) {
+    await alertAdmin(`❌ Steam trade offer ${offer.id} was declined by the buyer.`);
+  } else if (offer.state === SteamTradeOfferManager.ETradeOfferState.Canceled) {
+    await alertAdmin(`🚫 Steam trade offer ${offer.id} was cancelled.`);
+  } else if (offer.state === SteamTradeOfferManager.ETradeOfferState.InvalidItems) {
+    await alertAdmin(`⚠️ Steam trade offer ${offer.id} became invalid (item no longer available).`);
+  } else if (offer.state === SteamTradeOfferManager.ETradeOfferState.Accepted) {
+    await alertAdmin(`✅ Steam trade offer ${offer.id} was accepted by the buyer.`);
+  }
 
   // Notify server of offer status change
   try {
