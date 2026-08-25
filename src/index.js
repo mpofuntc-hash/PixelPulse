@@ -86,6 +86,8 @@ async function ensureLegacySchema() {
     ['users', 'freefire_diamonds_tokens', 'REAL DEFAULT 0'],
     ['users', 'discord_id', 'TEXT'],
     ['chat_messages', 'source', "TEXT DEFAULT 'webapp'"],
+    ['skins', 'price_fiat', 'REAL DEFAULT 0'],
+    ['skins', 'fiat_currency', "TEXT DEFAULT ''"],
     ['admin_users', 'email', 'TEXT'],
     ['admin_users', 'password_hash', 'TEXT'],
     ['admin_users', 'is_one_time_password', 'INTEGER DEFAULT 1'],
@@ -2548,10 +2550,27 @@ app.get('/api/skins', async (req, res) => {
   const rateByType = {};
   tokenRates.forEach(r => { rateByType[r.token_type] = r.rate_to_usd; });
 
-  const skinsWithUsd = skins.map(skin => ({
-    ...skin,
-    price_usd: (rateByType[skin.token_type] || 0) * skin.price_tokens
-  }));
+  const exchangeRates = await dbAll('SELECT * FROM exchange_rates');
+  const fiatRateByCurrency = {};
+  exchangeRates.forEach(r => { fiatRateByCurrency[r.currency] = r.rate_to_usd; });
+
+  const btcUsd = fiatRateByCurrency['BTC'] || 65000;
+
+  const skinsWithUsd = skins.map(skin => {
+    const isCS2 = skin.game_type === 'CS2';
+    let priceUsd = 0;
+    if (isCS2 && skin.price_fiat > 0) {
+      priceUsd = skin.price_fiat * (fiatRateByCurrency[skin.fiat_currency] || 1);
+    } else {
+      priceUsd = (rateByType[skin.token_type] || 0) * skin.price_tokens;
+    }
+    return {
+      ...skin,
+      price_usd: priceUsd,
+      is_fiat_priced: isCS2,
+      price_btc: isCS2 && btcUsd > 0 ? priceUsd / btcUsd : 0
+    };
+  });
 
   res.json(skinsWithUsd);
 });
@@ -2584,28 +2603,54 @@ app.get('/api/skins/purchases', authenticateRequest, async (req, res) => {
 
 // API: List skin for sale
 app.post('/api/skins', authenticateRequest, async (req, res) => {
-  const { game_type, skin_name, weapon, rarity, float_value, price_tokens, token_type, image_url } = req.body;
+  const { game_type, skin_name, weapon, rarity, float_value, price_tokens, token_type, image_url, price_fiat, fiat_currency } = req.body;
 
   if (!game_type) {
     return res.status(400).json({ error: 'Game type is required' });
   }
 
-  // Use token_type from request if valid, otherwise infer from game_type
-  const resolvedTokenType = (token_type && TOKEN_TYPES[token_type]) ? token_type : (game_type === 'CS2' ? 'steam' : 'standoff2');
-  if (!TOKEN_TYPES[resolvedTokenType]) {
-    return res.status(400).json({ error: 'Invalid token type' });
+  const isCS2 = game_type === 'CS2';
+  let resolvedTokenType = '';
+  let resolvedPriceFiat = 0;
+  let resolvedFiatCurrency = '';
+
+  if (isCS2) {
+    // CS2 skins are priced in fiat only
+    if (!price_fiat || price_fiat <= 0) {
+      return res.status(400).json({ error: 'CS2 skins require a fiat price' });
+    }
+    const currency = fiat_currency || 'USD';
+    if (!SUPPORTED_CURRENCIES[currency] || SUPPORTED_CURRENCIES[currency].type !== 'fiat') {
+      return res.status(400).json({ error: 'Invalid fiat currency. Supported: USD, EUR, GBP, ZAR' });
+    }
+    resolvedPriceFiat = parseFloat(price_fiat);
+    resolvedFiatCurrency = currency;
+    resolvedTokenType = 'steam'; // placeholder for DB compatibility
+  } else {
+    // Non-CS2 skins use token pricing
+    const tt = (token_type && TOKEN_TYPES[token_type]) ? token_type : (game_type === 'Standoff2' ? 'standoff2' : '');
+    if (!tt || !TOKEN_TYPES[tt]) {
+      return res.status(400).json({ error: 'Invalid token type' });
+    }
+    if (!price_tokens || price_tokens <= 0) {
+      return res.status(400).json({ error: 'Non-CS2 skins require a token price' });
+    }
+    resolvedTokenType = tt;
   }
 
   const result = await dbRun(`
-    INSERT INTO skins (user_id, game_type, skin_name, weapon, rarity, float_value, price_tokens, token_type, image_url)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [req.userId, game_type, skin_name, weapon, rarity, float_value, price_tokens, resolvedTokenType, image_url]);
+    INSERT INTO skins (user_id, game_type, skin_name, weapon, rarity, float_value, price_tokens, token_type, image_url, price_fiat, fiat_currency)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [req.userId, game_type, skin_name, weapon, rarity, float_value, isCS2 ? 0 : price_tokens, resolvedTokenType, image_url, resolvedPriceFiat, resolvedFiatCurrency]);
 
   // Broadcast to Discord
   const user = await dbGet('SELECT username FROM users WHERE id = ?', [req.userId]);
+  const priceDisplay = isCS2
+    ? `${resolvedPriceFiat} ${resolvedFiatCurrency}`
+    : `${price_tokens} ${getTokenLabel(resolvedTokenType)} tokens`;
   broadcastToDiscord(
     '🛒 New Skin Listing',
-    `**${skin_name}** (${weapon})\nGame: ${game_type} | Rarity: ${rarity}\nPrice: ${price_tokens} ${getTokenLabel(resolvedTokenType)} tokens\nSeller: ${user?.username || 'Unknown'}`,
+    `**${skin_name}** (${weapon})\nGame: ${game_type} | Rarity: ${rarity}\nPrice: ${priceDisplay}\nSeller: ${user?.username || 'Unknown'}`,
     0x4caf50
   ).catch(() => {});
 
@@ -4612,22 +4657,35 @@ async function createEscrowTrade(skinId, sellerId, buyerId, priceTokens, tokenTy
   return result.lastID;
 }
 
-// Helper: Complete escrow trade (release tokens to seller)
+// Helper: Complete escrow trade (release payment to seller)
 async function completeEscrowTrade(tradeId) {
   const trade = await dbGet('SELECT * FROM escrow_trades WHERE id = ?', [tradeId]);
   if (!trade || trade.status !== 'buyer_confirmed') return;
-  
-  const tokenColumn = getTokenColumn(trade.token_type);
-  
-  await dbRun(`UPDATE users SET ${tokenColumn} = ${tokenColumn} - ? WHERE id = ?`, [trade.price_tokens, trade.buyer_id]);
-  await dbRun(`UPDATE users SET ${tokenColumn} = ${tokenColumn} + ? WHERE id = ?`, [trade.price_tokens, trade.seller_id]);
-  
+
+  if (trade.token_type === 'btc') {
+    // CS2 fiat-priced skin: BTC was already deducted from buyer at purchase time, release to seller
+    await dbRun('UPDATE users SET btc_balance = btc_balance + ? WHERE id = ?', [trade.price_tokens, trade.seller_id]);
+  } else {
+    // Token-priced skin: transfer tokens from buyer to seller
+    const tokenColumn = getTokenColumn(trade.token_type);
+    if (tokenColumn) {
+      await dbRun(`UPDATE users SET ${tokenColumn} = ${tokenColumn} - ? WHERE id = ?`, [trade.price_tokens, trade.buyer_id]);
+      await dbRun(`UPDATE users SET ${tokenColumn} = ${tokenColumn} + ? WHERE id = ?`, [trade.price_tokens, trade.seller_id]);
+    }
+  }
+
   await dbRun('UPDATE escrow_trades SET status = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?', ['completed', tradeId]);
   await dbRun('UPDATE skins SET status = ?, user_id = ? WHERE id = ?', ['sold', trade.buyer_id, trade.skin_id]);
 
   // Freeze a USD + buyer's local-currency price snapshot at completion time for receipts/analytics
-  const tokenRate = await getTokenRate(trade.token_type);
-  const priceUsd = tokenRate ? trade.price_tokens * tokenRate.rate_to_usd : 0;
+  let priceUsd = 0;
+  if (trade.token_type === 'btc') {
+    const btcRate = await getExchangeRate('BTC');
+    priceUsd = btcRate ? trade.price_tokens * btcRate.rate_to_usd : 0;
+  } else {
+    const tokenRate = await getTokenRate(trade.token_type);
+    priceUsd = tokenRate ? trade.price_tokens * tokenRate.rate_to_usd : 0;
+  }
   const buyer = await dbGet('SELECT preferred_currency FROM users WHERE id = ?', [trade.buyer_id]);
   const buyerCurrency = buyer?.preferred_currency || 'USD';
   const currencyRate = await getExchangeRate(buyerCurrency);
@@ -4642,11 +4700,21 @@ async function completeEscrowTrade(tradeId) {
   logSystemEvent('info', `Escrow trade completed`, `Trade ID: ${tradeId}, Skin ID: ${trade.skin_id}`);
 }
 
-// Helper: Cancel escrow trade (refund buyer if tokens were held)
+// Helper: Cancel escrow trade (refund buyer)
 async function cancelEscrowTrade(tradeId, reason) {
   const trade = await dbGet('SELECT * FROM escrow_trades WHERE id = ?', [tradeId]);
   if (!trade) return;
-  
+
+  // Refund buyer: BTC for CS2 fiat-priced skins, tokens for others
+  if (trade.token_type === 'btc') {
+    await dbRun('UPDATE users SET btc_balance = btc_balance + ? WHERE id = ?', [trade.price_tokens, trade.buyer_id]);
+  } else {
+    const tokenColumn = getTokenColumn(trade.token_type);
+    if (tokenColumn) {
+      await dbRun(`UPDATE users SET ${tokenColumn} = ${tokenColumn} + ? WHERE id = ?`, [trade.price_tokens, trade.buyer_id]);
+    }
+  }
+
   await dbRun('UPDATE escrow_trades SET status = ?, dispute_reason = ? WHERE id = ?', ['cancelled', reason, tradeId]);
   await dbRun('UPDATE skins SET status = ? WHERE id = ?', ['available', trade.skin_id]);
   await dbRun(`
@@ -4664,50 +4732,91 @@ app.post('/api/skins/:id/purchase', authenticateRequest, async (req, res) => {
   const skin = await dbGet('SELECT * FROM skins WHERE id = ? AND status = ?', [skinId, 'available']);
   if (!skin) return res.status(404).json({ error: 'Skin not available' });
   if (skin.user_id === req.userId) return res.status(400).json({ error: 'Cannot purchase your own skin' });
-  
-  const tokenColumn = getTokenColumn(skin.token_type);
-  const buyer = await dbGet(`SELECT ${tokenColumn} FROM users WHERE id = ?`, [req.userId]);
-  if (!buyer || buyer[tokenColumn] < skin.price_tokens) {
-    return res.status(400).json({ error: `Insufficient ${getTokenLabel(skin.token_type)} tokens` });
-  }
-  
-  const tradeType = skin.game_type === 'CS2' ? 'steam_bot' : 'manual';
-  
-  if (tradeType === 'steam_bot') {
+
+  const isCS2 = skin.game_type === 'CS2';
+
+  if (isCS2) {
+    // CS2 skins are fiat-priced; buyer pays BTC equivalent from their BTC balance
+    const fiatCurrency = skin.fiat_currency || 'USD';
+    const fiatRate = await getExchangeRate(fiatCurrency);
+    const btcRate = await getExchangeRate('BTC');
+    if (!fiatRate || !btcRate) {
+      return res.status(500).json({ error: 'Exchange rate unavailable' });
+    }
+    const priceUsd = skin.price_fiat * fiatRate.rate_to_usd;
+    const priceBtc = btcRate.rate_to_usd > 0 ? priceUsd / btcRate.rate_to_usd : 0;
+
+    const buyer = await dbGet('SELECT btc_balance FROM users WHERE id = ?', [req.userId]);
+    if (!buyer || buyer.btc_balance < priceBtc) {
+      const symbol = SUPPORTED_CURRENCIES[fiatCurrency]?.symbol || '$';
+      return res.status(400).json({ error: `Insufficient BTC balance. This skin costs ${symbol}${skin.price_fiat} ${fiatCurrency} (~${priceBtc.toFixed(8)} BTC)` });
+    }
+
+    // Check Steam account for CS2 delivery
     const buyerSteam = await dbGet('SELECT * FROM steam_accounts WHERE user_id = ?', [req.userId]);
     if (!buyerSteam || !buyerSteam.trade_url) {
       return res.status(400).json({ error: 'Please link your Steam account and set your trade URL first' });
     }
-  }
-  
-  if (tradeType === 'manual') {
-    const buyerSO2 = await dbGet('SELECT * FROM standoff2_accounts WHERE user_id = ?', [req.userId]);
-    if (!buyerSO2) {
-      return res.status(400).json({ error: 'Please link your Standoff2 account first' });
+
+    // Escrow: deduct BTC from buyer, hold in escrow until trade completes
+    await dbRun('UPDATE users SET btc_balance = btc_balance - ? WHERE id = ?', [priceBtc, req.userId]);
+
+    const escrowId = await createEscrowTrade(skinId, skin.user_id, req.userId, priceBtc, 'btc', 'steam_bot');
+
+    await dbRun('UPDATE skins SET status = ? WHERE id = ?', ['pending', skinId]);
+
+    await dbRun(`
+      INSERT INTO skin_transactions (skin_id, seller_id, buyer_id, price_tokens, token_type, status, price_usd, buyer_currency)
+      VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)
+    `, [skinId, skin.user_id, req.userId, priceBtc, 'btc', priceUsd, fiatCurrency]);
+
+    const symbol = SUPPORTED_CURRENCIES[fiatCurrency]?.symbol || '$';
+    res.json({
+      escrowId,
+      message: `Escrow trade created! ${symbol}${skin.price_fiat} ${fiatCurrency} (~${priceBtc.toFixed(8)} BTC) held in escrow.`,
+      tradeType: 'steam_bot',
+      instructions: 'The seller will send the skin to the PixelPulse Steam bot. Once verified, it will be forwarded to your Steam account.',
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    });
+  } else {
+    // Non-CS2 skins: token pricing (existing flow)
+    const tokenColumn = getTokenColumn(skin.token_type);
+    if (!tokenColumn) return res.status(400).json({ error: 'Invalid token type for this skin' });
+    const buyer = await dbGet(`SELECT ${tokenColumn} FROM users WHERE id = ?`, [req.userId]);
+    if (!buyer || buyer[tokenColumn] < skin.price_tokens) {
+      return res.status(400).json({ error: `Insufficient ${getTokenLabel(skin.token_type)} tokens` });
     }
+
+    const tradeType = 'manual';
+
+    // For non-CS2 games, require appropriate game account
+    if (skin.game_type === 'Standoff2') {
+      const buyerSO2 = await dbGet('SELECT * FROM standoff2_accounts WHERE user_id = ?', [req.userId]);
+      if (!buyerSO2) {
+        return res.status(400).json({ error: 'Please link your Standoff2 account first' });
+      }
+    }
+
+    const escrowId = await createEscrowTrade(skinId, skin.user_id, req.userId, skin.price_tokens, skin.token_type, tradeType);
+
+    await dbRun('UPDATE skins SET status = ? WHERE id = ?', ['pending', skinId]);
+
+    await dbRun(`
+      INSERT INTO skin_transactions (skin_id, seller_id, buyer_id, price_tokens, token_type, status)
+      VALUES (?, ?, ?, ?, ?, 'pending')
+    `, [skinId, skin.user_id, req.userId, skin.price_tokens, skin.token_type]);
+
+    const tLabel = getTokenLabel(skin.token_type);
+    const instructions = `The seller will send the skin in-game. Confirm receipt in your escrow panel once you receive it.`;
+
+    res.json({
+      escrowId,
+      message: `Escrow trade created! ${skin.price_tokens} ${tLabel} tokens held in escrow.`,
+      tradeType,
+      instructions,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    });
   }
-  
-  const escrowId = await createEscrowTrade(skinId, skin.user_id, req.userId, skin.price_tokens, skin.token_type, tradeType);
-  
-  await dbRun('UPDATE skins SET status = ? WHERE id = ?', ['pending', skinId]);
-  
-  await dbRun(`
-    INSERT INTO skin_transactions (skin_id, seller_id, buyer_id, price_tokens, token_type, status)
-    VALUES (?, ?, ?, ?, ?, 'pending')
-  `, [skinId, skin.user_id, req.userId, skin.price_tokens, skin.token_type]);
-  
-  const tokenLabel = skin.token_type === 'steam' ? 'Steam tokens' : 'Standoff 2 tokens';
-  const instructions = tradeType === 'steam_bot'
-    ? 'The seller will send the skin to the PixelPulse Steam bot. Once verified, it will be forwarded to your Steam account.'
-    : `The seller will send the skin in-game. Confirm receipt in your escrow panel once you receive it. Seller's Standoff2 player ID will be shown.`;
-  
-  res.json({
-    escrowId,
-    message: `Escrow trade created! ${skin.price_tokens} ${tokenLabel} held in escrow.`,
-    tradeType,
-    instructions,
-    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-  });
 });
 
 // API: Get user's active escrow trades

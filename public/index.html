@@ -2511,6 +2511,9 @@
                                <span class="local-price">${localPrice}</span>
                            </span>`
                         : `$${usdPrice.toFixed(2)}`;
+                    const tokenPriceLine = skin.is_fiat_priced
+                        ? `<div class="anime-meta" style="color: #e50914;">💵 ${skin.price_fiat} ${skin.fiat_currency}</div>`
+                        : `<div class="anime-meta" style="color: #e50914;">${tIcon} ${skin.price_tokens} ${tLabel} Tokens</div>`;
                     return `
                     <div class="anime-card" style="position: relative;">
                         <img src="${skin.image_url || 'https://via.placeholder.com/200x280?text=Skin'}" 
@@ -2520,7 +2523,7 @@
                             <div class="anime-title">${skin.skin_name}</div>
                             <div class="anime-meta">${skin.weapon} • ${skin.rarity}</div>
                             <div class="anime-meta" style="color: #4caf50; font-weight: bold;">${priceDisplay}</div>
-                            <div class="anime-meta" style="color: #e50914;">${tIcon} ${skin.price_tokens} ${tLabel} Tokens</div>
+                            ${tokenPriceLine}
                             <button class="btn btn-primary" style="width: 100%; margin-top: 8px; padding: 6px;" onclick="purchaseSkin(${skin.id})">Buy Now</button>
                         </div>
                     </div>
@@ -2681,15 +2684,42 @@
             
             const weapon = prompt('Weapon:');
             const gameType = prompt('Game type (e.g. CS2, Standoff2, Valorant, PUBG Mobile, Fortnite, Roblox, Genshin Impact, Free Fire):');
+            if (!gameType) return;
             const rarity = prompt('Rarity:');
-            const tokenOptions = tokenTypesList.map(t => `${t.key} (${t.label})`).join(', ');
-            const tokenType = prompt(`Token type (${tokenOptions}):`);
-            if (!tokenType || !tokenTypesList.find(t => t.key === tokenType)) {
-                alert('Invalid token type');
-                return;
+
+            const isCS2 = gameType === 'CS2';
+            let payload = { skin_name: skinName, weapon, game_type: gameType, rarity, float_value: 0, image_url: '' };
+
+            if (isCS2) {
+                // CS2 skins are priced in fiat
+                const fiatCurrency = prompt('Currency (USD, EUR, GBP, ZAR):', 'USD');
+                if (!fiatCurrency) return;
+                const priceFiat = prompt(`Price in ${fiatCurrency}:`);
+                if (!priceFiat || parseFloat(priceFiat) <= 0) {
+                    alert('Invalid price');
+                    return;
+                }
+                payload.price_fiat = parseFloat(priceFiat);
+                payload.fiat_currency = fiatCurrency.toUpperCase();
+                payload.price_tokens = 0;
+                payload.token_type = 'steam';
+            } else {
+                // Non-CS2 skins use token pricing
+                const tokenOptions = tokenTypesList.map(t => `${t.key} (${t.label})`).join(', ');
+                const tokenType = prompt(`Token type (${tokenOptions}):`);
+                if (!tokenType || !tokenTypesList.find(t => t.key === tokenType)) {
+                    alert('Invalid token type');
+                    return;
+                }
+                const tLabel = tokenLabel(tokenType);
+                const priceTokens = prompt(`Price in ${tLabel} tokens:`);
+                if (!priceTokens || parseFloat(priceTokens) <= 0) {
+                    alert('Invalid price');
+                    return;
+                }
+                payload.price_tokens = parseFloat(priceTokens);
+                payload.token_type = tokenType;
             }
-            const tLabel = tokenLabel(tokenType);
-            const priceTokens = prompt(`Price in ${tLabel} tokens:`);
             
             fetch('/api/skins', {
                 method: 'POST',
@@ -2697,17 +2727,9 @@
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${sessionToken}`
                 },
-                body: JSON.stringify({
-                    game_type: gameType,
-                    skin_name: skinName,
-                    weapon,
-                    rarity,
-                    float_value: 0,
-                    price_tokens: parseFloat(priceTokens),
-                    token_type: tokenType,
-                    image_url: ''
-                })
+                body: JSON.stringify(payload)
             }).then(res => res.json()).then(data => {
+                if (data.error) { alert(data.error); return; }
                 alert(data.message);
                 loadSkins();
             });
