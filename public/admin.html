@@ -596,6 +596,17 @@
                         <div class="loading">Loading pending conversions...</div>
                     </div>
                 </div>
+                <div class="tickets-section" style="margin-top: 20px;">
+                    <div class="tickets-header">
+                        <h3>Pending Token Deposits</h3>
+                    </div>
+                    <div style="color: #999; font-size: 13px; margin-bottom: 10px;">
+                        High-value deposits (highlighted below) are worth verifying carefully before approving — check the real skin actually arrived (bot inventory / your Standoff2 account), then consider personally reselling it on Steam or a third-party market once approved.
+                    </div>
+                    <div class="ticket-list" id="pendingDepositsList">
+                        <div class="loading">Loading pending deposits...</div>
+                    </div>
+                </div>
             </div>
 
             <!-- Settings Section -->
@@ -1083,6 +1094,7 @@
             loadSystemLogs();
             loadFeePool();
             loadTokenConversions();
+            loadPendingDeposits();
             loadSettingsInfo();
         }
 
@@ -1136,6 +1148,51 @@
                 }
             } catch (error) {
                 console.error('Failed to load token conversions:', error);
+            }
+        }
+
+        // Load pending token deposits, high-value ones sorted first
+        async function loadPendingDeposits() {
+            try {
+                const response = await fetch('/api/admin/pending-deposits');
+                const deposits = await response.json();
+
+                if (deposits && deposits.length > 0) {
+                    document.getElementById('pendingDepositsList').innerHTML = deposits.map(d => `
+                        <div class="ticket-item" style="${d.is_high_value ? 'border-left: 3px solid #e50914;' : ''}">
+                            <div>
+                                ${d.is_high_value ? '<span style="color: #e50914; font-weight: bold;">⚠ HIGH VALUE</span> ' : ''}
+                                <strong>${d.username}</strong> — ${d.amount} ${d.token_type === 'steam' ? 'Steam' : 'Standoff 2'} tokens
+                                (~$${(d.estimated_usd_value || 0).toFixed(2)})
+                            </div>
+                            <div style="color: #999; font-size: 12px;">Verification: ${d.verification_method} • ${d.created_at}</div>
+                            <div style="margin-top: 8px; display: flex; gap: 8px;">
+                                <button class="btn btn-primary" onclick="reviewDeposit(${d.id}, true)">✅ Approve</button>
+                                <button class="btn btn-secondary" onclick="reviewDeposit(${d.id}, false)">❌ Reject</button>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    document.getElementById('pendingDepositsList').innerHTML = '<div style="color: #999; padding: 20px;">No pending deposits</div>';
+                }
+            } catch (error) {
+                console.error('Failed to load pending deposits:', error);
+            }
+        }
+
+        async function reviewDeposit(depositId, approved) {
+            if (approved && !confirm('Have you personally verified this skin/item was actually received before approving?')) return;
+            try {
+                const response = await fetch('/api/admin/verify-deposit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ depositId, approved })
+                });
+                const data = await response.json();
+                alert(data.message || data.error || 'Done');
+                loadPendingDeposits();
+            } catch (error) {
+                alert('Failed to process deposit');
             }
         }
 

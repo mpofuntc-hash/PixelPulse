@@ -193,6 +193,25 @@
             color: #999;
         }
 
+        .price-hover-wrap { position: relative; cursor: help; }
+        .price-hover-wrap .local-price {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #0f0f0f;
+            border: 1px solid #e50914;
+            color: #ffd700;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+            z-index: 10;
+            margin-bottom: 4px;
+        }
+        .price-hover-wrap:hover .local-price { display: block; }
+
         .free-badge {
             position: absolute;
             top: 8px;
@@ -1177,6 +1196,7 @@
         let currentAnime = null;
         let sessionToken = localStorage.getItem('sessionToken') || null;
         let currentUser = null;
+        let userPreferredCurrency = 'USD';
 
         // Authentication functions
         function showAuthModal() {
@@ -2455,6 +2475,14 @@
                 grid.innerHTML = skins.map(skin => {
                     const tokenLabel = skin.token_type === 'steam' ? 'Steam' : 'Standoff 2';
                     const tokenIcon = skin.token_type === 'steam' ? '🎮' : '⚔️';
+                    const usdPrice = skin.price_usd || 0;
+                    const localPrice = formatLocalPrice(usdPrice);
+                    const priceDisplay = localPrice
+                        ? `<span class="price-hover-wrap" title="Hover to see ${userPreferredCurrency} price">
+                               <span class="usd-price">$${usdPrice.toFixed(2)}</span>
+                               <span class="local-price">${localPrice}</span>
+                           </span>`
+                        : `$${usdPrice.toFixed(2)}`;
                     return `
                     <div class="anime-card" style="position: relative;">
                         <img src="${skin.image_url || 'https://via.placeholder.com/200x280?text=Skin'}" 
@@ -2463,6 +2491,7 @@
                         <div class="anime-info">
                             <div class="anime-title">${skin.skin_name}</div>
                             <div class="anime-meta">${skin.weapon} • ${skin.rarity}</div>
+                            <div class="anime-meta" style="color: #4caf50; font-weight: bold;">${priceDisplay}</div>
                             <div class="anime-meta" style="color: #e50914;">${tokenIcon} ${skin.price_tokens} ${tokenLabel} Tokens</div>
                             <button class="btn btn-primary" style="width: 100%; margin-top: 8px; padding: 6px;" onclick="purchaseSkin(${skin.id})">Buy Now</button>
                         </div>
@@ -3045,6 +3074,8 @@
                 allAvatars = await avatarsRes.json();
                 allBanners = await bannersRes.json();
                 userProfileData = profileData.profile;
+                userPreferredCurrency = profileData.profile.preferredCurrency || 'USD';
+                loadRates();
 
                 if (profileData.newUnlocks && profileData.newUnlocks.length > 0) {
                     const names = profileData.newUnlocks.map(u => u.name).join(', ');
@@ -3052,6 +3083,8 @@
                 }
 
                 renderProfile();
+                loadProfileAnalytics();
+                loadProfileReceipts();
             } catch (error) {
                 console.error('Failed to load profile:', error);
                 document.getElementById('profileContent').innerHTML = '<div style="color: #e50914; text-align: center; padding: 40px;">Failed to load profile.</div>';
@@ -3125,6 +3158,30 @@
                     </div>
                 </div>
 
+                <!-- Display Currency Preference -->
+                <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; border: 1px solid #333; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        <div style="font-weight: bold; color: #fff;">Display Currency</div>
+                        <div style="color: #999; font-size: 12px;">Skin prices and receipts show your local currency alongside USD</div>
+                    </div>
+                    <select id="preferredCurrencySelect" onchange="updatePreferredCurrency(this.value)" style="padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                        <option value="USD" ${userPreferredCurrency === 'USD' ? 'selected' : ''}>USD ($)</option>
+                        <option value="EUR" ${userPreferredCurrency === 'EUR' ? 'selected' : ''}>EUR (€)</option>
+                        <option value="GBP" ${userPreferredCurrency === 'GBP' ? 'selected' : ''}>GBP (£)</option>
+                        <option value="ZAR" ${userPreferredCurrency === 'ZAR' ? 'selected' : ''}>ZAR (R)</option>
+                    </select>
+                </div>
+
+                <!-- Analytics -->
+                <div id="profileAnalyticsSection" style="margin-bottom: 20px;">
+                    <div class="loading">Loading analytics...</div>
+                </div>
+
+                <!-- Receipts -->
+                <div id="profileReceiptsSection" style="margin-bottom: 20px;">
+                    <div class="loading">Loading receipts...</div>
+                </div>
+
                 <!-- Pixelation Progress Bar -->
                 <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; border: 1px solid #333; margin-bottom: 20px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
@@ -3179,6 +3236,150 @@
             `;
 
             document.getElementById('profileContent').innerHTML = html;
+        }
+
+        async function updatePreferredCurrency(currency) {
+            try {
+                const response = await fetch('/api/profile/currency', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                    body: JSON.stringify({ currency })
+                });
+                const data = await response.json();
+                if (data.error) { alert(data.error); return; }
+                userPreferredCurrency = currency;
+                loadSkins();
+            } catch (error) {
+                alert('Failed to update currency preference');
+            }
+        }
+
+        function formatLocalPrice(usdAmount) {
+            if (userPreferredCurrency === 'USD' || !currentRates || !currentRates.currencies) return null;
+            const rate = currentRates.currencies.find(c => c.currency === userPreferredCurrency);
+            if (!rate || !rate.rate_to_usd) return null;
+            const symbols = { USD: '$', EUR: '€', GBP: '£', ZAR: 'R' };
+            const localAmount = usdAmount / rate.rate_to_usd;
+            return `${symbols[userPreferredCurrency] || ''}${localAmount.toFixed(2)} ${userPreferredCurrency}`;
+        }
+
+        async function loadProfileAnalytics() {
+            const container = document.getElementById('profileAnalyticsSection');
+            if (!container) return;
+            try {
+                const response = await fetch('/api/profile/analytics', { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                const data = await response.json();
+
+                const topClips = data.clips.list.slice(0, 5);
+
+                container.innerHTML = `
+                    <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; border: 1px solid #333; margin-bottom: 12px;">
+                        <h3 style="margin-bottom: 12px;">📊 Your Analytics</h3>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 15px;">
+                            <div style="text-align: center;">
+                                <div style="color: #999; font-size: 11px;">Clip Views</div>
+                                <div style="font-size: 20px; font-weight: bold; color: #4caf50;">${data.clips.totalViews}</div>
+                            </div>
+                            <div style="text-align: center;">
+                                <div style="color: #999; font-size: 11px;">Clip Likes</div>
+                                <div style="font-size: 20px; font-weight: bold; color: #e50914;">${data.clips.totalLikes}</div>
+                            </div>
+                            <div style="text-align: center;">
+                                <div style="color: #999; font-size: 11px;">Skins Sold</div>
+                                <div style="font-size: 20px; font-weight: bold; color: #ffd700;">${data.skinSales.totalCompletedSales}</div>
+                            </div>
+                            <div style="text-align: center;">
+                                <div style="color: #999; font-size: 11px;">Total Earned</div>
+                                <div style="font-size: 20px; font-weight: bold; color: #4caf50;">$${data.skinSales.totalEarnedUsd.toFixed(2)}</div>
+                            </div>
+                            <div style="text-align: center;">
+                                <div style="color: #999; font-size: 11px;">Trades Completed</div>
+                                <div style="font-size: 20px; font-weight: bold; color: #2196f3;">${data.tokenTrades.asLister.reduce((s,t)=>s+t.count,0) + data.tokenTrades.asAcceptorCount}</div>
+                            </div>
+                        </div>
+                        ${topClips.length > 0 ? `
+                        <div style="border-top: 1px solid #333; padding-top: 12px;">
+                            <div style="color: #999; font-size: 12px; margin-bottom: 8px;">Recent Clips</div>
+                            ${topClips.map(c => `
+                                <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; border-bottom: 1px solid #222;">
+                                    <span>${c.title || 'Untitled clip'}</span>
+                                    <span style="color: #999;">👁 ${c.views} · ❤ ${c.likes}</span>
+                                </div>
+                            `).join('')}
+                        </div>` : '<div style="color: #666; font-size: 12px;">No clips uploaded yet</div>'}
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Failed to load profile analytics:', error);
+                container.innerHTML = '<div style="color: #e50914; padding: 15px;">Failed to load analytics</div>';
+            }
+        }
+
+        async function loadProfileReceipts() {
+            const container = document.getElementById('profileReceiptsSection');
+            if (!container) return;
+            try {
+                const [salesRes, purchasesRes] = await Promise.all([
+                    fetch('/api/skins/receipts', { headers: { 'Authorization': `Bearer ${sessionToken}` } }),
+                    fetch('/api/skins/purchases', { headers: { 'Authorization': `Bearer ${sessionToken}` } })
+                ]);
+                const sales = await salesRes.json();
+                const purchases = await purchasesRes.json();
+
+                const symbols = { USD: '$', EUR: '€', GBP: '£', ZAR: 'R' };
+
+                const salesHtml = sales.length > 0 ? sales.map(r => {
+                    const localPrice = r.price_in_buyer_currency && r.buyer_currency
+                        ? `${symbols[r.buyer_currency] || ''}${r.price_in_buyer_currency.toFixed(2)} ${r.buyer_currency}`
+                        : null;
+                    return `
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #222;">
+                            <div>
+                                <div style="font-weight: bold; color: #fff;">${r.skin_name}</div>
+                                <div style="font-size: 11px; color: #999;">Sold to ${r.buyer_username} • ${r.game_type}</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="color: #4caf50; font-weight: bold;">$${(r.price_usd || 0).toFixed(2)}</div>
+                                ${localPrice ? `<div style="font-size: 11px; color: #ffd700;">${localPrice}</div>` : ''}
+                                <div style="font-size: 11px; color: #999;">${r.price_tokens} ${r.token_type === 'steam' ? 'Steam' : 'Standoff2'} tokens</div>
+                            </div>
+                        </div>`;
+                }).join('') : '<div style="color: #666; font-size: 12px; padding: 10px 0;">No completed sales yet</div>';
+
+                const purchasesHtml = purchases.length > 0 ? purchases.map(r => {
+                    const localPrice = r.price_in_buyer_currency && r.buyer_currency
+                        ? `${symbols[r.buyer_currency] || ''}${r.price_in_buyer_currency.toFixed(2)} ${r.buyer_currency}`
+                        : null;
+                    return `
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #222;">
+                            <div>
+                                <div style="font-weight: bold; color: #fff;">${r.skin_name}</div>
+                                <div style="font-size: 11px; color: #999;">Bought from ${r.seller_username} • ${r.game_type}</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="color: #e50914; font-weight: bold;">$${(r.price_usd || 0).toFixed(2)}</div>
+                                ${localPrice ? `<div style="font-size: 11px; color: #ffd700;">${localPrice}</div>` : ''}
+                                <div style="font-size: 11px; color: #999;">${r.price_tokens} ${r.token_type === 'steam' ? 'Steam' : 'Standoff2'} tokens</div>
+                            </div>
+                        </div>`;
+                }).join('') : '<div style="color: #666; font-size: 12px; padding: 10px 0;">No completed purchases yet</div>';
+
+                container.innerHTML = `
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;">
+                        <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; border: 1px solid #333;">
+                            <h3 style="margin-bottom: 10px; color: #4caf50;">💰 Sale Receipts</h3>
+                            ${salesHtml}
+                        </div>
+                        <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; border: 1px solid #333;">
+                            <h3 style="margin-bottom: 10px; color: #e50914;">🛒 Purchase Receipts</h3>
+                            ${purchasesHtml}
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Failed to load receipts:', error);
+                container.innerHTML = '<div style="color: #e50914; padding: 15px;">Failed to load receipts</div>';
+            }
         }
 
         async function equipAvatar(avatarId) {
@@ -3382,6 +3583,7 @@
 
         // Initialize
         loadClips();
+        loadRates();
 
         // Restore session UI state
         if (sessionToken) {

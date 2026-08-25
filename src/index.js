@@ -99,7 +99,13 @@ async function ensureLegacySchema() {
     ['token_conversions', 'wallet_address', 'TEXT'],
     ['token_conversions', 'target_currency', 'TEXT'],
     ['token_conversions', 'tx_hash', 'TEXT'],
-    ['token_conversions', 'paid_at', 'TEXT']
+    ['token_conversions', 'paid_at', 'TEXT'],
+    ['users', 'preferred_currency', "TEXT DEFAULT 'USD'"],
+    ['skin_transactions', 'price_usd', 'REAL'],
+    ['skin_transactions', 'buyer_currency', 'TEXT'],
+    ['skin_transactions', 'price_in_buyer_currency', 'REAL'],
+    ['token_deposits', 'estimated_usd_value', 'REAL'],
+    ['token_deposits', 'is_high_value', 'INTEGER DEFAULT 0']
   ];
 
   for (const [tableName, columnName, definition] of requiredColumns) {
@@ -132,6 +138,10 @@ function postJson(url, payload) {
     request.end();
   });
 }
+
+// Deposits at or above this USD-equivalent value are flagged for admin attention
+// (e.g. worth personally reselling on Steam/third-party markets rather than letting sit).
+const HIGH_VALUE_DEPOSIT_THRESHOLD_USD = parseFloat(process.env.HIGH_VALUE_DEPOSIT_THRESHOLD_USD) || 200;
 
 // Supported currencies
 const SUPPORTED_CURRENCIES = {
@@ -2291,7 +2301,43 @@ app.get('/api/skins', async (req, res) => {
     WHERE s.status = 'available'
     ORDER BY s.created_at DESC
   `);
-  res.json(skins);
+
+  const tokenRates = await dbAll('SELECT * FROM token_rates');
+  const rateByType = {};
+  tokenRates.forEach(r => { rateByType[r.token_type] = r.rate_to_usd; });
+
+  const skinsWithUsd = skins.map(skin => ({
+    ...skin,
+    price_usd: (rateByType[skin.token_type] || 0) * skin.price_tokens
+  }));
+
+  res.json(skinsWithUsd);
+});
+
+// API: Get seller's completed skin sale receipts
+app.get('/api/skins/receipts', authenticateRequest, async (req, res) => {
+  const receipts = await dbAll(`
+    SELECT st.*, s.skin_name, s.game_type, s.image_url, buyer.username as buyer_username
+    FROM skin_transactions st
+    JOIN skins s ON st.skin_id = s.id
+    JOIN users buyer ON st.buyer_id = buyer.id
+    WHERE st.seller_id = ? AND st.status = 'completed'
+    ORDER BY st.created_at DESC
+  `, [req.userId]);
+  res.json(receipts);
+});
+
+// API: Get buyer's completed skin purchase receipts
+app.get('/api/skins/purchases', authenticateRequest, async (req, res) => {
+  const receipts = await dbAll(`
+    SELECT st.*, s.skin_name, s.game_type, s.image_url, seller.username as seller_username
+    FROM skin_transactions st
+    JOIN skins s ON st.skin_id = s.id
+    JOIN users seller ON st.seller_id = seller.id
+    WHERE st.buyer_id = ? AND st.status = 'completed'
+    ORDER BY st.created_at DESC
+  `, [req.userId]);
+  res.json(receipts);
 });
 
 // API: List skin for sale
@@ -2856,6 +2902,7 @@ app.get('/api/profile', authenticateRequest, async (req, res) => {
   const userId = req.userId;
   const profile = await getOrCreateUserProfile(userId);
   const stats = await getUserStats(userId);
+  const user = await dbGet('SELECT preferred_currency FROM users WHERE id = ?', [userId]);
   
   const newUnlocks = await checkStreakUnlocks(userId);
   
@@ -2871,9 +2918,97 @@ app.get('/api/profile', authenticateRequest, async (req, res) => {
       dragon: dragon ? { id: dragon.id, name: dragon.name, svg: dragon.svg } : null,
       pixelationLevel: profile.pixelation_level,
       blurAmount: getBlurFromLevel(profile.pixelation_level),
-      sitePoints: stats.sitePoints
+      sitePoints: stats.sitePoints,
+      preferredCurrency: user?.preferred_currency || 'USD'
     },
     newUnlocks
+  });
+});
+
+// API: Update preferred display currency
+app.post('/api/profile/currency', authenticateRequest, async (req, res) => {
+  const { currency } = req.body;
+  if (!currency || !SUPPORTED_CURRENCIES[currency] || SUPPORTED_CURRENCIES[currency].type !== 'fiat') {
+    return res.status(400).json({ error: 'Invalid currency. Must be one of: ' + Object.keys(SUPPORTED_CURRENCIES).filter(c => SUPPORTED_CURRENCIES[c].type === 'fiat').join(', ') });
+  }
+  await dbRun('UPDATE users SET preferred_currency = ? WHERE id = ?', [currency, req.userId]);
+  res.json({ message: 'Preferred currency updated', currency });
+});
+
+// API: Profile analytics - earnings, clip performance, trading activity
+app.get('/api/profile/analytics', authenticateRequest, async (req, res) => {
+  const userId = req.userId;
+
+  const clips = await dbAll(`
+    SELECT c.id, c.title, c.views, c.created_at,
+      COALESCE((SELECT COUNT(*) FROM clip_votes WHERE clip_id = c.id AND vote_type = 1), 0) as likes,
+      COALESCE((SELECT COUNT(*) FROM clip_votes WHERE clip_id = c.id AND vote_type = -1), 0) as dislikes
+    FROM clips c
+    WHERE c.user_id = ?
+    ORDER BY c.created_at DESC
+  `, [userId]);
+
+  const clipTotals = clips.reduce((acc, c) => {
+    acc.totalViews += c.views || 0;
+    acc.totalLikes += c.likes || 0;
+    return acc;
+  }, { totalViews: 0, totalLikes: 0 });
+
+  const skinSales = await dbAll(`
+    SELECT token_type, COUNT(*) as count, SUM(price_tokens) as total_tokens, SUM(price_usd) as total_usd
+    FROM skin_transactions
+    WHERE seller_id = ? AND status = 'completed'
+    GROUP BY token_type
+  `, [userId]);
+
+  const skinPurchases = await dbAll(`
+    SELECT COUNT(*) as count, SUM(price_usd) as total_usd
+    FROM skin_transactions
+    WHERE buyer_id = ? AND status = 'completed'
+  `, [userId]);
+
+  const tradesAsLister = await dbAll(`
+    SELECT want_token_type, COUNT(*) as count, SUM(want_amount) as gross_received, SUM(fee_amount) as total_fees_paid
+    FROM token_trade_listings
+    WHERE user_id = ? AND status = 'completed'
+    GROUP BY want_token_type
+  `, [userId]);
+
+  const tradesAsAcceptor = await dbGet(`
+    SELECT COUNT(*) as count
+    FROM token_trade_listings
+    WHERE buyer_id = ? AND status = 'completed'
+  `, [userId]);
+
+  const conversions = await dbAll(`
+    SELECT token_type, status, COUNT(*) as count, SUM(amount) as total_tokens, SUM(btc_received) as total_received
+    FROM token_conversions
+    WHERE user_id = ?
+    GROUP BY token_type, status
+  `, [userId]);
+
+  res.json({
+    clips: {
+      totalClips: clips.length,
+      totalViews: clipTotals.totalViews,
+      totalLikes: clipTotals.totalLikes,
+      list: clips
+    },
+    skinSales: {
+      byTokenType: skinSales,
+      totalCompletedSales: skinSales.reduce((sum, s) => sum + s.count, 0),
+      totalEarnedUsd: skinSales.reduce((sum, s) => sum + (s.total_usd || 0), 0)
+    },
+    skinPurchases: {
+      totalCompletedPurchases: skinPurchases[0]?.count || 0,
+      totalSpentUsd: skinPurchases[0]?.total_usd || 0
+    },
+    tokenTrades: {
+      asLister: tradesAsLister,
+      asAcceptorCount: tradesAsAcceptor?.count || 0,
+      totalFeesPaid: tradesAsLister.reduce((sum, t) => sum + (t.total_fees_paid || 0), 0)
+    },
+    conversions
   });
 });
 
@@ -4123,11 +4258,19 @@ app.post('/api/tokens/deposit', authenticateRequest, async (req, res) => {
   }
   
   const verificationMethod = tokenType === 'steam' ? 'steam_api' : 'manual';
-  
+
+  const tokenRate = await getTokenRate(tokenType);
+  const estimatedUsdValue = tokenRate ? amount * tokenRate.rate_to_usd : 0;
+  const isHighValue = estimatedUsdValue >= HIGH_VALUE_DEPOSIT_THRESHOLD_USD ? 1 : 0;
+
   const result = await dbRun(`
-    INSERT INTO token_deposits (user_id, token_type, amount, status, verification_method)
-    VALUES (?, ?, ?, 'pending', ?)
-  `, [req.userId, tokenType, amount, verificationMethod]);
+    INSERT INTO token_deposits (user_id, token_type, amount, status, verification_method, estimated_usd_value, is_high_value)
+    VALUES (?, ?, ?, 'pending', ?, ?, ?)
+  `, [req.userId, tokenType, amount, verificationMethod, estimatedUsdValue, isHighValue]);
+
+  if (isHighValue) {
+    logSystemEvent('warning', `High-value deposit flagged`, `User ${req.userId}: ${amount} ${tokenType} tokens (~$${estimatedUsdValue.toFixed(2)}). Review before approving.`);
+  }
   
   logSystemEvent('info', `Token deposit request by user ${req.userId}`, `${amount} ${tokenType} tokens (ID: ${result.lastID})`);
   
@@ -4173,7 +4316,7 @@ app.get('/api/admin/pending-deposits', checkAdminSession, async (req, res) => {
     FROM token_deposits td 
     JOIN users u ON td.user_id = u.id 
     WHERE td.status = 'pending' 
-    ORDER BY td.created_at ASC
+    ORDER BY td.is_high_value DESC, td.created_at ASC
   `);
   res.json(deposits);
 });
@@ -4206,6 +4349,20 @@ async function completeEscrowTrade(tradeId) {
   
   await dbRun('UPDATE escrow_trades SET status = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?', ['completed', tradeId]);
   await dbRun('UPDATE skins SET status = ?, user_id = ? WHERE id = ?', ['sold', trade.buyer_id, trade.skin_id]);
+
+  // Freeze a USD + buyer's local-currency price snapshot at completion time for receipts/analytics
+  const tokenRate = await getTokenRate(trade.token_type);
+  const priceUsd = tokenRate ? trade.price_tokens * tokenRate.rate_to_usd : 0;
+  const buyer = await dbGet('SELECT preferred_currency FROM users WHERE id = ?', [trade.buyer_id]);
+  const buyerCurrency = buyer?.preferred_currency || 'USD';
+  const currencyRate = await getExchangeRate(buyerCurrency);
+  const priceInBuyerCurrency = currencyRate && currencyRate.rate_to_usd > 0 ? priceUsd / currencyRate.rate_to_usd : priceUsd;
+
+  await dbRun(`
+    UPDATE skin_transactions
+    SET status = 'completed', price_usd = ?, buyer_currency = ?, price_in_buyer_currency = ?
+    WHERE skin_id = ? AND seller_id = ? AND buyer_id = ? AND status = 'pending'
+  `, [priceUsd, buyerCurrency, priceInBuyerCurrency, trade.skin_id, trade.seller_id, trade.buyer_id]);
   
   logSystemEvent('info', `Escrow trade completed`, `Trade ID: ${tradeId}, Skin ID: ${trade.skin_id}`);
 }
@@ -4217,6 +4374,10 @@ async function cancelEscrowTrade(tradeId, reason) {
   
   await dbRun('UPDATE escrow_trades SET status = ?, dispute_reason = ? WHERE id = ?', ['cancelled', reason, tradeId]);
   await dbRun('UPDATE skins SET status = ? WHERE id = ?', ['available', trade.skin_id]);
+  await dbRun(`
+    UPDATE skin_transactions SET status = 'cancelled'
+    WHERE skin_id = ? AND seller_id = ? AND buyer_id = ? AND status = 'pending'
+  `, [trade.skin_id, trade.seller_id, trade.buyer_id]);
   
   logSystemEvent('info', `Escrow trade cancelled`, `Trade ID: ${tradeId}, Reason: ${reason}`);
 }
