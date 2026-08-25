@@ -1,5 +1,6 @@
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
+const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, REST, Routes, ChannelType } = require('discord.js');
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const app = express();
@@ -83,6 +84,8 @@ async function ensureLegacySchema() {
     ['users', 'valorant_vp_tokens', 'REAL DEFAULT 0'],
     ['users', 'genshin_crystals_tokens', 'REAL DEFAULT 0'],
     ['users', 'freefire_diamonds_tokens', 'REAL DEFAULT 0'],
+    ['users', 'discord_id', 'TEXT'],
+    ['chat_messages', 'source', "TEXT DEFAULT 'webapp'"],
     ['admin_users', 'email', 'TEXT'],
     ['admin_users', 'password_hash', 'TEXT'],
     ['admin_users', 'is_one_time_password', 'INTEGER DEFAULT 1'],
@@ -1539,6 +1542,208 @@ if (TELEGRAM_BOT_TOKEN) {
   };
 }
 
+// Discord bot setup
+const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
+const DISCORD_CHANNEL_ID = process.env.DISCORD_CHANNEL_ID || '';
+let discordClient = null;
+let discordReady = false;
+
+if (DISCORD_BOT_TOKEN) {
+  discordClient = new Client({
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,
+      GatewayIntentBits.GuildMembers
+    ]
+  });
+
+  discordClient.once('ready', () => {
+    console.log(`Discord bot logged in as ${discordClient.user.tag}`);
+    discordReady = true;
+    registerDiscordSlashCommands();
+  });
+
+  discordClient.on('interactionCreate', async (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
+    await handleDiscordSlashCommand(interaction);
+  });
+
+  discordClient.on('messageCreate', async (message) => {
+    if (message.author.bot) return;
+    if (DISCORD_CHANNEL_ID && message.channelId === DISCORD_CHANNEL_ID) {
+      await handleDiscordChatBridge(message);
+    }
+  });
+
+  discordClient.login(DISCORD_BOT_TOKEN).catch(err => console.error('Discord login error:', err));
+} else {
+  console.log('No DISCORD_BOT_TOKEN provided, Discord bot disabled');
+}
+
+// Discord slash commands registration
+async function registerDiscordSlashCommands() {
+  if (!DISCORD_BOT_TOKEN || !discordClient?.application) return;
+  const commands = [
+    new SlashCommandBuilder().setName('start').setDescription('Welcome to PixelPulse'),
+    new SlashCommandBuilder().setName('markets').setDescription('View active prediction markets'),
+    new SlashCommandBuilder().setName('clips').setDescription('View top clips'),
+    new SlashCommandBuilder().setName('marketplace').setDescription('Browse skin marketplace'),
+    new SlashCommandBuilder().setName('stats').setDescription('Platform statistics'),
+    new SlashCommandBuilder().setName('help').setDescription('Get help')
+  ].map(cmd => cmd.toJSON());
+
+  const rest = new REST({ version: '10' }).setToken(DISCORD_BOT_TOKEN);
+  try {
+    await rest.put(Routes.applicationCommands(discordClient.application.id), { body: commands });
+    console.log('Discord slash commands registered');
+  } catch (err) {
+    console.error('Failed to register Discord slash commands:', err);
+  }
+}
+
+// Discord slash command handler
+async function handleDiscordSlashCommand(interaction) {
+  try {
+    switch (interaction.commandName) {
+      case 'start': {
+        const embed = new EmbedBuilder()
+          .setTitle('🎮 PixelPulse - Gaming Clips & Predictions')
+          .setColor(0xe50914)
+          .setDescription([
+            '🎬 **CLIPS** — Share CS2 & Standoff 2 highlights, get upvoted, win weekly prizes',
+            '🔮 **PREDICTIONS** — Predict match outcomes, anime events, win BTC prizes',
+            '💼 **MARKETPLACE** — Buy & sell skins with bot middleman escrow',
+            '🔄 **TRADE HUB** — Trade game tokens across 8 platforms (Steam, Standoff2, Roblox, Fortnite, PUBG Mobile, Valorant, Genshin, Free Fire)',
+            '',
+            '🔗 **Start now:** https://pixelpulse.zentriva-clubsync.online'
+          ].join('\n'));
+        await interaction.reply({ embeds: [embed] });
+        break;
+      }
+      case 'markets': {
+        await interaction.deferReply();
+        const markets = await dbAll('SELECT * FROM betting_markets WHERE status = ? ORDER BY created_at DESC LIMIT 5', ['active']);
+        if (markets.length === 0) {
+          await interaction.editReply('No active markets right now. Check back later!');
+          return;
+        }
+        const embed = new EmbedBuilder().setTitle('🔮 Active Prediction Markets').setColor(0xe50914);
+        markets.forEach((m, i) => {
+          const options = JSON.parse(m.options).join(', ');
+          embed.addFields({ name: `${i + 1}. ${m.title}`, value: `Options: ${options}\nEnds: ${new Date(m.end_date).toLocaleDateString()}` });
+        });
+        embed.setFooter({ text: 'Predict now: https://pixelpulse.zentriva-clubsync.online' });
+        await interaction.editReply({ embeds: [embed] });
+        break;
+      }
+      case 'clips': {
+        await interaction.deferReply();
+        const clips = await dbAll('SELECT c.*, u.username, (SELECT COUNT(*) FROM clip_votes WHERE clip_id = c.id AND vote_type = 1) as upvotes FROM clips c JOIN users u ON c.user_id = u.id ORDER BY upvotes DESC LIMIT 5');
+        if (clips.length === 0) {
+          await interaction.editReply('No clips yet. Be the first to share your highlight!');
+          return;
+        }
+        const embed = new EmbedBuilder().setTitle('🎬 Top Clips').setColor(0xe50914);
+        clips.forEach((c, i) => {
+          embed.addFields({ name: `${i + 1}. ${c.title}`, value: `Game: ${c.game_type} | 👍 ${c.upvotes} upvotes | 👤 ${c.username}` });
+        });
+        embed.setFooter({ text: 'Watch clips: https://pixelpulse.zentriva-clubsync.online' });
+        await interaction.editReply({ embeds: [embed] });
+        break;
+      }
+      case 'marketplace': {
+        await interaction.deferReply();
+        const skins = await dbAll('SELECT s.*, u.username FROM skins s JOIN users u ON s.user_id = u.id WHERE s.status = ? ORDER BY s.created_at DESC LIMIT 5', ['available']);
+        if (skins.length === 0) {
+          await interaction.editReply('No skins listed yet. List your first skin!');
+          return;
+        }
+        const embed = new EmbedBuilder().setTitle('💼 Skin Marketplace').setColor(0xe50914);
+        skins.forEach((s, i) => {
+          embed.addFields({ name: `${i + 1}. ${s.skin_name}`, value: `Weapon: ${s.weapon} | Game: ${s.game_type} | Price: ${s.price_tokens} tokens | 👤 ${s.username}` });
+        });
+        embed.setFooter({ text: 'Browse marketplace: https://pixelpulse.zentriva-clubsync.online' });
+        await interaction.editReply({ embeds: [embed] });
+        break;
+      }
+      case 'stats': {
+        await interaction.deferReply();
+        const totalClips = (await dbGet('SELECT COUNT(*) as count FROM clips')).count;
+        const totalSkins = (await dbGet('SELECT COUNT(*) as count FROM skins WHERE status = ?', ['available'])).count;
+        const activeMarkets = (await dbGet('SELECT COUNT(*) as count FROM betting_markets WHERE status = ?', ['active'])).count;
+        const totalVolume = (await dbGet('SELECT COALESCE(SUM(total_volume), 0) as volume FROM betting_markets')).volume;
+        const embed = new EmbedBuilder()
+          .setTitle('📊 Platform Statistics')
+          .setColor(0xe50914)
+          .addFields(
+            { name: '🎬 Clips', value: `${totalClips}`, inline: true },
+            { name: '💼 Skins Listed', value: `${totalSkins}`, inline: true },
+            { name: '🔮 Active Markets', value: `${activeMarkets}`, inline: true },
+            { name: '💰 Total Volume', value: `${totalVolume.toFixed(4)} BTC`, inline: true }
+          );
+        await interaction.editReply({ embeds: [embed] });
+        break;
+      }
+      case 'help': {
+        const embed = new EmbedBuilder()
+          .setTitle('🆘 Help & Commands')
+          .setColor(0xe50914)
+          .setDescription([
+            '/start — Welcome message',
+            '/markets — View betting markets',
+            '/clips — View top clips',
+            '/marketplace — Browse skin marketplace',
+            '/stats — Platform statistics',
+            '/help — This help message',
+            '',
+            '🔗 Website: https://pixelpulse.zentriva-clubsync.online'
+          ].join('\n'));
+        await interaction.reply({ embeds: [embed] });
+        break;
+      }
+    }
+  } catch (err) {
+    console.error('Discord slash command error:', err);
+    if (interaction.deferred) await interaction.editReply('Error processing command.');
+    else if (!interaction.replied) await interaction.reply('Error processing command.');
+  }
+}
+
+// Discord chat bridge: Discord -> webapp
+async function handleDiscordChatBridge(message) {
+  try {
+    const username = message.author.username;
+    const content = message.content;
+    if (!content || content.length > 500) return;
+
+    // Find or create a system user for this Discord user
+    let user = await dbGet('SELECT id FROM users WHERE discord_id = ?', [message.author.id]);
+    if (!user) {
+      // Create a lightweight user record for Discord users
+      const result = await dbRun('INSERT INTO users (username, discord_id, is_adult) VALUES (?, ?, 0)', [`d_${username}`, message.author.id]);
+      user = { id: result.lastID };
+    }
+
+    await dbRun('INSERT INTO chat_messages (user_id, message, message_type, source) VALUES (?, ?, ?, ?)', [user.id, content.trim(), 'community', 'discord']);
+  } catch (err) {
+    console.error('Discord chat bridge error:', err);
+  }
+}
+
+// Broadcast to Discord channel
+async function broadcastToDiscord(title, description, color = 0xe50914) {
+  if (!discordReady || !discordClient || !DISCORD_CHANNEL_ID) return;
+  try {
+    const channel = await discordClient.channels.fetch(DISCORD_CHANNEL_ID);
+    if (!channel) return;
+    const embed = new EmbedBuilder().setTitle(title).setColor(color).setDescription(description).setTimestamp();
+    await channel.send({ embeds: [embed] });
+  } catch (err) {
+    console.error('Discord broadcast error:', err);
+  }
+}
+
 // Initialize database on startup
 async function startupInit() {
   await initDatabaseAndSchema();
@@ -2379,20 +2584,31 @@ app.get('/api/skins/purchases', authenticateRequest, async (req, res) => {
 
 // API: List skin for sale
 app.post('/api/skins', authenticateRequest, async (req, res) => {
-  const { game_type, skin_name, weapon, rarity, float_value, price_tokens, image_url } = req.body;
-  
-  if (!['CS2', 'Standoff2'].includes(game_type)) {
-    return res.status(400).json({ error: 'Invalid game type. Must be CS2 or Standoff2' });
+  const { game_type, skin_name, weapon, rarity, float_value, price_tokens, token_type, image_url } = req.body;
+
+  if (!game_type) {
+    return res.status(400).json({ error: 'Game type is required' });
   }
-  
-  // Determine token type based on game
-  const tokenType = game_type === 'CS2' ? 'steam' : 'standoff2';
-  
+
+  // Use token_type from request if valid, otherwise infer from game_type
+  const resolvedTokenType = (token_type && TOKEN_TYPES[token_type]) ? token_type : (game_type === 'CS2' ? 'steam' : 'standoff2');
+  if (!TOKEN_TYPES[resolvedTokenType]) {
+    return res.status(400).json({ error: 'Invalid token type' });
+  }
+
   const result = await dbRun(`
     INSERT INTO skins (user_id, game_type, skin_name, weapon, rarity, float_value, price_tokens, token_type, image_url)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [req.userId, game_type, skin_name, weapon, rarity, float_value, price_tokens, tokenType, image_url]);
-  
+  `, [req.userId, game_type, skin_name, weapon, rarity, float_value, price_tokens, resolvedTokenType, image_url]);
+
+  // Broadcast to Discord
+  const user = await dbGet('SELECT username FROM users WHERE id = ?', [req.userId]);
+  broadcastToDiscord(
+    '🛒 New Skin Listing',
+    `**${skin_name}** (${weapon})\nGame: ${game_type} | Rarity: ${rarity}\nPrice: ${price_tokens} ${getTokenLabel(resolvedTokenType)} tokens\nSeller: ${user?.username || 'Unknown'}`,
+    0x4caf50
+  ).catch(() => {});
+
   res.json({ id: result.lastID, message: 'Skin listed successfully' });
 });
 
@@ -2437,6 +2653,12 @@ app.post('/api/chat/community', authenticateRequest, rateLimit({ windowMs: 60 * 
   }
 
   await dbRun('INSERT INTO chat_messages (user_id, message, message_type) VALUES (?, ?, ?)', [req.userId, String(message).trim(), 'community']);
+
+  // Bridge to Discord: send webapp community messages to Discord channel
+  const user = await dbGet('SELECT username FROM users WHERE id = ?', [req.userId]);
+  if (user) {
+    broadcastToDiscord('💬 Community Chat', `**${user.username}:** ${String(message).trim()}`, 0x5865f2).catch(() => {});
+  }
 
   res.json({ message: 'Message sent' });
 });
@@ -3473,7 +3695,7 @@ app.post('/api/convert', authenticateRequest, async (req, res) => {
 });
 
 // ============================================================
-// TOKEN TRADE MARKETPLACE (CS2 tokens <-> Standoff2 tokens)
+// TOKEN TRADE MARKETPLACE (Multi-game token trading)
 // ============================================================
 // A user lists "offer_amount of offer_token_type for want_amount of want_token_type".
 // Another user accepts and the swap executes immediately. The LISTER pays a service
@@ -3525,6 +3747,14 @@ app.post('/api/trades/list', authenticateRequest, async (req, res) => {
   `, [req.userId, offerTokenType, offerAmount, wantTokenType, wantAmount, getTradeFeePercent(offerAmount)]);
 
   logSystemEvent('info', `Trade listing created by user ${req.userId}`, `Offering ${offerAmount} ${offerTokenType} for ${wantAmount} ${wantTokenType}`);
+
+  // Broadcast to Discord
+  const tradeUser = await dbGet('SELECT username FROM users WHERE id = ?', [req.userId]);
+  broadcastToDiscord(
+    '🔄 New Token Trade Listing',
+    `**${tradeUser?.username || 'A user'}** is offering **${offerAmount} ${getTokenLabel(offerTokenType)}** for **${wantAmount} ${getTokenLabel(wantTokenType)}**`,
+    0xff9800
+  ).catch(() => {});
 
   res.json({ id: result.lastID, message: 'Listing created. Your tokens are held in escrow until this trade completes or is cancelled.' });
 });
