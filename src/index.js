@@ -592,6 +592,7 @@ async function fetchAniListAnime() {
           media(type: ANIME, status: NOT_YET_RELEASED, sort: POPULARITY_DESC) {
             id
             title { romaji english }
+            coverImage { large medium }
             startDate { year month day }
             genres
             averageScore
@@ -633,8 +634,23 @@ async function fetchAnimeData() {
       fetchAniListAnime().catch(() => []),
       fetchLiveChartAnime().catch(() => [])
     ]);
-    
-    return [...malAnime, ...anilistAnime, ...livechartAnime];
+
+    // Normalize coverImage across all sources
+    const normalize = item => {
+      // AniList returns coverImage as { large: "url", medium: "url" }
+      if (item.coverImage && typeof item.coverImage === 'object') {
+        item.coverImage = item.coverImage.large || item.coverImage.medium || null;
+      }
+      if (!item.coverImage) {
+        if (item.images?.jpg?.large_image_url) item.coverImage = item.images.jpg.large_image_url;
+        else if (item.images?.jpg?.image_url) item.coverImage = item.images.jpg.image_url;
+        else if (item.cover_image) item.coverImage = item.cover_image;
+        else if (item.image_url) item.coverImage = item.image_url;
+      }
+      return item;
+    };
+
+    return [...malAnime, ...anilistAnime, ...livechartAnime].map(normalize);
   } catch (error) {
     console.error('Error fetching anime data:', error);
     return [];
@@ -2889,6 +2905,7 @@ app.get('/api/predictions/feed', async (req, res) => {
     anime: anime.slice(0, 8).map(item => ({
       id: item.id,
       title: item.title?.english || item.title?.romaji || item.title,
+      coverImage: (item.coverImage && typeof item.coverImage === 'object' ? (item.coverImage.large || item.coverImage.medium) : item.coverImage) || item.images?.jpg?.large_image_url || item.image_url || null,
       startDate: item.startDate,
       score: item.averageScore,
       genres: item.genres || []

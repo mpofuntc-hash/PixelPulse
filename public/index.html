@@ -2302,7 +2302,7 @@
                     ? feed.live.map(event => predictionEventCard(event, true)).join('')
                     : '<div style="padding:12px; color:#999;">No verified live esports events right now.</div>';
                 const cards = feed.upcoming.slice(0, 6).map(event => predictionEventCard(event, false));
-                const animeCards = feed.anime.slice(0, 2).map(anime => `<div style="padding:12px; background:#101010; border:1px solid #333; border-radius:7px;"><div style="font-size:11px; color:#ad8cff; font-weight:bold;">UPCOMING ANIME</div><div style="font-weight:bold; margin-top:5px;">${escapePredictionText(anime.title)}</div><div style="font-size:12px; color:#aaa; margin-top:4px;">${anime.startDate?.year || 'Date TBA'} · ${(anime.genres || []).slice(0, 2).map(escapePredictionText).join(', ')}</div></div>`);
+                const animeCards = feed.anime.slice(0, 2).map(anime => `<div style="padding:12px; background:#101010; border:1px solid #333; border-radius:7px; display:flex; gap:10px; align-items:center;">${anime.coverImage ? `<img src="${anime.coverImage}" alt="${escapePredictionText(anime.title)}" style="width:45px; height:60px; object-fit:cover; border-radius:4px; flex-shrink:0;">` : ''}<div><div style="font-size:11px; color:#ad8cff; font-weight:bold;">UPCOMING ANIME</div><div style="font-weight:bold; margin-top:5px;">${escapePredictionText(anime.title)}</div><div style="font-size:12px; color:#aaa; margin-top:4px;">${anime.startDate?.year || 'Date TBA'} · ${(anime.genres || []).slice(0, 2).map(escapePredictionText).join(', ')}</div></div></div>`);
                 upcoming.innerHTML = [...cards, ...animeCards].join('') || '<div style="padding:12px; color:#999;">No scheduled events available yet.</div>';
             } catch (error) {
                 sourceStatus.textContent = 'Live sources are temporarily unavailable';
@@ -2505,7 +2505,7 @@
                     
                     return `
                         <div style="padding: 15px; border-bottom: 1px solid #333; display: flex; gap: 15px; align-items: center;">
-                            <img src="${coverImage}" alt="${title}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px;">
+                            <img src="${coverImage}" alt="${title}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px;" onerror="this.src='https://via.placeholder.com/60x60?text=Anime';">
                             <div style="flex: 1;">
                                 <div style="font-weight: bold; color: #fff; margin-bottom: 5px;">${title}</div>
                                 <div style="font-size: 12px; color: #999;">${genres}</div>
