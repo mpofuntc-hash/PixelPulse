@@ -844,16 +844,16 @@
     <nav class="navbar">
         <a href="#" class="logo">🏰 PixelPulse</a>
         <div class="nav-links">
-            <a href="#" onclick="showSection('home')" class="active" id="nav-home"><span class="nav-icon">🏠</span>Home</a>
-            <a href="#" onclick="showSection('clips')" id="nav-clips"><span class="nav-icon">🎬</span>Clips</a>
-            <a href="#" onclick="showSection('betting')" id="nav-betting"><span class="nav-icon">🎯</span>Predictions</a>
-            <a href="#" onclick="showSection('marketplace')" id="nav-marketplace"><span class="nav-icon">⚔️</span>Marketplace</a>
-            <a href="#" onclick="showSection('gold-transfer')" id="nav-gold-transfer"><span class="nav-icon">🔄</span>Trade Hub</a>
-            <a href="#" onclick="showSection('chat')" id="nav-chat"><span class="nav-icon">💬</span>Chat</a>
-            <a href="#" onclick="showSection('leaderboard')" id="nav-leaderboard"><span class="nav-icon">🏆</span>Ranks</a>
-            <a href="#" onclick="showSection('wallet')" id="nav-wallet"><span class="nav-icon">💰</span>Wallet</a>
-            <a href="#" onclick="showSection('profile')" id="nav-profile" style="display:none;"><span class="nav-icon">👤</span>Profile</a>
-            <a href="#" onclick="showAuthModal()" id="nav-auth"><span class="nav-icon">🔑</span>Login</a>
+            <a href="#" onclick="showSection('home')" class="active" id="nav-home">Home</a>
+            <a href="#" onclick="showSection('clips')" id="nav-clips">Clips</a>
+            <a href="#" onclick="showSection('betting')" id="nav-betting">Predictions</a>
+            <a href="#" onclick="showSection('marketplace')" id="nav-marketplace">Marketplace</a>
+            <a href="#" onclick="showSection('gold-transfer')" id="nav-gold-transfer">Trade Hub</a>
+            <a href="#" onclick="showSection('chat')" id="nav-chat">Chat</a>
+            <a href="#" onclick="showSection('leaderboard')" id="nav-leaderboard">Ranks</a>
+            <a href="#" onclick="showSection('wallet')" id="nav-wallet">Wallet</a>
+            <a href="#" onclick="showSection('profile')" id="nav-profile" style="display:none;">Profile</a>
+            <a href="#" onclick="showAuthModal()" id="nav-auth">Login</a>
         </div>
         <div class="search-container">
             <input type="text" class="search-input" placeholder="Search clips..." id="searchInput">
@@ -1076,7 +1076,7 @@
     </div>
 
     <div class="section" id="clips" style="display: none;">
-        <h2 class="section-title">🎬 Gaming Clips</h2>
+        <h2 class="section-title">Gaming Clips</h2>
         <div class="info-banner"><strong>Gaming Clips</strong> — Share your best CS2 & Standoff 2 moments. Upload clips, view others' highlights, and build your reputation in the community.</div>
         <div style="margin-bottom: 20px;">
             <button class="btn btn-primary" onclick="showUploadModal()">Upload Clip</button>
@@ -1089,7 +1089,7 @@
     <div class="section" id="betting" style="display: none;">
         <div class="info-banner"><strong>Prediction Markets</strong> — Predict outcomes of esports matches and anime events using BTC. Browse live fixtures, place single or accumulator bets, and track your predictions.</div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h2 class="section-title">🎯 Prediction Markets</h2>
+            <h2 class="section-title">Prediction Markets</h2>
             <div style="display: flex; gap: 10px;">
                 <button class="btn" style="background: #2f2f2f; color: #fff; border: 1px solid #333;" onclick="filterMarkets('all')">All</button>
                 <button class="btn" style="background: #2f2f2f; color: #fff; border: 1px solid #333;" onclick="filterMarkets('esports')">Esports</button>
@@ -1206,7 +1206,7 @@
 
     <div class="section" id="marketplace" style="display: none;">
         <div class="info-banner"><strong>Skin Marketplace</strong> — Buy and sell CS2 skins (BTC) and Standoff 2 skins (tokens). All trades are escrow-protected. Filter by game, token type, or price. List your own skins for sale.</div>
-        <h2 class="section-title">⚔️ Skin Marketplace</h2>
+        <h2 class="section-title">Skin Marketplace</h2>
         <div style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
             <button class="btn btn-primary" onclick="showListSkinModal()">List Skin</button>
             <div style="flex: 1; min-width: 200px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
@@ -1233,7 +1233,7 @@
 
     <div class="section" id="chat" style="display: none;">
         <div class="info-banner"><strong>Community Chat</strong> — Talk to other players in real time. See who's online, discuss trades, share tips, and make friends in the PixelPulse community.</div>
-        <h2 class="section-title">💬 Community Chat</h2>
+        <h2 class="section-title">Community Chat</h2>
         <div style="display: grid; grid-template-columns: 1fr 300px; gap: 20px;">
             <div style="background: #1f1f1f; padding: 20px; border-radius: 8px; border: 1px solid #333; height: 500px; overflow-y: auto;" id="chatMessages">
                 <div class="loading">Loading messages...</div>
@@ -1253,7 +1253,7 @@
 
     <div class="section" id="leaderboard" style="display: none;">
         <div class="info-banner"><strong>Weekly Leaderboard</strong> — Compete for the top spot! Earn points from clips, trades, predictions, and community activity. Top players get exclusive avatars and bragging rights.</div>
-        <h2 class="section-title">🏆 Weekly Leaderboard</h2>
+        <h2 class="section-title">Weekly Leaderboard</h2>
         <div style="background: #1f1f1f; padding: 20px; border-radius: 8px; border: 1px solid #333;">
             <div id="leaderboardList">
                 <div class="loading">Loading leaderboard...</div>
@@ -1263,7 +1263,7 @@
 
     <div class="section" id="wallet" style="display: none;">
         <div class="info-banner"><strong>Your Wallet</strong> — Manage your BTC, Royal Coins, and game tokens. Deposit funds, link game accounts, view your active trades, and manage your skin listings all in one place.</div>
-        <h2 class="section-title">💰 Your Wallet</h2>
+        <h2 class="section-title">Your Wallet</h2>
         <div class="wallet-container">
             <div class="balance-card">
                 <h3>BTC Balance</h3>
@@ -1412,7 +1412,7 @@
     <!-- Profile Section with Avatar & Banner System -->
     <div class="section" id="gold-transfer" style="display: none; max-width: 980px;">
         <div class="info-banner"><strong>Trade Hub</strong> — Send Standoff 2 Gold to other players or trade game tokens across all supported platforms. Create listings, browse open trades, and swap tokens securely.</div>
-        <h2 class="section-title">🔄 Trade Hub</h2>
+        <h2 class="section-title">Trade Hub</h2>
 
         <!-- Sub-tab buttons -->
         <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 24px; flex-wrap: wrap;">
@@ -1502,7 +1502,7 @@
 
     <div class="section" id="profile" style="display: none;">
         <div class="info-banner"><strong>My Profile</strong> — View your avatar, stats, trade history, and account settings. Your profile shows your rank, points, and activity across the platform.</div>
-        <h2 class="section-title">👤 My Profile</h2>
+        <h2 class="section-title">My Profile</h2>
         <div id="profileContent" style="max-width: 900px; margin: 0 auto;">
             <div class="loading">Loading profile...</div>
         </div>
@@ -1621,7 +1621,7 @@
                 sessionToken = data.sessionToken;
                 currentUser = data.user;
                 localStorage.setItem('sessionToken', sessionToken);
-                document.getElementById('nav-auth').innerHTML = '<span class="nav-icon">🚪</span>Logout';
+                document.getElementById('nav-auth').textContent = 'Logout';
                 document.getElementById('nav-profile').style.display = 'inline';
                 document.getElementById('signupPrompt').style.display = 'none';
                 closeAuthModal();
@@ -1680,7 +1680,7 @@
             sessionToken = null;
             currentUser = null;
             localStorage.removeItem('sessionToken');
-            document.getElementById('nav-auth').innerHTML = '<span class="nav-icon">🔑</span>Login';
+            document.getElementById('nav-auth').textContent = 'Login';
             document.getElementById('nav-profile').style.display = 'none';
             document.getElementById('signupPrompt').style.display = 'flex';
         }
@@ -4133,7 +4133,7 @@
 
         // Restore session UI state
         if (sessionToken) {
-            document.getElementById('nav-auth').innerHTML = '<span class="nav-icon">🚪</span>Logout';
+            document.getElementById('nav-auth').textContent = 'Logout';
             document.getElementById('nav-profile').style.display = 'inline';
         }
 
