@@ -907,6 +907,7 @@
                     <button class="btn btn-secondary" onclick="showTokenDepositModal()">Deposit Game Tokens</button>
                     <button class="btn btn-secondary" onclick="showGameAccountModal()">Link Game Accounts</button>
                     <button class="btn btn-secondary" onclick="loadEscrowTrades()">My Escrow Trades</button>
+                    <button class="btn btn-secondary" onclick="loadMySkinListings()">My Skin Listings</button>
                 </div>
             </div>
             <div class="your-bets">
@@ -987,6 +988,19 @@
             </div>
             <div class="modal-body">
                 <div id="escrowTradesList"><div class="loading">Loading...</div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- My Skin Listings Modal -->
+    <div class="modal" id="mySkinListingsModal" style="display: none;">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h3 class="modal-title">My Skin Listings</h3>
+                <button class="close-btn" onclick="closeMySkinListingsModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="mySkinListingsList"><div class="loading">Loading...</div></div>
             </div>
         </div>
     </div>
@@ -2906,6 +2920,57 @@
         }
         function closeEscrowModal() { document.getElementById('escrowModal').style.display = 'none'; }
         function closeEscrowDetailModal() { document.getElementById('escrowDetailModal').style.display = 'none'; }
+        function closeMySkinListingsModal() { document.getElementById('mySkinListingsModal').style.display = 'none'; }
+
+        // ===== MY SKIN LISTINGS (delist) =====
+        async function loadMySkinListings() {
+            if (!sessionToken) { alert('Please login first'); return; }
+            document.getElementById('mySkinListingsModal').style.display = 'flex';
+            try {
+                const res = await fetch('/api/skins/my-listings', { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                const skins = await res.json();
+                const el = document.getElementById('mySkinListingsList');
+                if (!skins || skins.length === 0) {
+                    el.innerHTML = '<p style="color: #999; text-align: center;">You have no active skin listings.</p>';
+                    return;
+                }
+                el.innerHTML = skins.map(s => {
+                    const priceText = s.game_type === 'CS2'
+                        ? `💵 ${s.price_fiat} ${s.fiat_currency}`
+                        : `${s.price_tokens} ${s.token_type} tokens`;
+                    return `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid #333;">
+                        <div style="display: flex; gap: 12px; align-items: center;">
+                            <img src="${s.image_url || 'https://via.placeholder.com/60x60?text=Skin'}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover;">
+                            <div>
+                                <div style="font-weight: bold;">${s.skin_name}</div>
+                                <div style="font-size: 12px; color: #999;">${s.weapon} • ${s.game_type} • ${priceText}</div>
+                            </div>
+                        </div>
+                        <button class="btn btn-secondary" style="padding: 6px 16px; font-size: 13px;" onclick="delistSkin(${s.id}, '${s.skin_name.replace(/'/g, "\\'")}')">Delist</button>
+                    </div>`;
+                }).join('');
+            } catch (e) {
+                document.getElementById('mySkinListingsList').innerHTML = '<p style="color: #f44336;">Failed to load listings</p>';
+            }
+        }
+
+        async function delistSkin(skinId, skinName) {
+            if (!confirm(`Remove "${skinName}" from the marketplace? You can relist it later.`)) return;
+            try {
+                const res = await fetch(`/api/skins/${skinId}/delist`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${sessionToken}` }
+                });
+                const data = await res.json();
+                if (data.error) { alert(data.error); return; }
+                alert(data.message);
+                loadMySkinListings();
+                loadSkins();
+            } catch (e) {
+                alert('Failed to delist skin');
+            }
+        }
 
         async function fetchActiveEscrowTrades() {
             try {

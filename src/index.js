@@ -4897,6 +4897,26 @@ app.post('/api/skins/:id/purchase', authenticateRequest, async (req, res) => {
   }
 });
 
+// API: Get user's own listed skins (available status only)
+app.get('/api/skins/my-listings', authenticateRequest, async (req, res) => {
+  const skins = await dbAll(`
+    SELECT * FROM skins WHERE user_id = ? AND status = 'available' ORDER BY created_at DESC
+  `, [req.userId]);
+  res.json(skins);
+});
+
+// API: Delist a skin (seller removes it from marketplace if still available)
+app.post('/api/skins/:id/delist', authenticateRequest, async (req, res) => {
+  const skinId = req.params.id;
+  const skin = await dbGet('SELECT * FROM skins WHERE id = ? AND status = ?', [skinId, 'available']);
+  if (!skin) return res.status(404).json({ error: 'Skin not found or no longer available' });
+  if (skin.user_id !== req.userId) return res.status(403).json({ error: 'You can only delist your own skins' });
+
+  await dbRun('UPDATE skins SET status = ? WHERE id = ?', ['delisted', skinId]);
+  logSystemEvent('info', `Skin delisted by user`, `Skin ID: ${skinId}, User: ${req.userId}`);
+  res.json({ message: 'Skin delisted successfully' });
+});
+
 // API: Get user's active escrow trades
 app.get('/api/escrow/active', authenticateRequest, async (req, res) => {
   const trades = await dbAll(`
