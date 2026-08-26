@@ -1511,6 +1511,30 @@
         </div>
     </div>
 
+    <div class="modal" id="clipModal" style="display: none;">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3 class="modal-title" id="clipModalTitle">Clip</h3>
+                <button class="close-btn" onclick="closeClipModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="clipVideoContainer" style="margin-bottom: 15px; border-radius: 8px; overflow: hidden;"></div>
+                <div id="clipModalDesc" style="color: #999; margin-bottom: 15px;"></div>
+                <div style="display: flex; gap: 15px; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #333;">
+                    <button class="btn btn-primary" onclick="voteClip(currentClipId, 1)">👍 <span id="clipUpvotes">0</span></button>
+                    <button class="btn" style="background: #2f2f2f; color: #fff; border: 1px solid #333;" onclick="voteClip(currentClipId, -1)">👎 <span id="clipDownvotes">0</span></button>
+                    <span id="clipUploader" style="color: #999; font-size: 13px;"></span>
+                </div>
+                <h4 style="margin-bottom: 10px;">Comments</h4>
+                <div id="clipComments" style="max-height: 200px; overflow-y: auto; margin-bottom: 15px;"></div>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="clipCommentInput" placeholder="Write a comment..." style="flex: 1; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                    <button class="btn btn-primary" onclick="submitClipComment()">Post</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal" id="animeModal">
         <div class="modal-content">
             <div class="modal-header">
@@ -2893,9 +2917,14 @@
                     const avatar = avatarCache[clip.user_id];
                     const avatarHtml = avatar ? getAvatarHtml(avatar.avatarSvg, avatar.blurAmount, 24) : '';
                     const streakBadge = avatar && avatar.weeklyStreak > 0 ? ` 🔥${avatar.weeklyStreak}w` : '';
+                    let thumb = clip.thumbnail_url;
+                    if (!thumb && clip.video_url) {
+                        const ytMatch = clip.video_url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+                        if (ytMatch) thumb = `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
+                    }
                     return `
                     <div class="anime-card" onclick="openClipModal(${clip.id})" style="position: relative;">
-                        <img src="${clip.thumbnail_url || 'https://via.placeholder.com/200x280?text=Clip'}" 
+                        <img src="${thumb || 'https://via.placeholder.com/200x280?text=Clip'}"
                              alt="${clip.title}" class="anime-cover">
                         <div class="free-badge">${clip.game_type}</div>
                         <div class="anime-info">
@@ -3191,12 +3220,112 @@
             }
         }
 
+        let currentClipId = null;
+
+        function getYouTubeEmbedUrl(url) {
+            if (!url) return null;
+            const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+            if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1&rel=0`;
+            return null;
+        }
+
+        function getTwitchEmbedUrl(url) {
+            if (!url) return null;
+            const twMatch = url.match(/twitch\.tv\/videos\/(\d+)/);
+            if (twMatch) return `https://player.twitch.tv/?video=v${twMatch[1]}&parent=${location.hostname}&autoplay=true`;
+            const twClipMatch = url.match(/clips\.twitch\.tv\/([a-zA-Z0-9_-]+)/);
+            if (twClipMatch) return `https://clips.twitch.tv/embed?clip=${twClipMatch[1]}&parent=${location.hostname}`;
+            const twLiveMatch = url.match(/twitch\.tv\/([a-zA-Z0-9_]+)$/);
+            if (twLiveMatch) return `https://player.twitch.tv/?channel=${twLiveMatch[1]}&parent=${location.hostname}&autoplay=true`;
+            return null;
+        }
+
+        function getVideoEmbedHtml(url) {
+            const ytUrl = getYouTubeEmbedUrl(url);
+            if (ytUrl) {
+                return `<iframe width="100%" height="450" src="${ytUrl}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+            }
+            const twUrl = getTwitchEmbedUrl(url);
+            if (twUrl) {
+                return `<iframe width="100%" height="450" src="${twUrl}" frameborder="0" allowfullscreen scrolling="no"></iframe>`;
+            }
+            if (url && (url.endsWith('.mp4') || url.endsWith('.webm'))) {
+                return `<video width="100%" height="450" controls autoplay><source src="${url}" type="video/${url.endsWith('.webm') ? 'webm' : 'mp4'}">Your browser does not support the video tag.</video>`;
+            }
+            return `<div style="padding: 40px; text-align: center; background: #0f0f0f; color: #999; border-radius: 8px;">Video not available${url ? ` — <a href="${url}" target="_blank" style="color: #e50914;">Open link</a>` : ''}</div>`;
+        }
+
         function openClipModal(clipId) {
             fetch(`/api/clips/${clipId}`)
                 .then(res => res.json())
                 .then(clip => {
-                    alert(`${clip.title}\n\n${clip.description}\n\n👍 ${clip.upvotes} upvotes\n💬 ${clip.comments.length} comments`);
+                    currentClipId = clipId;
+                    document.getElementById('clipModalTitle').textContent = clip.title;
+                    document.getElementById('clipModalDesc').textContent = clip.description || '';
+                    document.getElementById('clipVideoContainer').innerHTML = getVideoEmbedHtml(clip.video_url);
+                    document.getElementById('clipUpvotes').textContent = clip.upvotes || 0;
+                    document.getElementById('clipDownvotes').textContent = clip.downvotes || 0;
+                    document.getElementById('clipUploader').textContent = `Posted by ${clip.username}`;
+                    const commentsDiv = document.getElementById('clipComments');
+                    if (clip.comments && clip.comments.length > 0) {
+                        commentsDiv.innerHTML = clip.comments.map(c => `
+                            <div style="padding: 8px 0; border-bottom: 1px solid #222;">
+                                <div style="font-size: 12px; color: #e50914; font-weight: bold;">${c.username}</div>
+                                <div style="color: #ccc; font-size: 13px; margin-top: 2px;">${c.comment}</div>
+                            </div>
+                        `).join('');
+                    } else {
+                        commentsDiv.innerHTML = '<div style="color: #666; padding: 10px;">No comments yet.</div>';
+                    }
+                    document.getElementById('clipCommentInput').value = '';
+                    document.getElementById('clipModal').style.display = 'flex';
+                })
+                .catch(err => {
+                    console.error('Failed to load clip:', err);
+                    alert('Failed to load clip');
                 });
+        }
+
+        function closeClipModal() {
+            document.getElementById('clipModal').style.display = 'none';
+            document.getElementById('clipVideoContainer').innerHTML = '';
+            currentClipId = null;
+        }
+
+        async function voteClip(clipId, voteType) {
+            if (!sessionToken) { alert('Please login to vote'); return; }
+            try {
+                const response = await fetch(`/api/clips/${clipId}/vote`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                    body: JSON.stringify({ vote_type: voteType })
+                });
+                const data = await response.json();
+                if (data.error) { alert(data.error); return; }
+                openClipModal(clipId);
+            } catch (error) {
+                console.error('Vote error:', error);
+            }
+        }
+
+        async function submitClipComment() {
+            if (!sessionToken) { alert('Please login to comment'); return; }
+            if (!currentClipId) return;
+            const comment = document.getElementById('clipCommentInput').value.trim();
+            if (!comment) return;
+            try {
+                const response = await fetch(`/api/clips/${currentClipId}/comments`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                    body: JSON.stringify({ comment })
+                });
+                const data = await response.json();
+                if (data.error) { alert(data.error); return; }
+                openClipModal(currentClipId);
+            } catch (error) {
+                console.error('Comment error:', error);
+                alert('Failed to post comment');
+            }
         }
 
         function showDepositModal() {
