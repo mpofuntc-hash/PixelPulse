@@ -110,6 +110,7 @@ async function ensureLegacySchema() {
     ['user_profiles', 'weekly_streak', 'INTEGER DEFAULT 0'],
     ['user_profiles', 'max_streak', 'INTEGER DEFAULT 0'],
     ['user_profiles', 'clip_wins', 'INTEGER DEFAULT 0'],
+    ['user_profiles', 'username_changed_at', 'TEXT'],
     ['user_points', 'points', 'INTEGER DEFAULT 0'],
     ['sessions', 'session_token', 'TEXT'],
     ['sessions', 'expires_at', 'TEXT'],
@@ -3288,6 +3289,41 @@ app.get('/api/banners', authenticateRequest, async (req, res) => {
   }));
   
   res.json(banners);
+});
+
+// API: Change username
+app.post('/api/profile/username', authenticateRequest, async (req, res) => {
+  const newUsername = String(req.body.username || '').trim();
+  if (!newUsername || newUsername.length < 3 || newUsername.length > 20) {
+    return res.status(400).json({ error: 'Username must be 3-20 characters long' });
+  }
+  if (!/^[a-zA-Z0-9_]+$/.test(newUsername)) {
+    return res.status(400).json({ error: 'Username can only contain letters, numbers, and underscores' });
+  }
+
+  // Check if username is taken by another user
+  const existing = await dbGet('SELECT id FROM users WHERE username = ? AND id != ?', [newUsername, req.userId]);
+  if (existing) {
+    return res.status(409).json({ error: 'That username is already taken' });
+  }
+
+  // Check cooldown (30 days)
+  const profile = await dbGet('SELECT username_changed_at FROM user_profiles WHERE user_id = ?', [req.userId]);
+  if (profile && profile.username_changed_at) {
+    const lastChange = new Date(profile.username_changed_at);
+    const daysSince = (Date.now() - lastChange.getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSince < 30) {
+      const daysLeft = Math.ceil(30 - daysSince);
+      return res.status(429).json({ error: `You can change your username again in ${daysLeft} day(s)` });
+    }
+  }
+
+  const oldUsername = await dbGet('SELECT username FROM users WHERE id = ?', [req.userId]);
+  await dbRun('UPDATE users SET username = ? WHERE id = ?', [newUsername, req.userId]);
+  await dbRun('UPDATE user_profiles SET username = ?, username_changed_at = CURRENT_TIMESTAMP WHERE user_id = ?', [newUsername, req.userId]);
+
+  console.log(`User ${req.userId} changed username from "${oldUsername?.username}" to "${newUsername}"`);
+  res.json({ message: 'Username updated successfully', username: newUsername });
 });
 
 // API: Get user profile (avatar, banner, streak, etc.)

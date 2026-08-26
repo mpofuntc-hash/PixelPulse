@@ -3610,6 +3610,25 @@
         let allAvatars = [];
         let allBanners = [];
 
+        async function changeUsername() {
+            const newUsername = document.getElementById('usernameInput').value.trim();
+            if (!newUsername) { alert('Enter a username'); return; }
+            try {
+                const response = await fetch('/api/profile/username', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                    body: JSON.stringify({ username: newUsername })
+                });
+                const data = await response.json();
+                if (data.error) { alert(data.error); return; }
+                alert(data.message);
+                loadProfile();
+            } catch (error) {
+                console.error('Username change error:', error);
+                alert('Failed to change username');
+            }
+        }
+
         async function loadNavAvatar() {
             if (!sessionToken) return;
             try {
@@ -3699,6 +3718,18 @@
                             <div style="font-weight: bold; color: ${rarityColors[p.avatar.rarity] || '#fff'};">${p.dragon.name}</div>
                         </div>
                     </div>` : ''}
+                </div>
+
+                <!-- Change Username -->
+                <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; border: 1px solid #333; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        <div style="font-weight: bold; color: #fff;">Change Username</div>
+                        <div style="color: #999; font-size: 12px;">3-20 characters, letters/numbers/underscores. Can change once every 30 days.</div>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="text" id="usernameInput" value="${p.username || ''}" maxlength="20" style="padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px; width: 160px;">
+                        <button class="btn btn-primary" onclick="changeUsername()">Save</button>
+                    </div>
                 </div>
 
                 <!-- Stats Grid -->
