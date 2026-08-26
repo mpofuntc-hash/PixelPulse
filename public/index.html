@@ -1413,7 +1413,6 @@
     <div class="section" id="gold-transfer" style="display: none; max-width: 980px;">
         <div class="info-banner"><strong>Trade Hub</strong> — Send Standoff 2 Gold to other players or trade game tokens across all supported platforms. Create listings, browse open trades, and swap tokens securely.</div>
         <h2 class="section-title">🔄 Trade Hub</h2>
-        <p style="color: #aaa; max-width: 760px; margin: -10px auto 22px; text-align: center;">Send Standoff 2 Gold or trade game tokens with other players across all supported platforms.</p>
 
         <!-- Sub-tab buttons -->
         <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 24px; flex-wrap: wrap;">
@@ -1502,7 +1501,8 @@
     </div>
 
     <div class="section" id="profile" style="display: none;">
-        <h2 class="section-title">My Profile</h2>
+        <div class="info-banner"><strong>My Profile</strong> — View your avatar, stats, trade history, and account settings. Your profile shows your rank, points, and activity across the platform.</div>
+        <h2 class="section-title">👤 My Profile</h2>
         <div id="profileContent" style="max-width: 900px; margin: 0 auto;">
             <div class="loading">Loading profile...</div>
         </div>
@@ -1621,8 +1621,9 @@
                 sessionToken = data.sessionToken;
                 currentUser = data.user;
                 localStorage.setItem('sessionToken', sessionToken);
-                document.getElementById('nav-auth').textContent = 'Logout';
+                document.getElementById('nav-auth').innerHTML = '<span class="nav-icon">🚪</span>Logout';
                 document.getElementById('nav-profile').style.display = 'inline';
+                document.getElementById('signupPrompt').style.display = 'none';
                 closeAuthModal();
                 loadWalletData();
             } catch (error) {
@@ -1657,6 +1658,7 @@
                 }
 
                 alert('Registration successful! Please login.');
+                document.getElementById('signupPrompt').style.display = 'none';
                 showLoginForm();
             } catch (error) {
                 console.error('Registration error:', error);
@@ -1678,8 +1680,9 @@
             sessionToken = null;
             currentUser = null;
             localStorage.removeItem('sessionToken');
-            document.getElementById('nav-auth').textContent = 'Login';
+            document.getElementById('nav-auth').innerHTML = '<span class="nav-icon">🔑</span>Login';
             document.getElementById('nav-profile').style.display = 'none';
+            document.getElementById('signupPrompt').style.display = 'flex';
         }
 
         // Chat functions
