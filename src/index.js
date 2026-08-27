@@ -1859,6 +1859,9 @@ async function handleDiscordClipAutoUpload(message) {
 
     await awardRoyalCoins(user.id, ROYAL_COIN_REWARDS.CLIP_UPLOAD, 'Clip upload via Discord');
 
+    // Notify Telegram channel
+    notifyNewClip(title, 'General', user.username, embedUrl).catch(() => {});
+
     await message.reply({
       content: `Clip uploaded to PixelPulse! View it on your profile: https://pixelpulse.zentriva-clubsync.online/\n+${ROYAL_COIN_REWARDS.CLIP_UPLOAD} Royal Coins earned!`,
       allowedMentions: { repliedUser: false }
@@ -2661,6 +2664,10 @@ app.post('/api/clips', authenticateRequest, async (req, res) => {
   
   await awardRoyalCoins(req.userId, ROYAL_COIN_REWARDS.CLIP_UPLOAD, 'Clip upload');
   
+  // Notify Telegram channel
+  const uploader = await dbGet('SELECT username FROM users WHERE id = ?', [req.userId]);
+  notifyNewClip(title, finalGameType, uploader?.username || 'Anonymous', embedUrl).catch(() => {});
+  
   res.json({ id: result.lastID, message: 'Clip uploaded successfully', videoType, embedUrl, royalCoinsEarned: ROYAL_COIN_REWARDS.CLIP_UPLOAD });
 });
 
@@ -2831,6 +2838,15 @@ app.post('/api/skins', authenticateRequest, async (req, res) => {
     '🛒 New Skin Listing',
     `**${skin_name}** (${weapon})\nGame: ${game_type} | Rarity: ${rarity}\nPrice: ${priceDisplay}\nSeller: ${user?.username || 'Unknown'}`,
     0x4caf50
+  ).catch(() => {});
+
+  // Notify Telegram channel
+  notifyNewSkinListing(
+    `${skin_name} (${weapon || 'Item'})`,
+    game_type,
+    isCS2 ? resolvedPriceFiat : price_tokens,
+    isCS2 ? resolvedFiatCurrency : `${getTokenLabel(resolvedTokenType)} tokens`,
+    user?.username || 'Unknown'
   ).catch(() => {});
 
   res.json({ id: result.lastID, message: 'Skin listed successfully' });
@@ -6243,6 +6259,147 @@ async function postAnimeNews() {
   }
 }
 
+// --- Auto-update: Gaming news from RSS feeds ---
+async function fetchGamingNews() {
+  const feeds = [
+    { url: 'https://feeds.ign.com/ign/all', source: 'IGN' },
+    { url: 'https://www.gamespot.com/feeds/game-news/', source: 'GameSpot' },
+    { url: 'https://www.pcgamer.com/rss/', source: 'PC Gamer' }
+  ];
+
+  const allItems = [];
+  for (const feed of feeds) {
+    try {
+      const res = await new Promise((resolve, reject) => {
+        https.get(feed.url, { headers: { 'User-Agent': 'PixelPulse/1.0' } }, (response) => {
+          let data = '';
+          response.on('data', chunk => data += chunk);
+          response.on('end', () => resolve(data));
+          response.on('error', reject);
+        }).on('error', reject);
+      });
+
+      const items = [];
+      const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+      let match;
+      while ((match = itemRegex.exec(res)) !== null && items.length < 5) {
+        const block = match[1];
+        const title = block.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/)?.[1]?.trim();
+        const link = block.match(/<link>(.*?)<\/link>/)?.[1]?.trim();
+        const pubDate = block.match(/<pubDate>(.*?)<\/pubDate>/)?.[1]?.trim();
+        const descMatch = block.match(/<description>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/description>/s)?.[1]?.trim();
+        const desc = descMatch ? descMatch.replace(/<[^>]+>/g, '').substring(0, 200) : '';
+        if (title && link) {
+          items.push({ title, link, desc, source: feed.source, pubDate });
+        }
+      }
+      allItems.push(...items);
+    } catch (err) {
+      console.error(`Failed to fetch ${feed.source} RSS:`, err.message);
+    }
+  }
+
+  allItems.sort((a, b) => new Date(b.pubDate || 0) - new Date(a.pubDate || 0));
+  return allItems.slice(0, 5);
+}
+
+async function postGamingNews() {
+  try {
+    const news = await fetchGamingNews();
+    if (news.length === 0) {
+      console.log('No gaming news fetched, skipping post');
+      return;
+    }
+
+    let msg = '🎮 GAMING NEWS UPDATE\n\n';
+    for (const item of news.slice(0, 4)) {
+      msg += `📰 ${item.title}\n`;
+      if (item.desc) msg += `${item.desc}...\n`;
+      msg += `🔗 ${item.link}\n\n`;
+    }
+    msg += '💬 What do you think? Discuss below!\n🎮 Join the community: https://pixelpulse.zentriva-clubsync.online';
+
+    await postToChannel(msg);
+  } catch (err) {
+    console.error('Error posting gaming news:', err);
+  }
+}
+
+// --- Auto-update: Daily quiz of the day ---
+async function postQuizOfTheDay() {
+  try {
+    const quiz = await dbGet('SELECT id, title, description, reward_points, difficulty FROM quizzes ORDER BY RANDOM() LIMIT 1');
+    if (!quiz) return;
+
+    const diffEmoji = quiz.difficulty === 'easy' ? '🟢 Easy' : quiz.difficulty === 'medium' ? '🟡 Medium' : '🔴 Hard';
+    const msg = `🧠 QUIZ OF THE DAY\n\n❓ ${quiz.title}\n📝 ${quiz.description || ''}\n📊 Difficulty: ${diffEmoji}\n💰 Reward: ${quiz.reward_points} Royal Coins\n\nTake the quiz now and earn coins!\n🔗 https://pixelpulse.zentriva-clubsync.online`;
+
+    await postToChannel(msg);
+  } catch (err) {
+    console.error('Error posting quiz of the day:', err);
+  }
+}
+
+// --- Auto-update: Daily discussion prompt ---
+const discussionPrompts = [
+  'What\'s the best skin you\'ve ever owned in any game? Share a screenshot! 📸',
+  'Which game has the best trading economy and why? 💰',
+  'If you could trade one item from any game for real money, what would it be? 💸',
+  'What\'s your hottest gaming take that nobody agrees with? 🔥',
+  'Which game community is the most toxic, and which is the most wholesome? 🤔',
+  'What\'s the most you\'ve ever spent on in-game items? Be honest! 💵',
+  'If you could bring back one discontinued game item, what would it be? 🕹️',
+  'What game do you think has the worst monetization? 🎮',
+  'Which mobile game do you think has the best events? 📱',
+  'What\'s your dream collab between two games? 🤝',
+  'Have you ever been scammed in a game trade? Tell the story (no names)! ⚠️',
+  'What\'s the most underrated game of 2025? 🏆',
+  'Which game has the best Battle Pass value? 💎',
+  'What\'s your favorite gaming memory of all time? 🎬',
+  'If PixelPulse could support one more game, which should it be? 🎯'
+];
+
+async function postDiscussionPrompt() {
+  try {
+    const prompt = discussionPrompts[Math.floor(Math.random() * discussionPrompts.length)];
+    const msg = `💬 DAILY DISCUSSION\n\n${prompt}\n\n👇 Reply with your thoughts!\n🎮 Trade safely at https://pixelpulse.zentriva-clubsync.online`;
+    await postToChannel(msg);
+  } catch (err) {
+    console.error('Error posting discussion prompt:', err);
+  }
+}
+
+// --- Auto-update: New clip posted on webapp → notify Telegram ---
+async function notifyNewClip(clipTitle, gameType, username, videoUrl) {
+  try {
+    const msg = `🎬 NEW CLIP ALERT!\n\n🎥 "${clipTitle}"\n🎮 Game: ${gameType}\n👤 Shared by ${username}\n\nWatch and vote on PixelPulse!\n🔗 https://pixelpulse.zentriva-clubsync.online`;
+    await postToChannel(msg);
+  } catch (err) {
+    console.error('Error posting new clip notification:', err);
+  }
+}
+
+// --- Auto-update: New skin listed on marketplace → notify Telegram ---
+async function notifyNewSkinListing(skinName, gameType, price, currency, username) {
+  try {
+    const priceStr = price > 0 ? `${price} ${currency}` : 'token trade';
+    const msg = `💼 NEW LISTING\n\n📦 ${skinName}\n🎮 Game: ${gameType}\n💰 Price: ${priceStr}\n👤 Listed by ${username}\n\nCheck it out on PixelPulse!\n🔗 https://pixelpulse.zentriva-clubsync.online`;
+    await postToChannel(msg);
+  } catch (err) {
+    console.error('Error posting skin listing notification:', err);
+  }
+}
+
+// --- Auto-update: Token trade completed → notify Telegram ---
+async function notifyTokenTrade(fromUser, toUser, tokenType, amount) {
+  try {
+    const msg = `🔄 TOKEN TRADE COMPLETED\n\n👤 ${fromUser} → ${toUser}\n💰 ${amount} ${tokenType}\n\n✅ Escrow-protected trade successful!\n🔗 https://pixelpulse.zentriva-clubsync.online`;
+    await postToChannel(msg);
+  } catch (err) {
+    console.error('Error posting token trade notification:', err);
+  }
+}
+
 // Schedule auto-updates
 function scheduleChannelUpdates() {
   if (!TELEGRAM_CHANNEL_ID) {
@@ -6300,6 +6457,39 @@ function scheduleChannelUpdates() {
     postAnimeNews();
     setInterval(postAnimeNews, 2 * 24 * 60 * 60 * 1000); // Every 2 days
   }, msUntilTue);
+  
+  // Gaming news — every day at 10am
+  const next10am = new Date(now);
+  next10am.setHours(10, 0, 0, 0);
+  if (next10am < now) next10am.setDate(next10am.getDate() + 1);
+  const msUntil10am = next10am - now;
+  
+  setTimeout(() => {
+    postGamingNews();
+    setInterval(postGamingNews, 24 * 60 * 60 * 1000); // Daily
+  }, msUntil10am);
+  
+  // Quiz of the day — every day at 12pm
+  const next12pm = new Date(now);
+  next12pm.setHours(12, 0, 0, 0);
+  if (next12pm < now) next12pm.setDate(next12pm.getDate() + 1);
+  const msUntil12pm = next12pm - now;
+  
+  setTimeout(() => {
+    postQuizOfTheDay();
+    setInterval(postQuizOfTheDay, 24 * 60 * 60 * 1000); // Daily
+  }, msUntil12pm);
+  
+  // Discussion prompt — every day at 4pm
+  const next4pm = new Date(now);
+  next4pm.setHours(16, 0, 0, 0);
+  if (next4pm < now) next4pm.setDate(next4pm.getDate() + 1);
+  const msUntil4pm = next4pm - now;
+  
+  setTimeout(() => {
+    postDiscussionPrompt();
+    setInterval(postDiscussionPrompt, 24 * 60 * 60 * 1000); // Daily
+  }, msUntil4pm);
 }
 
 // Start Telegram bot
