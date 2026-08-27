@@ -1564,9 +1564,21 @@ async function initSchema() {
       FOREIGN KEY (agent_id) REFERENCES referral_agents(id)
     );
   `);
-}
 
-// Initialize database schema and exchange rates
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS community_posts (
+      id INTEGER PRIMARY KEY,
+      post_type TEXT NOT NULL,
+      title TEXT,
+      content TEXT,
+      poll_options TEXT,
+      follow_up TEXT,
+      source TEXT,
+      link TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+}
 async function initDatabaseAndSchema() {
   await ensureLegacySchema();
   await initSchema();
@@ -3069,6 +3081,33 @@ app.get('/api/leaderboard/current', async (req, res) => {
 app.get('/api/quizzes', async (req, res) => {
   const quizzes = await dbAll('SELECT id, anime_id, title, description, reward_points, difficulty FROM quizzes ORDER BY created_at DESC');
   res.json(quizzes);
+});
+
+// API: Get today's community posts (polls, news, discussions, quiz of the day)
+app.get('/api/community/posts', async (req, res) => {
+  const today = new Date().toISOString().split('T')[0];
+  const posts = await dbAll(
+    `SELECT * FROM community_posts WHERE date(created_at) = date('now') ORDER BY created_at DESC`
+  );
+  const parsed = posts.map(p => ({
+    ...p,
+    poll_options: p.poll_options ? JSON.parse(p.poll_options) : null,
+    content: p.post_type === 'gaming_news' && p.content ? JSON.parse(p.content) : p.content
+  }));
+  res.json(parsed);
+});
+
+// API: Get recent community posts (last 7 days)
+app.get('/api/community/posts/recent', async (req, res) => {
+  const posts = await dbAll(
+    `SELECT * FROM community_posts WHERE created_at >= datetime('now', '-7 days') ORDER BY created_at DESC LIMIT 20`
+  );
+  const parsed = posts.map(p => ({
+    ...p,
+    poll_options: p.poll_options ? JSON.parse(p.poll_options) : null,
+    content: p.post_type === 'gaming_news' && p.content ? JSON.parse(p.content) : p.content
+  }));
+  res.json(parsed);
 });
 
 // API: Get quiz by ID
@@ -6312,14 +6351,19 @@ async function postGamingNews() {
     }
 
     let msg = '🎮 GAMING NEWS UPDATE\n\n';
+    const newsItems = [];
     for (const item of news.slice(0, 4)) {
       msg += `📰 ${item.title}\n`;
       if (item.desc) msg += `${item.desc}...\n`;
       msg += `🔗 ${item.link}\n\n`;
+      newsItems.push({ title: item.title, desc: item.desc, link: item.link, source: item.source });
     }
     msg += '💬 What do you think? Discuss below!\n🎮 Join the community: https://pixelpulse.zentriva-clubsync.online';
 
     await postToChannel(msg);
+
+    await dbRun('INSERT INTO community_posts (post_type, title, content, source) VALUES (?, ?, ?, ?)',
+      ['gaming_news', 'Gaming News Update', JSON.stringify(newsItems), 'RSS']);
   } catch (err) {
     console.error('Error posting gaming news:', err);
   }
@@ -6335,6 +6379,9 @@ async function postQuizOfTheDay() {
     const msg = `🧠 QUIZ OF THE DAY\n\n❓ ${quiz.title}\n📝 ${quiz.description || ''}\n📊 Difficulty: ${diffEmoji}\n💰 Reward: ${quiz.reward_points} Royal Coins\n\nTake the quiz now and earn coins!\n🔗 https://pixelpulse.zentriva-clubsync.online`;
 
     await postToChannel(msg);
+
+    await dbRun('INSERT INTO community_posts (post_type, title, content, link) VALUES (?, ?, ?, ?)',
+      ['quiz', `Quiz of the Day: ${quiz.title}`, `${quiz.description || ''} | Difficulty: ${quiz.difficulty} | Reward: ${quiz.reward_points} Royal Coins`, 'https://pixelpulse.zentriva-clubsync.online']);
   } catch (err) {
     console.error('Error posting quiz of the day:', err);
   }
@@ -6364,6 +6411,9 @@ async function postDiscussionPrompt() {
     const prompt = discussionPrompts[Math.floor(Math.random() * discussionPrompts.length)];
     const msg = `💬 DAILY DISCUSSION\n\n${prompt}\n\n👇 Reply with your thoughts!\n🎮 Trade safely at https://pixelpulse.zentriva-clubsync.online`;
     await postToChannel(msg);
+
+    await dbRun('INSERT INTO community_posts (post_type, title, content) VALUES (?, ?, ?)',
+      ['discussion', 'Daily Discussion', prompt]);
   } catch (err) {
     console.error('Error posting discussion prompt:', err);
   }
@@ -6452,6 +6502,10 @@ async function postDailyPoll() {
   try {
     if (!TELEGRAM_CHANNEL_ID || !bot?.telegram) return;
     const poll = dailyPolls[Math.floor(Math.random() * dailyPolls.length)];
+
+    // Save poll to database
+    const pollResult = await dbRun('INSERT INTO community_posts (post_type, title, content, poll_options, follow_up) VALUES (?, ?, ?, ?, ?)',
+      ['poll', poll.question, poll.question, JSON.stringify(poll.options), poll.followUp]);
 
     // Send the poll
     await bot.telegram.sendPoll(

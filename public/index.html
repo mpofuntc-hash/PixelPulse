@@ -846,6 +846,7 @@
         <div class="nav-links">
             <a href="#" onclick="showSection('home')" class="active" id="nav-home">Home</a>
             <a href="#" onclick="showSection('clips')" id="nav-clips">Clips</a>
+            <a href="#" onclick="showSection('community')" id="nav-community">Community</a>
             <a href="#" onclick="showSection('betting')" id="nav-betting">Predictions</a>
             <a href="#" onclick="showSection('marketplace')" id="nav-marketplace">Marketplace</a>
             <a href="#" onclick="showSection('gold-transfer')" id="nav-gold-transfer">Trade Hub</a>
@@ -1086,6 +1087,17 @@
         </div>
         <div class="anime-grid" id="clipsGrid">
             <div class="loading">Loading clips...</div>
+        </div>
+    </div>
+
+    <div class="section" id="community" style="display: none;">
+        <h2 class="section-title">Community Feed</h2>
+        <div class="info-banner"><strong>Community Feed</strong> — Today's polls, gaming news, quizzes, and discussions from our Telegram community. Vote, discuss, and stay updated on what's happening across PixelPulse.</div>
+        <div style="margin-bottom: 15px;">
+            <button class="btn" style="background: #e50914; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer;" onclick="loadCommunityPosts()">Refresh Feed</button>
+        </div>
+        <div id="communityFeed" style="display: flex; flex-direction: column; gap: 16px;">
+            <div class="loading">Loading community feed...</div>
         </div>
     </div>
 
@@ -2232,6 +2244,7 @@
         function showSection(section) {
             // Hide all sections
             document.getElementById('clips').style.display = 'none';
+            document.getElementById('community').style.display = 'none';
             document.getElementById('betting').style.display = 'none';
             document.getElementById('marketplace').style.display = 'none';
             document.getElementById('gold-transfer').style.display = 'none';
@@ -2242,6 +2255,7 @@
             
             // Remove active class from all nav links
             document.getElementById('nav-clips').classList.remove('active');
+            document.getElementById('nav-community').classList.remove('active');
             document.getElementById('nav-betting').classList.remove('active');
             document.getElementById('nav-marketplace').classList.remove('active');
             document.getElementById('nav-gold-transfer').classList.remove('active');
@@ -2272,6 +2286,8 @@
             // Load section data
             if (section === 'clips') {
                 loadClips();
+            } else if (section === 'community') {
+                loadCommunityPosts();
             } else if (section === 'betting') {
                 loadBettingMarkets();
             } else if (section === 'marketplace') {
@@ -2908,6 +2924,96 @@
             } else {
                 subBetsContainer.style.display = 'none';
                 toggleText.textContent = '📊 View Sub-Markets (Player/Map Performance)';
+            }
+        }
+
+        async function loadCommunityPosts() {
+            const feed = document.getElementById('communityFeed');
+            feed.innerHTML = '<div class="loading">Loading community feed...</div>';
+            try {
+                const res = await fetch('/api/community/posts');
+                const posts = await res.json();
+                if (!posts || posts.length === 0) {
+                    feed.innerHTML = '<div style="text-align:center; padding:40px; color:#999;">No community posts yet today. Check back later — we post gaming news, polls, quizzes, and discussions daily!</div>';
+                    return;
+                }
+                feed.innerHTML = posts.map(post => renderCommunityPost(post)).join('');
+            } catch (err) {
+                feed.innerHTML = '<div style="text-align:center; padding:20px; color:#e50914;">Failed to load community feed. Try refreshing.</div>';
+            }
+        }
+
+        function renderCommunityPost(post) {
+            const time = new Date(post.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const typeIcons = { poll: '📊', gaming_news: '📰', quiz: '🧠', discussion: '💬' };
+            const typeLabels = { poll: 'DAILY POLL', gaming_news: 'GAMING NEWS', quiz: 'QUIZ OF THE DAY', discussion: 'DISCUSSION' };
+            const icon = typeIcons[post.post_type] || '📌';
+            const label = typeLabels[post.post_type] || post.post_type.toUpperCase();
+
+            let body = '';
+
+            if (post.post_type === 'poll' && post.poll_options) {
+                const options = Array.isArray(post.poll_options) ? post.poll_options : [];
+                body = `
+                    <div style="font-size: 16px; margin-bottom: 12px;">${post.title}</div>
+                    <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;">
+                        ${options.map((opt, i) => `
+                            <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 10px 14px; cursor: pointer; transition: all 0.2s;"
+                                 onmouseover="this.style.borderColor='#e50914'"
+                                 onmouseout="this.style.borderColor='#333'"
+                                 onclick="voteCommunityPoll(${post.id}, ${i}, this)">
+                                <span style="font-size: 14px;">${opt}</span>
+                                <span style="float: right; color: #888; font-size: 12px;" id="poll-votes-${post.id}-${i}">0 votes</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                    ${post.follow_up ? `<div style="background: #121212; border-left: 3px solid #e50914; padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 13px; color: #ccc;"><strong>💬 Discussion:</strong> ${post.follow_up}</div>` : ''}
+                `;
+            } else if (post.post_type === 'gaming_news' && Array.isArray(post.content)) {
+                body = post.content.map(item => `
+                    <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px;">
+                        <div style="font-size: 15px; font-weight: 600; margin-bottom: 4px;">📰 ${item.title}</div>
+                        ${item.desc ? `<div style="font-size: 13px; color: #aaa; margin-bottom: 6px;">${item.desc}...</div>` : ''}
+                        <a href="${item.link}" target="_blank" style="color: #e50914; font-size: 12px; text-decoration: none;">Read full article →</a>
+                    </div>
+                `).join('');
+            } else if (post.post_type === 'quiz') {
+                body = `
+                    <div style="font-size: 16px; margin-bottom: 8px;">${post.title}</div>
+                    <div style="font-size: 14px; color: #ccc; margin-bottom: 12px;">${post.content}</div>
+                    <a href="${post.link || 'https://pixelpulse.zentriva-clubsync.online'}" target="_blank"
+                       style="display: inline-block; background: #e50914; color: #fff; padding: 8px 20px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600;">
+                        Take Quiz & Earn Coins →
+                    </a>
+                `;
+            } else if (post.post_type === 'discussion') {
+                body = `
+                    <div style="font-size: 16px; margin-bottom: 12px;">${post.content}</div>
+                    <div style="font-size: 13px; color: #888;">💬 Join the discussion on our Telegram channel!</div>
+                `;
+            } else {
+                body = `<div style="font-size: 14px; color: #ccc;">${post.content || post.title}</div>`;
+            }
+
+            return `
+                <div style="background: linear-gradient(135deg, #161616, #1a1a1a); border: 1px solid #2a2a2a; border-radius: 12px; padding: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                        <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #e50914;">${icon} ${label}</span>
+                        <span style="font-size: 11px; color: #666;">${time}</span>
+                    </div>
+                    ${body}
+                </div>
+            `;
+        }
+
+        function voteCommunityPoll(postId, optionIndex, el) {
+            const voteEl = document.getElementById(`poll-votes-${postId}-${optionIndex}`);
+            if (voteEl) {
+                const current = parseInt(voteEl.dataset.count || '0');
+                voteEl.dataset.count = current + 1;
+                voteEl.textContent = `${current + 1} votes`;
+                el.style.borderColor = '#e50914';
+                el.style.background = '#1f1a1a';
             }
         }
 
