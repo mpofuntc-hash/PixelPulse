@@ -1082,8 +1082,28 @@
     <div class="section" id="clips" style="display: none;">
         <h2 class="section-title">Gaming Clips</h2>
         <div class="info-banner"><strong>Gaming Clips</strong> — Share your best moments from any game — CS2, Roblox, Fortnite, Valorant, PUBG Mobile, Free Fire, Call of Duty, and more. Upload clips, view others' highlights, and build your reputation in the community.</div>
-        <div style="margin-bottom: 20px;">
+        <div style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
             <button class="btn btn-primary" onclick="showUploadModal()">Upload Clip</button>
+            <select id="clipFilterGame" onchange="loadClips()" style="padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                <option value="">All Games</option>
+                <option value="CS2">CS2</option>
+                <option value="Valorant">Valorant</option>
+                <option value="Fortnite">Fortnite</option>
+                <option value="Roblox">Roblox</option>
+                <option value="PUBG Mobile">PUBG Mobile</option>
+                <option value="Free Fire">Free Fire</option>
+                <option value="Call of Duty">Call of Duty</option>
+                <option value="Apex Legends">Apex Legends</option>
+                <option value="Standoff2">Standoff2</option>
+                <option value="Minecraft">Minecraft</option>
+                <option value="GTA V">GTA V</option>
+                <option value="Other">Other</option>
+            </select>
+            <select id="clipFilterSort" onchange="loadClips()" style="padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                <option value="newest">Newest</option>
+                <option value="popular">Most Upvoted</option>
+            </select>
+            <input type="text" id="clipSearchInput" placeholder="Search clips..." oninput="debouncedLoadClips()" style="flex: 1; min-width: 180px; padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
         </div>
         <div class="anime-grid" id="clipsGrid">
             <div class="loading">Loading clips...</div>
@@ -3057,16 +3077,58 @@
             }
         }
 
+        let allClips = [];
+        let clipSearchTimer = null;
+        function debouncedLoadClips() {
+            clearTimeout(clipSearchTimer);
+            clipSearchTimer = setTimeout(() => loadClips(), 300);
+        }
+
         async function loadClips() {
             try {
+                const grid = document.getElementById('clipsGrid');
+                if (!grid) return;
+                grid.innerHTML = '<div class="loading">Loading clips...</div>';
+
+                const filterGame = document.getElementById('clipFilterGame')?.value || '';
+                const sortBy = document.getElementById('clipFilterSort')?.value || 'newest';
+                const searchTerm = (document.getElementById('clipSearchInput')?.value || '').toLowerCase().trim();
+
                 const response = await fetch('/api/clips');
-                const clips = await response.json();
-                
+                let clips = await response.json();
+                allClips = clips;
+
                 // Fetch avatar info for all unique clip uploaders
                 const userIds = [...new Set(clips.map(c => c.user_id))];
                 await Promise.all(userIds.map(uid => getUserAvatar(uid)));
-                
-                const grid = document.getElementById('clipsGrid');
+
+                // Filter by game
+                if (filterGame) {
+                    clips = clips.filter(c => c.game_type === filterGame);
+                }
+
+                // Filter by search term
+                if (searchTerm) {
+                    clips = clips.filter(c =>
+                        (c.title && c.title.toLowerCase().includes(searchTerm)) ||
+                        (c.game_type && c.game_type.toLowerCase().includes(searchTerm)) ||
+                        (c.username && c.username.toLowerCase().includes(searchTerm)) ||
+                        (c.description && c.description.toLowerCase().includes(searchTerm))
+                    );
+                }
+
+                // Sort
+                if (sortBy === 'popular') {
+                    clips.sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0));
+                } else {
+                    clips.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                }
+
+                if (clips.length === 0) {
+                    grid.innerHTML = '<div style="text-align:center; padding:40px; color:#999;">No clips found. Try a different filter or search.</div>';
+                    return;
+                }
+
                 grid.innerHTML = clips.map(clip => {
                     const avatar = avatarCache[clip.user_id];
                     const avatarHtml = avatar ? getAvatarHtml(avatar.avatarSvg, avatar.blurAmount, 24) : '';
@@ -3233,11 +3295,19 @@
                 actions = `<div style="display:flex;gap:6px;align-items:center;">${wishlistBtn}</div>`;
             }
 
+            const rep = trade.seller_reputation;
+            let repBadges = '';
+            if (rep && rep.badges && rep.badges.length > 0) {
+                repBadges = rep.badges.map(b =>
+                    `<span style="display:inline-block; cursor:help; margin-left:4px; padding:1px 5px; border-radius:3px; font-size:10px; font-weight:700; background:${b.color}22; color:${b.color}; border:1px solid ${b.color}44;" title="${b.tooltip}">${b.icon} ${b.label}</span>`
+                ).join('');
+            }
+
             return `
-                <div style="background: linear-gradient(135deg, #161616, #1a1a1a); border: 1px solid #2a2a2a; border-radius: 10px; padding: 16px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                <div style="background: linear-gradient(135deg, #161616, #1a1a1a); border: 1px solid ${rep?.is_trusted ? '#2d5438' : '#2a2a2a'}; border-radius: 10px; padding: 16px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
                     <div style="font-size: 28px;">${icon}</div>
                     <div style="flex: 1; min-width: 200px;">
-                        <div style="font-size: 15px; font-weight: 600; margin-bottom: 4px;">${trade.item_title || 'Untitled'}</div>
+                        <div style="font-size: 15px; font-weight: 600; margin-bottom: 4px;">${trade.item_title || 'Untitled'}${repBadges}</div>
                         <div style="font-size: 12px; color: #aaa;">
                             <span style="color: #e50914; font-weight: 600;">${typeLabel}</span>
                             ${trade.game_type ? ` | Game: ${trade.game_type}` : ''}
@@ -4243,6 +4313,7 @@
 
         // ===== AVATAR & BANNER PROFILE SYSTEM =====
         let userProfileData = null;
+        let userReputation = null;
         let allAvatars = [];
         let allBanners = [];
 
@@ -4289,15 +4360,17 @@
                 return;
             }
             try {
-                const [profileRes, avatarsRes, bannersRes] = await Promise.all([
+                const [profileRes, avatarsRes, bannersRes, repRes] = await Promise.all([
                     fetch('/api/profile', { headers: { 'Authorization': `Bearer ${sessionToken}` } }),
                     fetch('/api/avatars', { headers: { 'Authorization': `Bearer ${sessionToken}` } }),
-                    fetch('/api/banners', { headers: { 'Authorization': `Bearer ${sessionToken}` } })
+                    fetch('/api/banners', { headers: { 'Authorization': `Bearer ${sessionToken}` } }),
+                    fetch(`/api/user/${currentUser?.id || ''}/reputation`)
                 ]);
                 const profileData = await profileRes.json();
                 allAvatars = await avatarsRes.json();
                 allBanners = await bannersRes.json();
                 userProfileData = profileData.profile;
+                try { userReputation = await repRes.json(); } catch(e) { userReputation = null; }
                 userPreferredCurrency = profileData.profile.preferredCurrency || 'USD';
                 loadRates();
 
@@ -4342,6 +4415,19 @@
                             <span style="background: #3a1a3a; color: #e040ff; padding: 4px 10px; border-radius: 6px; font-size: 12px;">${p.sitePoints || 0} RC</span>
                             ${p.clip_wins > 0 ? `<span style="background: #3a2a0a; color: #ffd700; padding: 4px 10px; border-radius: 6px; font-size: 12px;">${p.clip_wins} wins</span>` : ''}
                         </div>
+                        ${userReputation && userReputation.badges && userReputation.badges.length > 0 ? `
+                        <div style="display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; justify-content: center;">
+                            ${userReputation.badges.map(b => `
+                                <span style="display: inline-flex; align-items: center; gap: 4px; cursor: help; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; background: ${b.color}22; color: ${b.color}; border: 1px solid ${b.color}44;" title="${b.tooltip}">${b.icon} ${b.label}</span>
+                            `).join('')}
+                        </div>
+                        <div style="display: flex; gap: 16px; margin-top: 10px; justify-content: center; font-size: 11px; color: #999;">
+                            <span>Trades: <strong style="color:#fff;">${userReputation.total_trades}</strong></span>
+                            <span>Completed: <strong style="color:#4caf50;">${userReputation.completed_trades}</strong></span>
+                            <span>Disputes: <strong style="color:${userReputation.disputed_trades > 0 ? '#f44336' : '#fff'};">${userReputation.disputed_trades}</strong></span>
+                            <span>Trust Score: <strong style="color:${userReputation.trust_score >= 50 ? '#4caf50' : userReputation.trust_score < 0 ? '#f44336' : '#fff'};">${userReputation.trust_score}</strong></span>
+                        </div>
+                        ` : ''}
                     </div>
                     <!-- Dragon Companion -->
                     ${p.dragon ? `

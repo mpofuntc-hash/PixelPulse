@@ -1623,6 +1623,41 @@ async function initSchema() {
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
   `);
+
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS user_penalties (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      penalty_type TEXT NOT NULL,
+      reason TEXT,
+      dispute_trade_id INTEGER,
+      ban_days INTEGER,
+      expires_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      lifted_at TEXT,
+      lifted_by INTEGER,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  `);
+
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS user_reputation (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL UNIQUE,
+      total_trades INTEGER DEFAULT 0,
+      completed_trades INTEGER DEFAULT 0,
+      disputed_trades INTEGER DEFAULT 0,
+      cancelled_trades INTEGER DEFAULT 0,
+      trust_score INTEGER DEFAULT 0,
+      is_trusted INTEGER DEFAULT 0,
+      is_flagged INTEGER DEFAULT 0,
+      flag_reason TEXT,
+      is_banned INTEGER DEFAULT 0,
+      ban_until TEXT,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  `);
 }
 async function initDatabaseAndSchema() {
   await ensureLegacySchema();
@@ -2633,6 +2668,18 @@ async function authenticateRequest(req, res, next) {
   }
   
   req.userId = session.user_id;
+  req.isAdmin = session.is_admin || false;
+
+  // Check if user is banned (only for trade-related write actions)
+  const tradeActions = ['/api/skins', '/api/p2p-trades', '/api/escrow', '/api/trades/list'];
+  const isTradeAction = req.method === 'POST' && tradeActions.some(p => req.path.startsWith(p));
+  if (isTradeAction) {
+    const banned = await isUserBanned(session.user_id);
+    if (banned) {
+      return res.status(403).json({ error: 'Your account has been banned due to trade disputes. Contact support if you believe this is an error.' });
+    }
+  }
+
   next();
 }
 
@@ -4992,6 +5039,10 @@ async function completeEscrowTrade(tradeId) {
   await dbRun('UPDATE escrow_trades SET status = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?', ['completed', tradeId]);
   await dbRun('UPDATE skins SET status = ?, user_id = ? WHERE id = ?', ['sold', trade.buyer_id, trade.skin_id]);
 
+  // Record completed trade for reputation
+  await recordCompletedTrade(trade.seller_id);
+  await recordCompletedTrade(trade.buyer_id);
+
   // Freeze a USD + buyer's local-currency price snapshot at completion time for receipts/analytics
   let priceUsd = 0;
   if (trade.token_type === 'btc') {
@@ -5248,6 +5299,10 @@ app.post('/api/escrow/:id/dispute', authenticateRequest, async (req, res) => {
   
   await dbRun('UPDATE escrow_trades SET status = ?, dispute_reason = ? WHERE id = ?', ['disputed', reason || 'No reason provided', trade.id]);
   
+  // Record dispute against both parties (the one who didn't raise it gets it too, admin decides)
+  await recordDispute(trade.seller_id, trade.id, `Escrow dispute: ${reason || 'No reason'}`);
+  await recordDispute(trade.buyer_id, trade.id, `Escrow dispute: ${reason || 'No reason'}`);
+  
   logSystemEvent('warning', `Escrow dispute raised`, `Trade ID: ${trade.id}, By: ${req.userId}, Reason: ${reason}`);
   res.json({ message: 'Dispute raised. An admin will review this trade.' });
 });
@@ -5416,6 +5471,10 @@ app.post('/api/p2p-trades/:id/buyer-confirm', authenticateRequest, async (req, r
   await dbRun('UPDATE p2p_trades SET buyer_confirmed = 1, buyer_confirm_at = CURRENT_TIMESTAMP, status = ?, fee_amount = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?',
     ['completed', feeAmount, trade.id]);
 
+  // Record completed trade for reputation
+  await recordCompletedTrade(trade.seller_id);
+  await recordCompletedTrade(trade.buyer_id);
+
   logSystemEvent('info', `P2P trade completed`, `Trade ID: ${trade.id}, Fee: ${feeAmount} ${trade.price_currency} (${trade.fee_percent}%), Seller receives: ${sellerReceives} ${trade.price_currency}`);
 
   res.json({
@@ -5435,6 +5494,8 @@ app.post('/api/p2p-trades/:id/dispute', authenticateRequest, async (req, res) =>
   if (['completed', 'cancelled'].includes(trade.status)) return res.status(400).json({ error: 'Trade already finished' });
 
   await dbRun('UPDATE p2p_trades SET status = ?, dispute_reason = ? WHERE id = ?', ['disputed', reason || 'No reason provided', trade.id]);
+  await recordDispute(trade.seller_id, trade.id, `P2P dispute: ${reason || 'No reason'}`);
+  await recordDispute(trade.buyer_id, trade.id, `P2P dispute: ${reason || 'No reason'}`);
   logSystemEvent('warning', `P2P trade dispute raised`, `Trade ID: ${trade.id}, By: ${req.userId}, Reason: ${reason}`);
   res.json({ message: 'Dispute raised. An admin will review this trade.' });
 });
@@ -5539,7 +5600,37 @@ app.get('/api/trades/all', async (req, res) => {
 
   // Combine and sort by created_at desc
   const allTrades = [...skinTrades, ...p2pTrades, ...tokenTrades];
-  allTrades.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+  // Fetch reputation for all sellers to sort trusted first
+  const sellerNames = [...new Set(allTrades.map(t => t.seller_name).filter(Boolean))];
+  const repMap = {};
+  for (const name of sellerNames) {
+    const user = await dbGet('SELECT id FROM users WHERE username = ?', [name]);
+    if (user) {
+      const rep = await ensureReputationRow(user.id);
+      repMap[name] = {
+        is_trusted: !!rep.is_trusted,
+        is_flagged: !!rep.is_flagged,
+        is_banned: !!rep.is_banned,
+        trust_score: rep.trust_score,
+        completed_trades: rep.completed_trades,
+        badges: getReputationBadges(rep)
+      };
+    }
+  }
+
+  // Attach reputation to each trade
+  allTrades.forEach(t => {
+    t.seller_reputation = repMap[t.seller_name] || null;
+  });
+
+  // Sort: trusted sellers first, then non-flagged, then by date
+  allTrades.sort((a, b) => {
+    const aTrusted = a.seller_reputation?.is_trusted ? 0 : (a.seller_reputation?.is_banned ? 2 : (a.seller_reputation?.is_flagged ? 1 : 0));
+    const bTrusted = b.seller_reputation?.is_trusted ? 0 : (b.seller_reputation?.is_banned ? 2 : (b.seller_reputation?.is_flagged ? 1 : 0));
+    if (aTrusted !== bTrusted) return aTrusted - bTrusted;
+    return new Date(b.created_at) - new Date(a.created_at);
+  });
 
   res.json({
     total: allTrades.length,
@@ -5587,6 +5678,158 @@ app.get('/api/trades/stats', async (req, res) => {
       fees_collected: p2pCompleted.fees
     }
   });
+});
+
+// ============================================================
+// REPUTATION & PENALTY SYSTEM
+// ============================================================
+
+async function ensureReputationRow(userId) {
+  const existing = await dbGet('SELECT * FROM user_reputation WHERE user_id = ?', [userId]);
+  if (existing) return existing;
+  await dbRun('INSERT INTO user_reputation (user_id) VALUES (?)', [userId]);
+  return await dbGet('SELECT * FROM user_reputation WHERE user_id = ?', [userId]);
+}
+
+async function recordDispute(userId, tradeId, reason) {
+  const rep = await ensureReputationRow(userId);
+  const newDisputeCount = rep.disputed_trades + 1;
+  await dbRun('UPDATE user_reputation SET disputed_trades = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?',
+    [newDisputeCount, userId]);
+
+  // Record penalty entry
+  await dbRun('INSERT INTO user_penalties (user_id, penalty_type, reason, dispute_trade_id) VALUES (?, ?, ?, ?)',
+    [userId, 'dispute', reason || 'Trade dispute', tradeId]);
+
+  // Auto-penalty: 3 disputes = 7-day ban, 5 disputes = permanent ban
+  await checkAutoPenalty(userId, newDisputeCount);
+}
+
+async function recordCompletedTrade(userId) {
+  const rep = await ensureReputationRow(userId);
+  const newCompleted = rep.completed_trades + 1;
+  const newTotal = rep.total_trades + 1;
+  // Trust score: +10 per completed, -15 per dispute
+  const newScore = newCompleted * 10 - rep.disputed_trades * 15;
+  // Auto-trusted: 5+ completed trades, 0 disputes, trust_score >= 50
+  const shouldTrust = newCompleted >= 5 && rep.disputed_trades === 0 && newScore >= 50;
+  await dbRun('UPDATE user_reputation SET completed_trades = ?, total_trades = ?, trust_score = ?, is_trusted = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?',
+    [newCompleted, newTotal, newScore, shouldTrust ? 1 : 0, userId]);
+}
+
+async function checkAutoPenalty(userId, disputeCount) {
+  if (disputeCount >= 5) {
+    // Permanent ban
+    await dbRun('UPDATE user_reputation SET is_banned = 1, ban_until = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?',
+      ['9999-12-31 23:59:59', userId]);
+    await dbRun('INSERT INTO user_penalties (user_id, penalty_type, reason, ban_days) VALUES (?, ?, ?, ?)',
+      [userId, 'permanent_ban', 'Automatic: 5+ trade disputes — flagged for scamming', 99999]);
+    logSystemEvent('warning', `User permanently banned (auto)`, `User ID: ${userId}, Disputes: ${disputeCount}`);
+  } else if (disputeCount >= 3) {
+    // 7-day ban
+    const banUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    await dbRun('UPDATE user_reputation SET is_banned = 1, ban_until = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?',
+      [banUntil, userId]);
+    await dbRun('INSERT INTO user_penalties (user_id, penalty_type, reason, ban_days, expires_at) VALUES (?, ?, ?, ?, ?)',
+      [userId, 'temp_ban', `Automatic: ${disputeCount} trade disputes — 7-day ban`, 7, banUntil]);
+    logSystemEvent('warning', `User temp-banned 7 days (auto)`, `User ID: ${userId}, Disputes: ${disputeCount}`);
+  } else if (disputeCount >= 1) {
+    // Flag as suspect
+    await dbRun('UPDATE user_reputation SET is_flagged = 1, flag_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?',
+      [`${disputeCount} dispute(s) on record`, userId]);
+  }
+}
+
+async function isUserBanned(userId) {
+  const rep = await ensureReputationRow(userId);
+  if (!rep.is_banned) return false;
+  if (rep.ban_until && new Date(rep.ban_until) > new Date('9999-01-01')) return true; // permanent
+  if (rep.ban_until && new Date(rep.ban_until) > new Date()) return true; // still active
+  // Ban expired — lift it
+  await dbRun('UPDATE user_reputation SET is_banned = 0, ban_until = NULL, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?', [userId]);
+  return false;
+}
+
+// API: Get a user's reputation (public — visible to other users)
+app.get('/api/user/:id/reputation', async (req, res) => {
+  const rep = await ensureReputationRow(req.params.id);
+  const user = await dbGet('SELECT username FROM users WHERE id = ?', [req.params.id]);
+  res.json({
+    username: user?.username || 'Unknown',
+    total_trades: rep.total_trades,
+    completed_trades: rep.completed_trades,
+    disputed_trades: rep.disputed_trades,
+    trust_score: rep.trust_score,
+    is_trusted: !!rep.is_trusted,
+    is_flagged: !!rep.is_flagged,
+    flag_reason: rep.flag_reason || '',
+    is_banned: !!rep.is_banned,
+    badges: getReputationBadges(rep)
+  });
+});
+
+function getReputationBadges(rep) {
+  const badges = [];
+  if (rep.is_banned) {
+    badges.push({ icon: '🚫', label: 'BANNED', color: '#f44336', tooltip: rep.ban_until && new Date(rep.ban_until) > new Date('9999-01-01') ? 'Permanently banned for scamming' : 'Temporarily banned due to disputes' });
+  }
+  if (rep.is_flagged && !rep.is_banned) {
+    badges.push({ icon: '⚠️', label: 'FLAGGED', color: '#ff9800', tooltip: rep.flag_reason || 'Flagged for suspicious activity' });
+  }
+  if (rep.is_trusted) {
+    badges.push({ icon: '✅', label: 'TRUSTED', color: '#4caf50', tooltip: `Honest trader — ${rep.completed_trades} completed trades, 0 disputes` });
+  }
+  if (rep.completed_trades >= 10 && !rep.is_banned) {
+    badges.push({ icon: '🏆', label: 'TOP TRADER', color: '#ffc107', tooltip: `${rep.completed_trades} completed trades — experienced trader` });
+  }
+  if (badges.length === 0 && rep.total_trades === 0) {
+    badges.push({ icon: '🆕', label: 'NEW', color: '#2196f3', tooltip: 'New trader — no trade history yet' });
+  }
+  return badges;
+}
+
+// API: Admin flag a user manually
+app.post('/api/admin/flag-user', authenticateRequest, async (req, res) => {
+  if (!req.isAdmin) return res.status(403).json({ error: 'Admin only' });
+  const { user_id, flag_reason } = req.body;
+  if (!user_id) return res.status(400).json({ error: 'user_id required' });
+
+  await ensureReputationRow(user_id);
+  await dbRun('UPDATE user_reputation SET is_flagged = 1, flag_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?',
+    [flag_reason || 'Flagged by admin', user_id]);
+  await dbRun('INSERT INTO user_penalties (user_id, penalty_type, reason) VALUES (?, ?, ?)',
+    [user_id, 'admin_flag', flag_reason || 'Flagged by admin']);
+
+  logSystemEvent('warning', `User flagged by admin`, `User ID: ${user_id}, Reason: ${flag_reason}`);
+  res.json({ message: 'User flagged successfully' });
+});
+
+// API: Admin lift a ban or flag
+app.post('/api/admin/lift-penalty', authenticateRequest, async (req, res) => {
+  if (!req.isAdmin) return res.status(403).json({ error: 'Admin only' });
+  const { user_id } = req.body;
+  if (!user_id) return res.status(400).json({ error: 'user_id required' });
+
+  await dbRun('UPDATE user_reputation SET is_banned = 0, ban_until = NULL, is_flagged = 0, flag_reason = NULL, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?',
+    [user_id]);
+  await dbRun('UPDATE user_penalties SET lifted_at = CURRENT_TIMESTAMP, lifted_by = ? WHERE user_id = ? AND lifted_at IS NULL',
+    [req.userId, user_id]);
+
+  logSystemEvent('info', `Penalties lifted by admin`, `User ID: ${user_id}, Admin: ${req.userId}`);
+  res.json({ message: 'Penalties lifted successfully' });
+});
+
+// API: Admin get all penalized users
+app.get('/api/admin/penalized-users', authenticateRequest, async (req, res) => {
+  if (!req.isAdmin) return res.status(403).json({ error: 'Admin only' });
+  const users = await dbAll(`
+    SELECT r.*, u.username, u.email
+    FROM user_reputation r
+    JOIN users u ON r.user_id = u.id
+    WHERE r.is_banned = 1 OR r.is_flagged = 1 OR r.disputed_trades > 0
+    ORDER BY r.disputed_trades DESC, r.updated_at DESC
+  `);
+  res.json(users);
 });
 
 // ============================================================
