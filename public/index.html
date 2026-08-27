@@ -1240,6 +1240,7 @@
                     <option value="completed">Completed</option>
                     <option value="pending">In Progress</option>
                     <option value="disputed">Disputed</option>
+                    <option value="wishlist">My Wishlist</option>
                 </select>
                 <select id="tradeStatusFilter" onchange="loadTradeReports()" style="padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
                     <option value="all">All Status</option>
@@ -3114,6 +3115,11 @@
             const tabFilter = document.getElementById('tradeTabFilter')?.value || 'all';
             const statusFilter = document.getElementById('tradeStatusFilter')?.value || 'all';
 
+            if (tabFilter === 'wishlist') {
+                loadWishlistView();
+                return;
+            }
+
             try {
                 let apiUrl = '/api/trades/all?limit=50';
                 if (tabFilter === 'completed' || tabFilter === 'pending' || tabFilter === 'disputed') {
@@ -3154,19 +3160,30 @@
                     </div>
                 `;
 
+                // Fetch wishlist status if logged in
+                let wishlistedKeys = {};
+                if (sessionToken) {
+                    try {
+                        const wlRes = await fetch('/api/wishlist/check', { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                        const wlData = await wlRes.json();
+                        wishlistedKeys = wlData.wishlisted || {};
+                    } catch (e) {}
+                }
+
                 // Render trades
                 const trades = tradesData.trades || [];
                 if (trades.length === 0) {
                     grid.innerHTML = '<div style="text-align:center; padding:40px; color:#999;">No trades found. Be the first to list an item!</div>';
                     return;
                 }
-                grid.innerHTML = trades.map(t => renderTradeCard(t)).join('');
+                grid.innerHTML = trades.map(t => renderTradeCard(t, wishlistedKeys)).join('');
             } catch (err) {
                 grid.innerHTML = '<div style="text-align:center; padding:20px; color:#e50914;">Failed to load trade reports. Try refreshing.</div>';
             }
         }
 
-        function renderTradeCard(trade) {
+        function renderTradeCard(trade, wishlistedKeys) {
+            wishlistedKeys = wishlistedKeys || {};
             const typeIcons = { skin: '🔫', gift_card: '🎁', game_account: '🎮', token_swap: '🔄', gold_send: '🪙' };
             const typeLabels = { skin: 'SKIN', gift_card: 'GIFT CARD', game_account: 'GAME ACCOUNT', token_swap: 'TOKEN SWAP', gold_send: 'GOLD SEND' };
             const statusColors = {
@@ -3200,11 +3217,20 @@
             const seller = trade.seller_name || 'Unknown';
             const buyer = trade.buyer_name || '—';
 
+            const wlKey = `${trade.trade_type}:${trade.id || 0}`;
+            const isWishlisted = wishlistedKeys[wlKey];
+            const heartIcon = isWishlisted ? '❤️' : '🤍';
+            const wishlistBtn = sessionToken
+                ? `<button class="btn" style="background:transparent;border:none;padding:4px 8px;cursor:pointer;font-size:18px;" onclick="toggleWishlist('${trade.trade_type}', ${trade.id || 0}, '${(trade.item_title || '').replace(/'/g, "\\'")}', '${(trade.game_type || '').replace(/'/g, "\\'")}', '${priceDisplay.replace(/'/g, "\\'")}', this)" title="Add to wishlist">${heartIcon}</button>`
+                : '';
+
             let actions = '';
             if (status === 'open' && trade.trade_type !== 'skin' && trade.trade_type !== 'token_swap') {
-                actions = `<button class="btn" style="background:#e50914;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;" onclick="purchaseP2PTrade(${trade.id})">Buy / Initiate</button>`;
+                actions = `<div style="display:flex;gap:6px;align-items:center;">${wishlistBtn}<button class="btn" style="background:#e50914;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;" onclick="purchaseP2PTrade(${trade.id})">Buy / Initiate</button></div>`;
             } else if (status === 'open' && trade.trade_type === 'skin') {
-                actions = `<button class="btn" style="background:#e50914;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;" onclick="purchaseSkin(${trade.id})">Buy Skin</button>`;
+                actions = `<div style="display:flex;gap:6px;align-items:center;">${wishlistBtn}<button class="btn" style="background:#e50914;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;" onclick="purchaseSkin(${trade.id})">Buy Skin</button></div>`;
+            } else if (sessionToken) {
+                actions = `<div style="display:flex;gap:6px;align-items:center;">${wishlistBtn}</div>`;
             }
 
             return `
@@ -3319,6 +3345,104 @@
                 }
             } catch (err) {
                 alert('Error creating listing');
+            }
+        }
+
+        async function toggleWishlist(tradeType, tradeId, itemTitle, gameType, priceDisplay, btn) {
+            if (!sessionToken) { alert('Please login to use wishlist'); return; }
+            const isWishlisted = btn.textContent.includes('❤');
+
+            if (isWishlisted) {
+                // Find and remove
+                try {
+                    const wlRes = await fetch('/api/wishlist', { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                    const items = await wlRes.json();
+                    const item = items.find(i => i.trade_type === tradeType && i.trade_id === tradeId);
+                    if (item) {
+                        await fetch(`/api/wishlist/${item.id}`, {
+                            method: 'DELETE',
+                            headers: { 'Authorization': `Bearer ${sessionToken}` }
+                        });
+                    }
+                    btn.textContent = '🤍';
+                } catch (err) {
+                    alert('Error removing from wishlist');
+                }
+            } else {
+                // Add
+                try {
+                    const res = await fetch('/api/wishlist/add', {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ trade_type: tradeType, trade_id: tradeId, item_title: itemTitle, game_type: gameType, price_display: priceDisplay })
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        btn.textContent = '❤️';
+                    } else if (res.status === 409) {
+                        btn.textContent = '❤️';
+                    } else {
+                        alert(data.error || 'Failed to add to wishlist');
+                    }
+                } catch (err) {
+                    alert('Error adding to wishlist');
+                }
+            }
+        }
+
+        async function loadWishlistView() {
+            const grid = document.getElementById('tradeReportsGrid');
+            const statsEl = document.getElementById('tradeStats');
+            if (!grid) return;
+            grid.innerHTML = '<div class="loading">Loading your wishlist...</div>';
+            statsEl.innerHTML = '';
+
+            if (!sessionToken) {
+                grid.innerHTML = '<div style="text-align:center; padding:40px; color:#999;">Please login to view your wishlist.</div>';
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/wishlist', { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                const items = await res.json();
+
+                if (!items || items.length === 0) {
+                    grid.innerHTML = '<div style="text-align:center; padding:40px; color:#999;">Your wishlist is empty. Browse the Trades section and tap the 🤍 icon to save items.</div>';
+                    return;
+                }
+
+                const typeIcons = { skin: '🔫', gift_card: '🎁', game_account: '🎮', token_swap: '🔄', gold_send: '🪙' };
+                grid.innerHTML = items.map(item => `
+                    <div style="background: linear-gradient(135deg, #161616, #1a1a1a); border: 1px solid #2a2a2a; border-radius: 10px; padding: 16px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                        <div style="font-size: 28px;">${typeIcons[item.trade_type] || '📌'}</div>
+                        <div style="flex: 1; min-width: 200px;">
+                            <div style="font-size: 15px; font-weight: 600; margin-bottom: 4px;">${item.item_title}</div>
+                            <div style="font-size: 12px; color: #aaa;">
+                                <span style="color: #e50914; font-weight: 600;">${item.trade_type.toUpperCase().replace('_', ' ')}</span>
+                                ${item.game_type ? ` | Game: ${item.game_type}` : ''}
+                                | Added: ${new Date(item.created_at).toLocaleDateString()}
+                            </div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">${item.price_display || ''}</div>
+                            <button class="btn" style="background:#e50914;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;" onclick="removeWishlistItem(${item.id})">Remove</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                grid.innerHTML = '<div style="text-align:center; padding:20px; color:#e50914;">Failed to load wishlist.</div>';
+            }
+        }
+
+        async function removeWishlistItem(itemId) {
+            try {
+                await fetch(`/api/wishlist/${itemId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${sessionToken}` }
+                });
+                loadWishlistView();
+            } catch (err) {
+                alert('Error removing item');
             }
         }
 

@@ -1608,6 +1608,21 @@ async function initSchema() {
       FOREIGN KEY (buyer_id) REFERENCES users(id)
     );
   `);
+
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS wishlists (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      trade_type TEXT NOT NULL,
+      trade_id INTEGER,
+      item_title TEXT,
+      game_type TEXT,
+      price_display TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  `);
 }
 async function initDatabaseAndSchema() {
   await ensureLegacySchema();
@@ -5572,6 +5587,60 @@ app.get('/api/trades/stats', async (req, res) => {
       fees_collected: p2pCompleted.fees
     }
   });
+});
+
+// ============================================================
+// WISHLIST SYSTEM
+// ============================================================
+
+// API: Add item to wishlist
+app.post('/api/wishlist/add', authenticateRequest, async (req, res) => {
+  const { trade_type, trade_id, item_title, game_type, price_display, notes } = req.body;
+  if (!trade_type || !item_title) {
+    return res.status(400).json({ error: 'trade_type and item_title are required' });
+  }
+
+  // Check if already wishlisted
+  const existing = await dbGet('SELECT id FROM wishlists WHERE user_id = ? AND trade_type = ? AND trade_id = ?',
+    [req.userId, trade_type, trade_id || 0]);
+  if (existing) {
+    return res.status(409).json({ error: 'Already in your wishlist', wishlistId: existing.id });
+  }
+
+  const result = await dbRun(`
+    INSERT INTO wishlists (user_id, trade_type, trade_id, item_title, game_type, price_display, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `, [req.userId, trade_type, trade_id || null, item_title, game_type || '', price_display || '', notes || '']);
+
+  res.json({ id: result.lastID, message: 'Added to wishlist' });
+});
+
+// API: Remove item from wishlist
+app.delete('/api/wishlist/:id', authenticateRequest, async (req, res) => {
+  const item = await dbGet('SELECT * FROM wishlists WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
+  if (!item) return res.status(404).json({ error: 'Wishlist item not found' });
+
+  await dbRun('DELETE FROM wishlists WHERE id = ?', [req.params.id]);
+  res.json({ message: 'Removed from wishlist' });
+});
+
+// API: Get user's wishlist
+app.get('/api/wishlist', authenticateRequest, async (req, res) => {
+  const items = await dbAll(`
+    SELECT * FROM wishlists WHERE user_id = ? ORDER BY created_at DESC
+  `, [req.userId]);
+  res.json(items);
+});
+
+// API: Check if specific items are wishlisted (for rendering buttons)
+app.get('/api/wishlist/check', authenticateRequest, async (req, res) => {
+  const items = await dbAll('SELECT trade_type, trade_id FROM wishlists WHERE user_id = ?', [req.userId]);
+  const wishlisted = {};
+  for (const item of items) {
+    const key = `${item.trade_type}:${item.trade_id || 0}`;
+    wishlisted[key] = true;
+  }
+  res.json({ wishlisted });
 });
 
 // ============================================================
