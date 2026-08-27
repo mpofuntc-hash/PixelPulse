@@ -3055,6 +3055,20 @@
             }
         }
 
+        let activeStatFilter = 'all';
+
+        function filterByStat(stat) {
+            activeStatFilter = stat;
+            const tabFilter = document.getElementById('tradeTabFilter');
+            const statusFilter = document.getElementById('tradeStatusFilter');
+            if (stat === 'completed') { tabFilter.value = 'all'; statusFilter.value = 'completed'; }
+            else if (stat === 'active') { tabFilter.value = 'all'; statusFilter.value = 'pending'; }
+            else if (stat === 'open') { tabFilter.value = 'all'; statusFilter.value = 'open'; }
+            else if (stat === 'fees') { tabFilter.value = 'all'; statusFilter.value = 'completed'; }
+            else { tabFilter.value = 'all'; statusFilter.value = 'all'; }
+            loadTradeReports();
+        }
+
         async function loadTradeReports() {
             const grid = document.getElementById('tradeReportsGrid');
             const statsEl = document.getElementById('tradeStats');
@@ -3081,21 +3095,23 @@
                 const tradesData = await tradesRes.json();
                 const stats = await statsRes.json();
 
-                // Render stats
+                // Render clickable stat cards
+                const cardBase = 'border-radius: 10px; padding: 14px; cursor: pointer; transition: all 0.2s;';
+                const cardActive = 'border-width: 2px; transform: scale(1.03);';
                 statsEl.innerHTML = `
-                    <div style="background: linear-gradient(135deg, #1a2318, #171717); border: 1px solid #2d5438; border-radius: 10px; padding: 14px;">
+                    <div style="background: linear-gradient(135deg, #1a2318, #171717); border: 1px solid ${activeStatFilter === 'completed' ? '#4caf50' : '#2d5438'}; ${cardBase} ${activeStatFilter === 'completed' ? cardActive : ''}" onclick="filterByStat('completed')" onmouseover="this.style.borderColor='#4caf50'" onmouseout="if(activeStatFilter!=='completed')this.style.borderColor='#2d5438'">
                         <div style="font-size: 11px; color: #8cdb9a; font-weight: 700; letter-spacing: 0.08em;">COMPLETED</div>
                         <div style="font-size: 24px; font-weight: 700; color: #fff;">${stats.completed.total}</div>
                     </div>
-                    <div style="background: linear-gradient(135deg, #1a1a2e, #171717); border: 1px solid #2a2a4a; border-radius: 10px; padding: 14px;">
+                    <div style="background: linear-gradient(135deg, #1a1a2e, #171717); border: 1px solid ${activeStatFilter === 'active' ? '#7a8cff' : '#2a2a4a'}; ${cardBase} ${activeStatFilter === 'active' ? cardActive : ''}" onclick="filterByStat('active')" onmouseover="this.style.borderColor='#7a8cff'" onmouseout="if(activeStatFilter!=='active')this.style.borderColor='#2a2a4a'">
                         <div style="font-size: 11px; color: #7a8cff; font-weight: 700; letter-spacing: 0.08em;">ACTIVE</div>
                         <div style="font-size: 24px; font-weight: 700; color: #fff;">${stats.active.total}</div>
                     </div>
-                    <div style="background: linear-gradient(135deg, #2e1a1a, #171717); border: 1px solid #4a2a2a; border-radius: 10px; padding: 14px;">
+                    <div style="background: linear-gradient(135deg, #2e1a1a, #171717); border: 1px solid ${activeStatFilter === 'open' ? '#ff7a7a' : '#4a2a2a'}; ${cardBase} ${activeStatFilter === 'open' ? cardActive : ''}" onclick="filterByStat('open')" onmouseover="this.style.borderColor='#ff7a7a'" onmouseout="if(activeStatFilter!=='open')this.style.borderColor='#4a2a2a'">
                         <div style="font-size: 11px; color: #ff7a7a; font-weight: 700; letter-spacing: 0.08em;">OPEN LISTINGS</div>
                         <div style="font-size: 24px; font-weight: 700; color: #fff;">${stats.open_listings.total}</div>
                     </div>
-                    <div style="background: linear-gradient(135deg, #2e2a1a, #171717); border: 1px solid #4a402a; border-radius: 10px; padding: 14px;">
+                    <div style="background: linear-gradient(135deg, #2e2a1a, #171717); border: 1px solid ${activeStatFilter === 'fees' ? '#ffc97a' : '#4a402a'}; ${cardBase} ${activeStatFilter === 'fees' ? cardActive : ''}" onclick="filterByStat('fees')" onmouseover="this.style.borderColor='#ffc97a'" onmouseout="if(activeStatFilter!=='fees')this.style.borderColor='#4a402a'">
                         <div style="font-size: 11px; color: #ffc97a; font-weight: 700; letter-spacing: 0.08em;">FEES COLLECTED</div>
                         <div style="font-size: 24px; font-weight: 700; color: #fff;">${stats.volume.fees_collected?.toFixed(2) || '0.00'}</div>
                     </div>
