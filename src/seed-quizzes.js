@@ -122,6 +122,124 @@ const quizzes = [
     ]),
     reward_points: 50,
     difficulty: 'easy'
+  },
+  {
+    anime_id: null,
+    title: 'Counter-Strike 2 Trivia',
+    description: 'How well do you know CS2?',
+    questions: JSON.stringify([
+      { question: 'What year was Counter-Strike originally released?', options: ['1998', '1999', '2000', '2001'], correctAnswer: 1 },
+      { question: 'Which weapon is known as the "AWP"?', options: ['Assault Rifle', 'Sniper Rifle', 'Shotgun', 'SMG'], correctAnswer: 1 },
+      { question: 'What is the max players on one team in standard competitive?', options: ['4', '5', '6', '7'], correctAnswer: 1 },
+      { question: 'Which map is the most iconic in CS history?', options: ['Nuke', 'Dust2', 'Inferno', 'Mirage'], correctAnswer: 1 }
+    ]),
+    reward_points: 75,
+    difficulty: 'medium'
+  },
+  {
+    anime_id: null,
+    title: 'Roblox Knowledge Quiz',
+    description: 'Test your Roblox expertise!',
+    questions: JSON.stringify([
+      { question: 'What currency is used in Roblox?', options: ['Coins', 'Robux', 'Gems', 'Bux'], correctAnswer: 1 },
+      { question: 'What year was Roblox released?', options: ['2004', '2006', '2008', '2010'], correctAnswer: 1 },
+      { question: 'What is the name of Roblox\'s creator?', options: ['David Baszucki', 'Mark Zuckerberg', 'Notch', 'Tim Sweeney'], correctAnswer: 0 },
+      { question: 'What are tradable items on Roblox called?', options: ['Limiteds', 'Rares', 'Exclusives', 'Specials'], correctAnswer: 0 }
+    ]),
+    reward_points: 50,
+    difficulty: 'easy'
+  },
+  {
+    anime_id: null,
+    title: 'Fortnite Battle Royale Quiz',
+    description: 'Think you know Fortnite?',
+    questions: JSON.stringify([
+      { question: 'What currency is used in Fortnite?', options: ['Gems', 'V-Bucks', 'Coins', 'Gold'], correctAnswer: 1 },
+      { question: 'What year did Fortnite Battle Royale release?', options: ['2016', '2017', '2018', '2019'], correctAnswer: 1 },
+      { question: 'How many players are in a standard squad?', options: ['3', '4', '5', '6'], correctAnswer: 1 },
+      { question: 'What is the rarest pickaxe in Fortnite?', options: ['Reaper', 'Raider\'s Revenge', 'AC/DC', 'Rainbow Smash'], correctAnswer: 1 }
+    ]),
+    reward_points: 50,
+    difficulty: 'easy'
+  },
+  {
+    anime_id: null,
+    title: 'Valorant Pro Quiz',
+    description: 'Test your Valorant knowledge!',
+    questions: JSON.stringify([
+      { question: 'What currency is used in Valorant?', options: ['VP', 'RP', 'CP', 'GP'], correctAnswer: 0 },
+      { question: 'How many agents are on a standard team?', options: ['4', '5', '6', '7'], correctAnswer: 1 },
+      { question: 'Which agent has the ability "Showstopper"?', options: ['Jett', 'Raze', 'Sage', 'Phoenix'], correctAnswer: 1 },
+      { question: 'What year was Valorant released?', options: ['2019', '2020', '2021', '2022'], correctAnswer: 1 }
+    ]),
+    reward_points: 75,
+    difficulty: 'medium'
+  },
+  {
+    anime_id: null,
+    title: 'Free Fire Trivia',
+    description: 'How well do you know Free Fire?',
+    questions: JSON.stringify([
+      { question: 'What currency is used in Free Fire?', options: ['Coins', 'Diamonds', 'Gold', 'Credits'], correctAnswer: 1 },
+      { question: 'How many players land on an island in a standard match?', options: ['50', '100', '150', '200'], correctAnswer: 0 },
+      { question: 'What company developed Free Fire?', options: ['Tencent', 'Garena', 'PUBG Corp', 'Supercell'], correctAnswer: 1 },
+      { question: 'What is the max level character skill in Free Fire?', options: ['5', '6', '7', '8'], correctAnswer: 3 }
+    ]),
+    reward_points: 50,
+    difficulty: 'easy'
+  },
+  {
+    anime_id: null,
+    title: 'Call of Duty Challenge',
+    description: 'Think you know CoD?',
+    questions: JSON.stringify([
+      { question: 'What currency is used in Call of Duty?', options: ['CP', 'RP', 'VP', 'GP'], correctAnswer: 0 },
+      { question: 'What was the first Call of Duty game?', options: ['CoD 2', 'CoD (2003)', 'Modern Warfare', 'Black Ops'], correctAnswer: 1 },
+      { question: 'Which CoD game introduced Warzone?', options: ['Modern Warfare 2019', 'Black Ops Cold War', 'Vanguard', 'MW2'], correctAnswer: 0 },
+      { question: 'How many players in a Warzone squad max?', options: ['3', '4', '5', '6'], correctAnswer: 1 }
+    ]),
+    reward_points: 75,
+    difficulty: 'medium'
+  },
+  {
+    anime_id: null,
+    title: 'PUBG Mobile Quiz',
+    description: 'Test your PUBG Mobile skills!',
+    questions: JSON.stringify([
+      { question: 'What currency is used in PUBG Mobile?', options: ['UC', 'BP', 'RP', 'Both UC and BP'], correctAnswer: 3 },
+      { question: 'How many players land in a classic match?', options: ['50', '75', '100', '120'], correctAnswer: 2 },
+      { question: 'What company publishes PUBG Mobile?', options: ['Tencent', 'Krafton', 'Garena', 'EA'], correctAnswer: 0 },
+      { question: 'What is the name of the desert map?', options: ['Erangel', 'Miramar', 'Sanhok', 'Vikendi'], correctAnswer: 1 }
+    ]),
+    reward_points: 50,
+    difficulty: 'easy'
+  },
+  {
+    anime_id: null,
+    title: 'Genshin Impact Quiz',
+    description: 'Test your Teyvat knowledge!',
+    questions: JSON.stringify([
+      { question: 'What currency is used for wishes in Genshin?', options: ['Primogems', 'Crystals', 'Mora', 'Stardust'], correctAnswer: 0 },
+      { question: 'How many elements are in Genshin Impact?', options: ['5', '6', '7', '8'], correctAnswer: 2 },
+      { question: 'Who is the main character?', options: ['Aether', 'Lumine', 'Both Aether and Lumine', 'Paimon'], correctAnswer: 2 },
+      { question: 'What company developed Genshin Impact?', options: ['miHoYo', 'Tencent', 'NetEase', 'Square Enix'], correctAnswer: 0 }
+    ]),
+    reward_points: 75,
+    difficulty: 'medium'
+  },
+  {
+    anime_id: null,
+    title: 'General Gaming Trivia',
+    description: 'A mix of gaming questions across all platforms!',
+    questions: JSON.stringify([
+      { question: 'What is the best-selling video game of all time?', options: ['Tetris', 'Minecraft', 'GTA V', 'Wii Sports'], correctAnswer: 1 },
+      { question: 'What year was the PlayStation 1 released?', options: ['1993', '1994', '1995', '1996'], correctAnswer: 1 },
+      { question: 'Which company created the Xbox?', options: ['Sony', 'Nintendo', 'Microsoft', 'Sega'], correctAnswer: 2 },
+      { question: 'What does "FPS" stand for in gaming?', options: ['First Person Shooter', 'Frames Per Second', 'Both', 'Fast Play Style'], correctAnswer: 2 },
+      { question: 'What is the most popular gaming platform?', options: ['PC', 'Mobile', 'Console', 'Handheld'], correctAnswer: 1 }
+    ]),
+    reward_points: 100,
+    difficulty: 'hard'
   }
 ];
 

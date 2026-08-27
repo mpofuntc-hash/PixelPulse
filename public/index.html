@@ -3120,8 +3120,8 @@
             const title = prompt('Clip title:');
             if (!title) return;
             
-            const description = prompt('Description:');
-            const gameType = prompt('Game type (e.g. CS2, Standoff2, Roblox, Fortnite, PUBG Mobile, Free Fire, Valorant, Call of Duty, Genshin Impact):');
+            const description = prompt('Description (optional):');
+            const gameType = prompt('Game type (optional — e.g. CS2, Roblox, Fortnite, Valorant, or leave blank):');
             const videoUrl = prompt('Video URL (YouTube or Twitch):');
             
             fetch('/api/clips', {

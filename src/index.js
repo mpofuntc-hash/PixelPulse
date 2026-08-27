@@ -1640,6 +1640,7 @@ if (DISCORD_BOT_TOKEN) {
     if (DISCORD_CHANNEL_ID && message.channelId === DISCORD_CHANNEL_ID) {
       await handleDiscordChatBridge(message);
     }
+    await handleDiscordClipAutoUpload(message);
   });
 
   discordClient.login(DISCORD_BOT_TOKEN).catch(err => console.error('Discord login error:', err));
@@ -1656,6 +1657,7 @@ async function registerDiscordSlashCommands() {
     new SlashCommandBuilder().setName('clips').setDescription('View top clips'),
     new SlashCommandBuilder().setName('marketplace').setDescription('Browse skin marketplace'),
     new SlashCommandBuilder().setName('stats').setDescription('Platform statistics'),
+    new SlashCommandBuilder().setName('quiz').setDescription('Take a gaming or anime quiz and earn Royal Coins'),
     new SlashCommandBuilder().setName('help').setDescription('Get help')
   ].map(cmd => cmd.toJSON());
 
@@ -1751,6 +1753,28 @@ async function handleDiscordSlashCommand(interaction) {
         await interaction.editReply({ embeds: [embed] });
         break;
       }
+      case 'quiz': {
+        await interaction.deferReply();
+        const quizzes = await dbAll('SELECT id, title, description, reward_points, difficulty FROM quizzes ORDER BY RANDOM() LIMIT 5');
+        if (quizzes.length === 0) {
+          await interaction.editReply('No quizzes available right now. Check back later!');
+          break;
+        }
+        const embed = new EmbedBuilder()
+          .setTitle('🎮 Quizzes — Earn Royal Coins!')
+          .setColor(0xe50914)
+          .setDescription('Take a quiz on the website to earn Royal Coins. Click a link below to start!');
+        quizzes.forEach((q, i) => {
+          const diffEmoji = q.difficulty === 'easy' ? '🟢' : q.difficulty === 'medium' ? '🟡' : '🔴';
+          embed.addFields({
+            name: `${i + 1}. ${q.title} ${diffEmoji}`,
+            value: `${q.description || ''}\nReward: ${q.reward_points} Royal Coins • [Take Quiz](https://pixelpulse.zentriva-clubsync.online/#quizzes)`
+          });
+        });
+        embed.setFooter({ text: 'Complete quizzes on the website to earn coins and climb the leaderboard' });
+        await interaction.editReply({ embeds: [embed] });
+        break;
+      }
       case 'help': {
         const embed = new EmbedBuilder()
           .setTitle('🆘 Help & Commands')
@@ -1759,9 +1783,12 @@ async function handleDiscordSlashCommand(interaction) {
             '/start — Welcome message',
             '/markets — View betting markets',
             '/clips — View top clips',
-            '/marketplace — Browse skin marketplace',
+            '/marketplace — Browse marketplace',
+            '/quiz — Take a quiz and earn Royal Coins',
             '/stats — Platform statistics',
             '/help — This help message',
+            '',
+            '💡 Share a YouTube or Twitch link in any channel to auto-upload it as a clip to PixelPulse!',
             '',
             '🔗 Website: https://pixelpulse.zentriva-clubsync.online'
           ].join('\n'));
@@ -1773,6 +1800,73 @@ async function handleDiscordSlashCommand(interaction) {
     console.error('Discord slash command error:', err);
     if (interaction.deferred) await interaction.editReply('Error processing command.');
     else if (!interaction.replied) await interaction.reply('Error processing command.');
+  }
+}
+
+// Discord auto clip-upload: detect YouTube/Twitch links and upload to webapp
+async function handleDiscordClipAutoUpload(message) {
+  try {
+    const content = message.content || '';
+    const ytMatch = content.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+    const twMatch = content.match(/(?:twitch\.tv\/videos\/(\d+)|clips\.twitch\.tv\/([a-zA-Z0-9_-]+)|twitch\.tv\/([a-zA-Z0-9_]+))/);
+
+    if (!ytMatch && !twMatch) return;
+
+    const videoUrl = ytMatch
+      ? `https://www.youtube.com/watch?v=${ytMatch[1]}`
+      : twMatch[1]
+        ? `https://twitch.tv/videos/${twMatch[1]}`
+        : twMatch[2]
+          ? `https://clips.twitch.tv/${twMatch[2]}`
+          : `https://twitch.tv/${twMatch[3]}`;
+
+    // Find user by Discord ID
+    const user = await dbGet('SELECT id, username FROM users WHERE discord_id = ?', [message.author.id]);
+    if (!user) {
+      // User hasn't linked their Discord to PixelPulse yet
+      await message.reply({
+        content: `Nice clip! Link your Discord account to PixelPulse to auto-upload clips to your profile.\nSign up at https://pixelpulse.zentriva-clubsync.online/ and link your Discord in your profile settings.`,
+        allowedMentions: { repliedUser: false }
+      }).catch(() => {});
+      return;
+    }
+
+    // Check for duplicate (same video URL by same user in last 24h)
+    const existing = await dbGet(
+      'SELECT id FROM clips WHERE user_id = ? AND video_url LIKE ? AND created_at > datetime("now", "-1 day")',
+      [user.id, `%${ytMatch ? ytMatch[1] : (twMatch[1] || twMatch[2] || twMatch[3])}%`]
+    );
+    if (existing) return; // Already uploaded recently, skip silently
+
+    // Derive a title from the message or use a default
+    const title = content.replace(videoUrl, '').trim().substring(0, 100) || `Clip shared by ${user.username}`;
+    const gameType = 'General';
+
+    // Build embed URL
+    let embedUrl = videoUrl;
+    if (ytMatch) {
+      embedUrl = `https://www.youtube.com/embed/${ytMatch[1]}`;
+    } else if (twMatch) {
+      const channel = twMatch[3];
+      if (channel) embedUrl = `https://player.twitch.tv/?channel=${channel}&parent=${message.guild ? 'pixelpulse.zentriva-clubsync.online' : 'localhost'}`;
+    }
+
+    // Insert clip
+    const result = await dbRun(
+      'INSERT INTO clips (user_id, title, description, video_url, game_type, thumbnail_url) VALUES (?, ?, ?, ?, ?, ?)',
+      [user.id, title, `Shared via Discord by ${message.author.username}`, embedUrl, gameType, '']
+    );
+
+    await awardRoyalCoins(user.id, ROYAL_COIN_REWARDS.CLIP_UPLOAD, 'Clip upload via Discord');
+
+    await message.reply({
+      content: `Clip uploaded to PixelPulse! View it on your profile: https://pixelpulse.zentriva-clubsync.online/\n+${ROYAL_COIN_REWARDS.CLIP_UPLOAD} Royal Coins earned!`,
+      allowedMentions: { repliedUser: false }
+    }).catch(() => {});
+
+    console.log(`Discord clip auto-uploaded: user ${user.username}, clip ID ${result.lastID}`);
+  } catch (err) {
+    console.error('Discord clip auto-upload error:', err);
   }
 }
 
@@ -2541,9 +2635,7 @@ app.post('/api/clips', authenticateRequest, async (req, res) => {
     return res.status(400).json({ error: 'A valid video URL is required.' });
   }
 
-  if (!['CS2', 'Standoff2'].includes(game_type)) {
-    return res.status(400).json({ error: 'Invalid game type. Must be CS2 or Standoff2' });
-  }
+  const finalGameType = game_type || 'General';
 
   let embedUrl = video_url;
   let videoType = 'direct';
@@ -2565,7 +2657,7 @@ app.post('/api/clips', authenticateRequest, async (req, res) => {
   const result = await dbRun(`
     INSERT INTO clips (user_id, title, description, video_url, game_type, thumbnail_url)
     VALUES (?, ?, ?, ?, ?, ?)
-  `, [req.userId, title, description, embedUrl, game_type, thumbnail_url]);
+  `, [req.userId, title, description, embedUrl, finalGameType, thumbnail_url]);
   
   await awardRoyalCoins(req.userId, ROYAL_COIN_REWARDS.CLIP_UPLOAD, 'Clip upload');
   
