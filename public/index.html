@@ -848,6 +848,7 @@
             <a href="#" onclick="showSection('clips')" id="nav-clips">Clips</a>
             <a href="#" onclick="showSection('community')" id="nav-community">Community</a>
             <a href="#" onclick="showSection('betting')" id="nav-betting">Predictions</a>
+            <a href="#" onclick="showSection('arcade')" id="nav-arcade">Arcade</a>
             <a href="#" onclick="showSection('marketplace')" id="nav-marketplace">Trades</a>
             <a href="#" onclick="showSection('gold-transfer')" id="nav-gold-transfer">Trade Hub</a>
             <a href="#" onclick="showSection('chat')" id="nav-chat">Chat</a>
@@ -1238,6 +1239,120 @@
     <button id="slipToggleBtn" onclick="toggleSlip()" style="position: fixed; right: 20px; bottom: 20px; background: #e50914; color: #fff; border: none; border-radius: 50%; width: 60px; height: 60px; font-size: 24px; cursor: pointer; box-shadow: 0 4px 12px rgba(229,9,20,0.5); z-index: 999; display: none;">
         🎫<span id="slipBadge" style="position: absolute; top: -5px; right: -5px; background: #fff; color: #e50914; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;">0</span>
     </button>
+
+    <div class="section" id="arcade" style="display: none;">
+        <div class="info-banner"><strong>PixelPulse Arcade</strong> — Provably fair games with USD stakes. Play Coin Flip, Slots, Castle Crash, and prediction markets. Minimum stake $2 on web, $0.50 on Discord. 5% house edge.</div>
+
+        <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
+            <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 10px 18px;">
+                <span style="color: #888; font-size: 13px;">Arcade Balance:</span>
+                <span id="arcadeBalance" style="color: #4caf50; font-weight: 700; font-size: 18px;">$0.00</span>
+            </div>
+            <button class="btn btn-secondary" onclick="showSection('wallet')" style="font-size: 13px;">Deposit</button>
+            <button class="btn btn-secondary" onclick="loadArcadeHistory()" style="font-size: 13px;">My History</button>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;">
+            <button class="btn btn-primary" id="arcadeTab-coinflip" onclick="switchArcadeTab('coinflip')">🪙 Coin Flip</button>
+            <button class="btn btn-secondary" id="arcadeTab-slots" onclick="switchArcadeTab('slots')">🎰 Slots</button>
+            <button class="btn btn-secondary" id="arcadeTab-crash" onclick="switchArcadeTab('crash')">🏰 Castle Crash</button>
+            <button class="btn btn-secondary" id="arcadeTab-predictions" onclick="switchArcadeTab('predictions')">🔮 Predictions</button>
+            <button class="btn btn-secondary" id="arcadeTab-winners" onclick="switchArcadeTab('winners')">🏆 Winners</button>
+        </div>
+
+        <!-- Coin Flip -->
+        <div id="arcade-coinflip" style="display: block;">
+            <div style="max-width: 500px; margin: 0 auto; background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 30px; text-align: center;">
+                <h3 style="margin-bottom: 20px;">🪙 Heads or Tails</h3>
+                <div id="coinflipResult" style="font-size: 64px; margin: 20px 0; min-height: 80px; display: flex; align-items: center; justify-content: center;">🪙</div>
+                <div style="margin-bottom: 16px;">
+                    <label style="color: #888; font-size: 13px; display: block; margin-bottom: 6px;">Choose:</label>
+                    <div style="display: flex; gap: 10px; justify-content: center;">
+                        <button class="btn btn-secondary" id="coinflipChoice-heads" onclick="selectCoinflipChoice('heads')" style="min-width: 100px;">Heads</button>
+                        <button class="btn btn-secondary" id="coinflipChoice-tails" onclick="selectCoinflipChoice('tails')" style="min-width: 100px;">Tails</button>
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <label style="color: #888; font-size: 13px; display: block; margin-bottom: 6px;">Stake (USD, min $2):</label>
+                    <input type="number" id="coinflipStake" value="2" min="2" step="0.50" style="background: #0f0f0f; border: 1px solid #444; border-radius: 6px; padding: 8px 12px; color: #fff; width: 120px; text-align: center;">
+                </div>
+                <button class="btn btn-primary" onclick="playCoinflip()" id="coinflipPlayBtn" style="width: 100%; font-size: 16px; padding: 12px;">Flip Coin</button>
+                <div id="coinflipPayout" style="margin-top: 12px; font-size: 14px; color: #888;"></div>
+            </div>
+        </div>
+
+        <!-- Slots -->
+        <div id="arcade-slots" style="display: none;">
+            <div style="max-width: 500px; margin: 0 auto; background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 30px; text-align: center;">
+                <h3 style="margin-bottom: 20px;">🎰 Slot Machine</h3>
+                <div id="slotsReels" style="font-size: 56px; margin: 20px 0; min-height: 80px; display: flex; align-items: center; justify-content: center; gap: 15px; background: #0f0f0f; border: 1px solid #444; border-radius: 8px; padding: 20px;">
+                    <span>❓</span><span>❓</span><span>❓</span>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <label style="color: #888; font-size: 13px; display: block; margin-bottom: 6px;">Stake (USD, min $2):</label>
+                    <input type="number" id="slotsStake" value="2" min="2" step="0.50" style="background: #0f0f0f; border: 1px solid #444; border-radius: 6px; padding: 8px 12px; color: #fff; width: 120px; text-align: center;">
+                </div>
+                <button class="btn btn-primary" onclick="playSlots()" id="slotsPlayBtn" style="width: 100%; font-size: 16px; padding: 12px;">Spin</button>
+                <div id="slotsPayout" style="margin-top: 12px; font-size: 14px; color: #888;"></div>
+                <div style="margin-top: 12px; font-size: 12px; color: #666;">
+                    3x 💎 = 50x | 3x 7️⃣ = 25x | 3x ⭐ = 15x | 2 match = 1.5x
+                </div>
+            </div>
+        </div>
+
+        <!-- Castle Crash -->
+        <div id="arcade-crash" style="display: none;">
+            <div style="max-width: 600px; margin: 0 auto; background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 30px; text-align: center;">
+                <h3 style="margin-bottom: 8px;">🏰 Castle Crash</h3>
+                <p style="color: #888; font-size: 13px; margin-bottom: 20px;">A thief sneaks down the corridor. Cash out before the guard turns around!</p>
+                <div id="crashGameArea" style="display: none; background: #0f0f0f; border: 1px solid #444; border-radius: 8px; padding: 20px; margin-bottom: 16px;">
+                    <div id="crashMultiplier" style="font-size: 48px; font-weight: 800; color: #4caf50; margin: 10px 0;">1.00x</div>
+                    <div id="crashThief" style="font-size: 28px; margin: 10px 0;">🦹</div>
+                    <div id="crashStatus" style="font-size: 14px; color: #888;">The thief is sneaking...</div>
+                    <div id="crashPotentialPayout" style="font-size: 14px; color: #aaa; margin-top: 8px;">Potential payout: $0.00</div>
+                </div>
+                <div id="crashSetupArea">
+                    <div style="margin-bottom: 16px;">
+                        <label style="color: #888; font-size: 13px; display: block; margin-bottom: 6px;">Stake (USD, min $2):</label>
+                        <input type="number" id="crashStake" value="2" min="2" step="0.50" style="background: #0f0f0f; border: 1px solid #444; border-radius: 6px; padding: 8px 12px; color: #fff; width: 120px; text-align: center;">
+                    </div>
+                    <button class="btn btn-primary" onclick="startCrash()" id="crashStartBtn" style="width: 100%; font-size: 16px; padding: 12px;">Start Game</button>
+                </div>
+                <button class="btn btn-primary" onclick="cashoutCrash()" id="crashCashoutBtn" style="display: none; width: 100%; font-size: 18px; padding: 14px; background: #4caf50; color: #fff; border: none; border-radius: 6px; font-weight: 700; margin-top: 12px;">💰 CASH OUT</button>
+                <div id="crashResult" style="margin-top: 12px; font-size: 14px; color: #888;"></div>
+            </div>
+        </div>
+
+        <!-- Predictions -->
+        <div id="arcade-predictions" style="display: none;">
+            <div style="margin-bottom: 20px;">
+                <h3 style="margin-bottom: 12px;">🔮 Prediction Markets</h3>
+                <p style="color: #888; font-size: 13px; margin-bottom: 16px;">Bet on anime, gaming, and community polls. Winners split the pool proportionally (5% house edge).</p>
+            </div>
+            <div id="predictionsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 16px;">
+                <div style="color: #888; text-align: center; padding: 40px;">Loading prediction markets...</div>
+            </div>
+        </div>
+
+        <!-- Winners Feed -->
+        <div id="arcade-winners" style="display: none;">
+            <h3 style="margin-bottom: 16px;">🏆 Recent Winners</h3>
+            <div id="winnersFeed" style="display: flex; flex-direction: column; gap: 10px;">
+                <div style="color: #888; text-align: center; padding: 40px;">Loading winners...</div>
+            </div>
+        </div>
+
+        <!-- History Modal -->
+        <div id="arcadeHistoryModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center;">
+            <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3>My Arcade History</h3>
+                    <button onclick="document.getElementById('arcadeHistoryModal').style.display='none'" style="background: none; border: none; color: #888; font-size: 24px; cursor: pointer;">&times;</button>
+                </div>
+                <div id="arcadeHistoryList"></div>
+            </div>
+        </div>
+    </div>
 
     <div class="section" id="marketplace" style="display: none;">
         <div class="info-banner"><strong>Trade Reports</strong> — All trades across PixelPulse: CS2 skins, game accounts, gift card swaps/sales, token swaps, and Standoff2 gold sends. Every trade is P2P escrow-protected with a 5% service fee. Both parties confirm when satisfied — nobody leaves until everyone is happy.</div>
@@ -2306,6 +2421,7 @@
             document.getElementById('clips').style.display = 'none';
             document.getElementById('community').style.display = 'none';
             document.getElementById('betting').style.display = 'none';
+            document.getElementById('arcade').style.display = 'none';
             document.getElementById('marketplace').style.display = 'none';
             document.getElementById('gold-transfer').style.display = 'none';
             document.getElementById('chat').style.display = 'none';
@@ -2317,6 +2433,7 @@
             document.getElementById('nav-clips').classList.remove('active');
             document.getElementById('nav-community').classList.remove('active');
             document.getElementById('nav-betting').classList.remove('active');
+            document.getElementById('nav-arcade').classList.remove('active');
             document.getElementById('nav-marketplace').classList.remove('active');
             document.getElementById('nav-gold-transfer').classList.remove('active');
             document.getElementById('nav-chat').classList.remove('active');
@@ -2350,6 +2467,8 @@
                 loadCommunityPosts();
             } else if (section === 'betting') {
                 loadBettingMarkets();
+            } else if (section === 'arcade') {
+                loadArcadeBalance();
             } else if (section === 'marketplace') {
                 loadTradeReports();
             } else if (section === 'gold-transfer') {
@@ -4933,6 +5052,303 @@
         const tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
+
+        // ============================================================
+        // ARCADE — GAMES & PREDICTIONS
+        // ============================================================
+
+        let coinflipChoice = null;
+        let crashState = { active: false, sessionId: null, stake: 0, crashPoint: 0, currentMult: 1.0, cashedOut: false, crashed: false, animInterval: null };
+
+        function switchArcadeTab(tab) {
+            const tabs = ['coinflip', 'slots', 'crash', 'predictions', 'winners'];
+            tabs.forEach(t => {
+                const panel = document.getElementById('arcade-' + t);
+                const btn = document.getElementById('arcadeTab-' + t);
+                if (panel) panel.style.display = t === tab ? 'block' : 'none';
+                if (btn) {
+                    btn.classList.remove('btn-primary');
+                    btn.classList.add('btn-secondary');
+                    if (t === tab) { btn.classList.remove('btn-secondary'); btn.classList.add('btn-primary'); }
+                }
+            });
+            if (tab === 'winners') loadArcadeWinners();
+            if (tab === 'predictions') loadPredictions();
+        }
+
+        async function loadArcadeBalance() {
+            if (!sessionToken) return;
+            try {
+                const res = await fetch('/api/arcade/balance', { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                const data = await res.json();
+                const el = document.getElementById('arcadeBalance');
+                if (el) el.textContent = `$${(data.balance || 0).toFixed(2)}`;
+            } catch(e) {}
+        }
+
+        function selectCoinflipChoice(choice) {
+            coinflipChoice = choice;
+            ['heads', 'tails'].forEach(c => {
+                const btn = document.getElementById('coinflipChoice-' + c);
+                if (btn) {
+                    btn.classList.remove('btn-primary');
+                    btn.classList.add('btn-secondary');
+                }
+            });
+            const selBtn = document.getElementById('coinflipChoice-' + choice);
+            if (selBtn) { selBtn.classList.remove('btn-secondary'); selBtn.classList.add('btn-primary'); }
+        }
+
+        async function playCoinflip() {
+            if (!sessionToken) { showAuthModal(); return; }
+            if (!coinflipChoice) { alert('Choose heads or tails first!'); return; }
+            const stake = parseFloat(document.getElementById('coinflipStake').value);
+            const btn = document.getElementById('coinflipPlayBtn');
+            const resultEl = document.getElementById('coinflipResult');
+            const payoutEl = document.getElementById('coinflipPayout');
+            btn.disabled = true; btn.textContent = 'Flipping...';
+            resultEl.textContent = '🪙';
+            payoutEl.textContent = '';
+
+            try {
+                const res = await fetch('/api/arcade/coinflip', {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ choice: coinflipChoice, stake })
+                });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); btn.disabled = false; btn.textContent = 'Flip Coin'; return; }
+
+                // Animate coin flip
+                let flips = 0;
+                const flipAnim = setInterval(() => {
+                    resultEl.textContent = flips % 2 === 0 ? '🪙' : '🥈';
+                    flips++;
+                    if (flips > 8) {
+                        clearInterval(flipAnim);
+                        resultEl.textContent = data.result === 'heads' ? '🪙' : '🥈';
+                        if (data.won) {
+                            payoutEl.innerHTML = `🎉 Won <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
+                        } else {
+                            payoutEl.innerHTML = `❌ Lost $${data.stake.toFixed(2)}`;
+                        }
+                        document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+                        btn.disabled = false; btn.textContent = 'Flip Coin';
+                    }
+                }, 100);
+            } catch(e) { alert('Error playing coinflip'); btn.disabled = false; btn.textContent = 'Flip Coin'; }
+        }
+
+        async function playSlots() {
+            if (!sessionToken) { showAuthModal(); return; }
+            const stake = parseFloat(document.getElementById('slotsStake').value);
+            const btn = document.getElementById('slotsPlayBtn');
+            const reelsEl = document.getElementById('slotsReels');
+            const payoutEl = document.getElementById('slotsPayout');
+            btn.disabled = true; btn.textContent = 'Spinning...';
+            payoutEl.textContent = '';
+
+            const symbols = ['🍒','🍋','🔔','⭐','💎','7️⃣','🎮','👾'];
+            let spins = 0;
+            const spinAnim = setInterval(() => {
+                reelsEl.innerHTML = symbols.map(() => `<span>${symbols[Math.floor(Math.random()*symbols.length)]}</span>`).join('');
+                spins++;
+                if (spins > 12) {
+                    clearInterval(spinAnim);
+                    // Now call the API
+                    fetch('/api/arcade/slots', {
+                        method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ stake })
+                    }).then(res => res.json()).then(data => {
+                        if (data.error) { alert(data.error); btn.disabled=false; btn.textContent='Spin'; return; }
+                        reelsEl.innerHTML = data.reels.map(r => `<span>${r}</span>`).join('');
+                        if (data.payout > 0) {
+                            payoutEl.innerHTML = `${data.result === 'jackpot' ? '🎉 JACKPOT! ' : '✅ '}<span style="color:#4caf50;font-weight:700">Won $${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
+                        } else {
+                            payoutEl.innerHTML = `❌ Lost $${data.stake.toFixed(2)}`;
+                        }
+                        document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+                        btn.disabled = false; btn.textContent = 'Spin';
+                    }).catch(() => { alert('Error'); btn.disabled=false; btn.textContent='Spin'; });
+                }
+            }, 80);
+        }
+
+        async function startCrash() {
+            if (!sessionToken) { showAuthModal(); return; }
+            const stake = parseFloat(document.getElementById('crashStake').value);
+            const startBtn = document.getElementById('crashStartBtn');
+            const cashoutBtn = document.getElementById('crashCashoutBtn');
+            const gameArea = document.getElementById('crashGameArea');
+            const setupArea = document.getElementById('crashSetupArea');
+            const resultEl = document.getElementById('crashResult');
+            startBtn.disabled = true;
+            resultEl.textContent = '';
+
+            try {
+                const res = await fetch('/api/arcade/castle-crash/start', {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stake })
+                });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); startBtn.disabled = false; return; }
+
+                crashState = { active: true, sessionId: data.sessionId, stake: data.stake, crashPoint: data.crashPoint, currentMult: 1.0, cashedOut: false, crashed: false, animInterval: null };
+                document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+                gameArea.style.display = 'block';
+                setupArea.style.display = 'none';
+                cashoutBtn.style.display = 'block';
+                document.getElementById('crashMultiplier').textContent = '1.00x';
+                document.getElementById('crashMultiplier').style.color = '#4caf50';
+                document.getElementById('crashStatus').textContent = '🦹 The thief is sneaking...';
+                document.getElementById('crashThief').textContent = '🦹';
+
+                const startTime = Date.now();
+                crashState.animInterval = setInterval(() => {
+                    if (crashState.cashedOut || crashState.crashed) { clearInterval(crashState.animInterval); return; }
+                    const elapsed = (Date.now() - startTime) / 1000;
+                    crashState.currentMult = 1 + (elapsed * elapsed * 0.15);
+
+                    if (crashState.currentMult >= crashState.crashPoint) {
+                        // CRASH
+                        crashState.crashed = true;
+                        clearInterval(crashState.animInterval);
+                        document.getElementById('crashMultiplier').textContent = `${crashState.crashPoint.toFixed(2)}x`;
+                        document.getElementById('crashMultiplier').style.color = '#f44336';
+                        document.getElementById('crashStatus').innerHTML = '🚨 <strong>GUARD TURNED AROUND!</strong> The thief was caught!';
+                        document.getElementById('crashThief').textContent = '🚔';
+                        cashoutBtn.style.display = 'none';
+                        resultEl.innerHTML = `❌ Lost $${crashState.stake.toFixed(2)}`;
+                        // Record crash
+                        fetch('/api/arcade/castle-crash/crash', {
+                            method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ sessionId: crashState.sessionId, stake: crashState.stake, crashPoint: crashState.crashPoint, multiplierAtCrash: crashState.currentMult })
+                        }).then(r => r.json()).then(d => {
+                            document.getElementById('arcadeBalance').textContent = `$${d.newBalance.toFixed(2)}`;
+                        });
+                        setTimeout(() => {
+                            gameArea.style.display = 'none';
+                            setupArea.style.display = 'block';
+                            startBtn.disabled = false;
+                        }, 3000);
+                        return;
+                    }
+
+                    document.getElementById('crashMultiplier').textContent = `${crashState.currentMult.toFixed(2)}x`;
+                    const potential = Math.floor(crashState.stake * crashState.currentMult * 100) / 100;
+                    document.getElementById('crashPotentialPayout').textContent = `Potential payout: $${potential.toFixed(2)}`;
+                    // Thief animation
+                    const steps = Math.floor(elapsed * 2);
+                    const thiefEmojis = ['🦹','🚶','🦹','🏃'];
+                    document.getElementById('crashThief').textContent = thiefEmojis[steps % thiefEmojis.length];
+                }, 100);
+            } catch(e) { alert('Error starting crash'); startBtn.disabled = false; }
+        }
+
+        async function cashoutCrash() {
+            if (!crashState.active || crashState.cashedOut || crashState.crashed) return;
+            crashState.cashedOut = true;
+            clearInterval(crashState.animInterval);
+            const cashoutBtn = document.getElementById('crashCashoutBtn');
+            cashoutBtn.style.display = 'none';
+
+            try {
+                const res = await fetch('/api/arcade/castle-crash/cashout', {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sessionId: crashState.sessionId, multiplier: crashState.currentMult, stake: crashState.stake })
+                });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); return; }
+
+                document.getElementById('crashMultiplier').textContent = `${crashState.currentMult.toFixed(2)}x`;
+                document.getElementById('crashMultiplier').style.color = '#4caf50';
+                document.getElementById('crashStatus').innerHTML = '💰 <strong>Escaped with the treasure!</strong>';
+                document.getElementById('crashThief').textContent = '💰';
+                document.getElementById('crashResult').innerHTML = `🎉 Won <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
+                document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+
+                setTimeout(() => {
+                    document.getElementById('crashGameArea').style.display = 'none';
+                    document.getElementById('crashSetupArea').style.display = 'block';
+                    document.getElementById('crashStartBtn').disabled = false;
+                }, 3000);
+            } catch(e) { alert('Error cashing out'); }
+        }
+
+        async function loadArcadeWinners() {
+            try {
+                const res = await fetch('/api/arcade/winners');
+                const data = await res.json();
+                const feed = document.getElementById('winnersFeed');
+                if (data.length === 0) { feed.innerHTML = '<div style="color:#888;text-align:center;padding:40px;">No winners yet. Be the first!</div>'; return; }
+                feed.innerHTML = data.map(w => {
+                    const gameIcon = w.game === 'coinflip' ? '🪙' : w.game === 'slots' ? '🎰' : '🏰';
+                    return `<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;">
+                        <div><span style="font-size:20px">${gameIcon}</span> <strong>${w.username}</strong> <span style="color:#888;font-size:13px">staked $${w.stake}</span></div>
+                        <div style="color:#4caf50;font-weight:700">+$${w.payout.toFixed(2)} <span style="color:#888;font-weight:400">(${w.multiplier.toFixed(2)}x)</span></div>
+                    </div>`;
+                }).join('');
+            } catch(e) {}
+        }
+
+        async function loadPredictions() {
+            try {
+                const res = await fetch('/api/predictions');
+                const data = await res.json();
+                const grid = document.getElementById('predictionsGrid');
+                if (data.length === 0) { grid.innerHTML = '<div style="color:#888;text-align:center;padding:40px;">No open prediction markets right now. Check back soon!</div>'; return; }
+                grid.innerHTML = data.map(m => `
+                    <div style="background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:20px;">
+                        <div style="font-size:12px;color:#888;margin-bottom:6px">${m.category.toUpperCase()} ${m.source_url ? `• <a href="${m.source_url}" target="_blank" style="color:#e50914">Source</a>` : ''}</div>
+                        <h4 style="margin-bottom:8px">${m.title}</h4>
+                        ${m.description ? `<p style="color:#aaa;font-size:13px;margin-bottom:12px">${m.description}</p>` : ''}
+                        <div style="display:flex;flex-direction:column;gap:8px;">
+                            ${m.options.map(opt => `
+                                <button class="btn btn-secondary" onclick="placePredictionBet(${m.id}, '${opt.replace(/'/g,"\\'")}')" style="text-align:left;justify-content:flex-start;">${opt}</button>
+                            `).join('')}
+                        </div>
+                        ${m.resolves_at ? `<div style="margin-top:10px;font-size:12px;color:#666">Resolves: ${new Date(m.resolves_at).toLocaleDateString()}</div>` : ''}
+                    </div>
+                `).join('');
+            } catch(e) {}
+        }
+
+        async function placePredictionBet(marketId, option) {
+            if (!sessionToken) { showAuthModal(); return; }
+            const stake = prompt(`Bet on: ${option}\nEnter stake amount (min $2):`, '2');
+            if (!stake) return;
+            try {
+                const res = await fetch(`/api/predictions/${marketId}/bet`, {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chosen_option: option, stake: parseFloat(stake) })
+                });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); return; }
+                alert(`✅ Bet placed: $${stake} on "${option}"`);
+                loadArcadeBalance();
+            } catch(e) { alert('Error placing bet'); }
+        }
+
+        async function loadArcadeHistory() {
+            if (!sessionToken) { showAuthModal(); return; }
+            try {
+                const res = await fetch('/api/arcade/history', { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                const data = await res.json();
+                const list = document.getElementById('arcadeHistoryList');
+                if (data.length === 0) { list.innerHTML = '<div style="color:#888;text-align:center;padding:20px;">No bets yet.</div>'; }
+                else {
+                    list.innerHTML = data.map(b => {
+                        const gameIcon = b.game_type === 'coinflip' ? '🪙' : b.game_type === 'slots' ? '🎰' : '🏰';
+                        const won = b.payout > 0;
+                        return `<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #333;">
+                            <div>${gameIcon} ${b.game_type} • $${b.stake_amount}</div>
+                            <div style="color:${won?'#4caf50':'#f44336'};font-weight:600">${won?'+':''}$${b.payout.toFixed(2)} (${b.multiplier.toFixed(2)}x)</div>
+                        </div>`;
+                    }).join('');
+                }
+                document.getElementById('arcadeHistoryModal').style.display = 'flex';
+            } catch(e) {}
+        }
+
     </script>
 </body>
 </html>

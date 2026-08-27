@@ -1237,6 +1237,7 @@ async function initSchema() {
       id INTEGER PRIMARY KEY,
       user_id INTEGER UNIQUE,
       btc_balance REAL DEFAULT 0,
+      usd_balance REAL DEFAULT 0,
       total_deposited REAL DEFAULT 0,
       total_withdrawn REAL DEFAULT 0,
       total_won REAL DEFAULT 0,
@@ -1658,6 +1659,57 @@ async function initSchema() {
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
   `);
+
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS game_bets (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      game_type TEXT NOT NULL,
+      stake_amount REAL NOT NULL,
+      stake_currency TEXT DEFAULT 'RC',
+      multiplier REAL DEFAULT 0,
+      payout REAL DEFAULT 0,
+      result TEXT,
+      game_data TEXT,
+      server_seed TEXT,
+      client_seed TEXT,
+      nonce INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  `);
+
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS prediction_markets (
+      id INTEGER PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT,
+      source TEXT DEFAULT 'reddit',
+      source_url TEXT,
+      options_json TEXT NOT NULL,
+      category TEXT DEFAULT 'anime',
+      status TEXT DEFAULT 'open',
+      resolves_at TEXT,
+      resolved_option TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS prediction_bets (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      market_id INTEGER NOT NULL,
+      chosen_option TEXT NOT NULL,
+      stake_amount REAL NOT NULL,
+      stake_currency TEXT DEFAULT 'RC',
+      payout REAL DEFAULT 0,
+      status TEXT DEFAULT 'pending',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (market_id) REFERENCES prediction_markets(id)
+    );
+  `);
 }
 async function initDatabaseAndSchema() {
   await ensureLegacySchema();
@@ -1750,7 +1802,20 @@ async function registerDiscordSlashCommands() {
     new SlashCommandBuilder().setName('marketplace').setDescription('Browse skin marketplace'),
     new SlashCommandBuilder().setName('stats').setDescription('Platform statistics'),
     new SlashCommandBuilder().setName('quiz').setDescription('Take a gaming or anime quiz and earn Royal Coins'),
-    new SlashCommandBuilder().setName('help').setDescription('Get help')
+    new SlashCommandBuilder().setName('help').setDescription('Get help'),
+    new SlashCommandBuilder().setName('balance').setDescription('Check your arcade USD balance'),
+    new SlashCommandBuilder().setName('deposit').setDescription('Get deposit instructions for arcade funds')
+      .addStringOption(opt => opt.setName('amount').setDescription('Amount in USD to deposit').setRequired(true)),
+    new SlashCommandBuilder().setName('coinflip').setDescription('Flip a coin — heads or tails (min $0.50)')
+      .addStringOption(opt => opt.setName('choice').setDescription('heads or tails').setRequired(true).addChoices({ name: 'Heads', value: 'heads' }, { name: 'Tails', value: 'tails' }))
+      .addNumberOption(opt => opt.setName('stake').setDescription('Stake amount in USD (min 0.50)').setRequired(true)),
+    new SlashCommandBuilder().setName('slots').setDescription('Spin the slots (min $0.50)')
+      .addNumberOption(opt => opt.setName('stake').setDescription('Stake amount in USD (min 0.50)').setRequired(true)),
+    new SlashCommandBuilder().setName('crash').setDescription('Castle Crash — cash out before the guard turns! (min $0.50)')
+      .addNumberOption(opt => opt.setName('stake').setDescription('Stake amount in USD (min 0.50)').setRequired(true)),
+    new SlashCommandBuilder().setName('winners').setDescription('View recent arcade winners'),
+    new SlashCommandBuilder().setName('link').setDescription('Link your Discord to your PixelPulse account')
+      .addStringOption(opt => opt.setName('username').setDescription('Your PixelPulse username').setRequired(true))
   ].map(cmd => cmd.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(DISCORD_BOT_TOKEN);
@@ -1878,6 +1943,13 @@ async function handleDiscordSlashCommand(interaction) {
             '/marketplace — Browse marketplace',
             '/quiz — Take a quiz and earn Royal Coins',
             '/stats — Platform statistics',
+            '/balance — Check your arcade USD balance',
+            '/deposit — Deposit USD to your arcade balance',
+            '/coinflip — Bet on heads or tails (min $0.50)',
+            '/slots — Spin the slot machine (min $0.50)',
+            '/crash — Castle Crash game (min $0.50)',
+            '/winners — View recent arcade winners',
+            '/link — Link your Discord to PixelPulse account',
             '/help — This help message',
             '',
             '💡 Share a YouTube or Twitch link in any channel to auto-upload it as a clip to PixelPulse!',
@@ -1885,6 +1957,318 @@ async function handleDiscordSlashCommand(interaction) {
             '🔗 Website: https://pixelpulse.zentriva-clubsync.online'
           ].join('\n'));
         await interaction.reply({ embeds: [embed] });
+        break;
+      }
+      case 'link': {
+        const username = interaction.options.getString('username');
+        const user = await dbGet('SELECT id, discord_id FROM users WHERE username = ?', [username]);
+        if (!user) {
+          await interaction.reply({ content: `No PixelPulse account found with username "${username}". Create one at https://pixelpulse.zentriva-clubsync.online`, ephemeral: true });
+          return;
+        }
+        if (user.discord_id && user.discord_id !== interaction.user.id) {
+          await interaction.reply({ content: 'That account is already linked to another Discord user.', ephemeral: true });
+          return;
+        }
+        await dbRun('UPDATE users SET discord_id = ? WHERE id = ?', [interaction.user.id, user.id]);
+        await interaction.reply({ content: `✅ Linked Discord account to PixelPulse user **${username}**! You can now use arcade commands.`, ephemeral: true });
+        break;
+      }
+      case 'balance': {
+        const user = await dbGet('SELECT id FROM users WHERE discord_id = ?', [interaction.user.id]);
+        if (!user) {
+          await interaction.reply({ content: 'Link your account first with `/link <username>`', ephemeral: true });
+          return;
+        }
+        const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [user.id]);
+        const embed = new EmbedBuilder()
+          .setTitle('💰 Arcade Balance')
+          .setColor(0xe50914)
+          .setDescription(`Your USD balance: **$${(bal?.usd_balance || 0).toFixed(2)}**\n\nUse /deposit to add funds, then /coinflip, /slots, or /crash to play!`)
+          .setFooter({ text: 'Minimum stake: $0.50' });
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+        break;
+      }
+      case 'deposit': {
+        const amount = interaction.options.getString('amount');
+        const user = await dbGet('SELECT id FROM users WHERE discord_id = ?', [interaction.user.id]);
+        if (!user) {
+          await interaction.reply({ content: 'Link your account first with `/link <username>`', ephemeral: true });
+          return;
+        }
+        const embed = new EmbedBuilder()
+          .setTitle('💳 Deposit to Arcade')
+          .setColor(0xe50914)
+          .setDescription([
+            `To deposit **$${amount}** to your arcade balance:`,
+            '',
+            '1. Go to https://pixelpulse.zentriva-clubsync.online',
+            '2. Login and navigate to Wallet',
+            '3. Deposit BTC — it will be converted to USD automatically',
+            '4. Use /balance to check your updated balance',
+            '',
+            'BTC deposits are credited within 1-3 confirmations.',
+            'Your balance is shared between the website and Discord.'
+          ].join('\n'));
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+        break;
+      }
+      case 'coinflip': {
+        const choice = interaction.options.getString('choice');
+        const stake = interaction.options.getNumber('stake');
+        if (stake < DISCORD_MIN_STAKE) {
+          await interaction.reply({ content: `Minimum stake is $${DISCORD_MIN_STAKE}`, ephemeral: true });
+          return;
+        }
+        const user = await dbGet('SELECT id FROM users WHERE discord_id = ?', [interaction.user.id]);
+        if (!user) {
+          await interaction.reply({ content: 'Link your account first with `/link <username>`', ephemeral: true });
+          return;
+        }
+        const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [user.id]);
+        if (!bal || bal.usd_balance < stake) {
+          await interaction.reply({ content: `Insufficient balance. You have $${(bal?.usd_balance || 0).toFixed(2)}. Use /deposit to add funds.`, ephemeral: true });
+          return;
+        }
+        const serverSeed = generateServerSeed();
+        const cSeed = arcadeCrypto.randomBytes(8).toString('hex');
+        const nonce = Date.now();
+        const roll = provablyFairResult(serverSeed, cSeed, nonce);
+        const result = roll < 0.5 ? 'heads' : 'tails';
+        const won = result === choice;
+        const multiplier = won ? (2 - HOUSE_EDGE * 2) : 0;
+        const payout = won ? Math.floor(stake * multiplier * 100) / 100 : 0;
+
+        await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stake, stake, user.id]);
+        if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, user.id]);
+        await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'coinflip', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
+          [user.id, stake, multiplier, payout, won ? 'won' : 'lost', JSON.stringify({ choice, result, source: 'discord' }), serverSeed, cSeed, nonce]);
+
+        const coinEmoji = result === 'heads' ? '🪙' : '🥈';
+        const embed = new EmbedBuilder()
+          .setTitle(`🪙 Coin Flip — ${result.toUpperCase()}`)
+          .setColor(won ? 0x4caf50 : 0xf44336)
+          .setDescription([
+            `You chose: **${choice}**`,
+            `Result: **${result}** ${coinEmoji}`,
+            `Stake: $${stake.toFixed(2)}`,
+            won ? `🎉 You won **$${payout.toFixed(2)}** (${multiplier.toFixed(2)}x)` : `❌ You lost $${stake.toFixed(2)}`,
+            `New balance: $${(bal.usd_balance - stake + payout).toFixed(2)}`
+          ].join('\n'));
+        await interaction.reply({ embeds: [embed] });
+        break;
+      }
+      case 'slots': {
+        const stake = interaction.options.getNumber('stake');
+        if (stake < DISCORD_MIN_STAKE) {
+          await interaction.reply({ content: `Minimum stake is $${DISCORD_MIN_STAKE}`, ephemeral: true });
+          return;
+        }
+        const user = await dbGet('SELECT id FROM users WHERE discord_id = ?', [interaction.user.id]);
+        if (!user) {
+          await interaction.reply({ content: 'Link your account first with `/link <username>`', ephemeral: true });
+          return;
+        }
+        const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [user.id]);
+        if (!bal || bal.usd_balance < stake) {
+          await interaction.reply({ content: `Insufficient balance. You have $${(bal?.usd_balance || 0).toFixed(2)}.`, ephemeral: true });
+          return;
+        }
+        const serverSeed = generateServerSeed();
+        const cSeed = arcadeCrypto.randomBytes(8).toString('hex');
+        const nonce = Date.now();
+        const reels = [];
+        for (let i = 0; i < 3; i++) {
+          const roll = provablyFairResult(serverSeed, cSeed, nonce + i);
+          reels.push(SLOT_SYMBOLS[Math.floor(roll * SLOT_SYMBOLS.length)]);
+        }
+        let multiplier = 0, result = 'lost';
+        if (reels[0] === reels[1] && reels[1] === reels[2]) {
+          multiplier = SLOT_PAYOUTS[reels[0]] * (1 - HOUSE_EDGE);
+          result = 'jackpot';
+        } else if (reels[0] === reels[1] || reels[1] === reels[2] || reels[0] === reels[2]) {
+          multiplier = 1.5 * (1 - HOUSE_EDGE);
+          result = 'won';
+        }
+        const payout = multiplier > 0 ? Math.floor(stake * multiplier * 100) / 100 : 0;
+        await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stake, stake, user.id]);
+        if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, user.id]);
+        await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'slots', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
+          [user.id, stake, multiplier, payout, result, JSON.stringify({ reels, source: 'discord' }), serverSeed, cSeed, nonce]);
+
+        const embed = new EmbedBuilder()
+          .setTitle('🎰 Slots')
+          .setColor(payout > 0 ? 0x4caf50 : 0xf44336)
+          .setDescription([
+            `# ${reels.join(' | ')}`,
+            '',
+            result === 'jackpot' ? `🎉 JACKPOT! 3x ${reels[0]}` : result === 'won' ? '✅ Two of a kind!' : '❌ No match',
+            `Stake: $${stake.toFixed(2)}`,
+            payout > 0 ? `You won **$${payout.toFixed(2)}** (${multiplier.toFixed(2)}x)` : `You lost $${stake.toFixed(2)}`,
+            `New balance: $${(bal.usd_balance - stake + payout).toFixed(2)}`
+          ].join('\n'));
+        await interaction.reply({ embeds: [embed] });
+        break;
+      }
+      case 'crash': {
+        const stake = interaction.options.getNumber('stake');
+        if (stake < DISCORD_MIN_STAKE) {
+          await interaction.reply({ content: `Minimum stake is $${DISCORD_MIN_STAKE}`, ephemeral: true });
+          return;
+        }
+        const user = await dbGet('SELECT id FROM users WHERE discord_id = ?', [interaction.user.id]);
+        if (!user) {
+          await interaction.reply({ content: 'Link your account first with `/link <username>`', ephemeral: true });
+          return;
+        }
+        const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [user.id]);
+        if (!bal || bal.usd_balance < stake) {
+          await interaction.reply({ content: `Insufficient balance. You have $${(bal?.usd_balance || 0).toFixed(2)}.`, ephemeral: true });
+          return;
+        }
+
+        const serverSeed = generateServerSeed();
+        const cSeed = arcadeCrypto.randomBytes(8).toString('hex');
+        const nonce = Date.now();
+        const crashPoint = generateCrashPoint(serverSeed, cSeed, nonce);
+
+        await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stake, user.id]);
+
+        // Discord crash: animated with buttons
+        const row = new (require('discord.js').ActionRowBuilder)()
+          .addComponents(
+            new (require('discord.js').ButtonBuilder)()
+              .setCustomId('crash_cashout')
+              .setLabel('💰 CASH OUT')
+              .setStyle(require('discord.js').ButtonStyle.Success)
+          );
+
+        const embed = new EmbedBuilder()
+          .setTitle('🏰 Castle Crash')
+          .setColor(0xe50914)
+          .setDescription([
+            '🦹 A thief sneaks down the castle corridor...',
+            'Guards patrol ahead. Cash out before they turn around!',
+            '',
+            `Stake: $${stake.toFixed(2)}`,
+            `Multiplier: **1.00x**`,
+            `Potential payout: $${stake.toFixed(2)}`
+          ].join('\n'))
+          .setFooter({ text: 'Click CASH OUT to secure your winnings!' });
+
+        await interaction.reply({ embeds: [embed], components: [row] });
+        const reply = await interaction.fetchReply();
+
+        // Animate multiplier growth
+        let currentMult = 1.00;
+        const startTime = Date.now();
+        let crashed = false;
+        let cashedOut = false;
+
+        const updateInterval = setInterval(async () => {
+          if (cashedOut || crashed) { clearInterval(updateInterval); return; }
+          const elapsed = (Date.now() - startTime) / 1000;
+          currentMult = 1 + (elapsed * elapsed * 0.15); // accelerating growth
+          if (currentMult >= crashPoint) {
+            crashed = true;
+            clearInterval(updateInterval);
+            await dbRun('UPDATE user_balances SET total_lost = total_lost + ? WHERE user_id = ?', [stake, user.id]);
+            await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'castle_crash', ?, 'USD', 0, 0, 'crashed', ?, ?)`,
+              [user.id, stake, JSON.stringify({ crashPoint, multiplierAtCrash: currentMult, source: 'discord' }), nonce]);
+
+            const crashEmbed = EmbedBuilder.from(embed)
+              .setColor(0xf44336)
+              .setDescription([
+                '🚨 **GUARD TURNED AROUND!** 🚨',
+                '🦹 The thief was caught!',
+                '',
+                `Crashed at **${crashPoint.toFixed(2)}x**`,
+                `You lost $${stake.toFixed(2)}`
+              ].join('\n'));
+            await interaction.editReply({ embeds: [crashEmbed], components: [] });
+            return;
+          }
+
+          const potentialPayout = Math.floor(stake * currentMult * 100) / 100;
+          const updatedEmbed = EmbedBuilder.from(embed)
+            .setDescription([
+              '🦹 The thief sneaks deeper into the castle...',
+              `Steps: ${Math.floor(elapsed * 2)} | Guards still facing away`,
+              '',
+              `Stake: $${stake.toFixed(2)}`,
+              `Multiplier: **${currentMult.toFixed(2)}x**`,
+              `Potential payout: $${potentialPayout.toFixed(2)}`
+            ].join('\n'));
+          try { await interaction.editReply({ embeds: [updatedEmbed] }); } catch(e) {}
+        }, 1500);
+
+        // Button collector for cashout
+        const collector = reply.createMessageComponentCollector({ time: 60000 });
+        collector.on('collect', async (btnInteraction) => {
+          if (btnInteraction.user.id !== interaction.user.id) {
+            await btnInteraction.reply({ content: 'This is not your game!', ephemeral: true });
+            return;
+          }
+          if (cashedOut || crashed) return;
+          cashedOut = true;
+          clearInterval(updateInterval);
+          collector.stop();
+
+          const payout = Math.floor(stake * currentMult * 100) / 100;
+          await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, user.id]);
+          await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'castle_crash', ?, 'USD', ?, ?, 'cashed_out', ?, ?)`,
+            [user.id, stake, currentMult, payout, JSON.stringify({ cashoutMultiplier: currentMult, source: 'discord' }), nonce]);
+
+          const cashEmbed = EmbedBuilder.from(embed)
+            .setColor(0x4caf50)
+            .setDescription([
+              '💰 **CASHED OUT SUCCESSFULLY!**',
+              `🦹 The thief escaped with the treasure!`,
+              '',
+              `Multiplier: **${currentMult.toFixed(2)}x**`,
+              `You won **$${payout.toFixed(2)}**`,
+              `Stake: $${stake.toFixed(2)}`
+            ].join('\n'));
+          await btnInteraction.update({ embeds: [cashEmbed], components: [] });
+        });
+        collector.on('end', async () => {
+          if (!cashedOut && !crashed) {
+            clearInterval(updateInterval);
+            // Auto-crash if timer expires
+            crashed = true;
+            await dbRun('UPDATE user_balances SET total_lost = total_lost + ? WHERE user_id = ?', [stake, user.id]);
+            await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'castle_crash', ?, 'USD', 0, 0, 'crashed', ?, ?)`,
+              [user.id, stake, JSON.stringify({ crashPoint, multiplierAtCrash: currentMult, source: 'discord', reason: 'timeout' }), nonce]);
+            const timeoutEmbed = EmbedBuilder.from(embed)
+              .setColor(0xf44336)
+              .setDescription([
+                '⏰ **Time ran out! The guard caught the thief.**',
+                '',
+                `You lost $${stake.toFixed(2)}`
+              ].join('\n'));
+            try { await interaction.editReply({ embeds: [timeoutEmbed], components: [] }); } catch(e) {}
+          }
+        });
+        break;
+      }
+      case 'winners': {
+        await interaction.deferReply();
+        const winners = await dbAll(`
+          SELECT gb.*, u.username FROM game_bets gb
+          JOIN users u ON gb.user_id = u.id
+          WHERE gb.payout > 0 AND gb.stake_currency = 'USD'
+          ORDER BY gb.created_at DESC LIMIT 10
+        `);
+        if (winners.length === 0) {
+          await interaction.editReply('No winners yet. Be the first to win!');
+          return;
+        }
+        const embed = new EmbedBuilder().setTitle('🏆 Recent Arcade Winners').setColor(0xffd700);
+        winners.forEach((w, i) => {
+          const gameName = w.game_type === 'coinflip' ? '🪙 Coin Flip' : w.game_type === 'slots' ? '🎰 Slots' : '🏰 Castle Crash';
+          embed.addFields({ name: `${i + 1}. ${w.username}`, value: `${gameName} | Staked $${w.stake_amount} | Won **$${w.payout}** (${w.multiplier.toFixed(2)}x)` });
+        });
+        await interaction.editReply({ embeds: [embed] });
         break;
       }
     }
@@ -5678,6 +6062,256 @@ app.get('/api/trades/stats', async (req, res) => {
       fees_collected: p2pCompleted.fees
     }
   });
+});
+
+// ============================================================
+// ARCADE — PROVABLY FAIR GAMES (USD staking)
+// ============================================================
+
+const arcadeCrypto = require('crypto');
+
+function generateServerSeed() {
+  return arcadeCrypto.randomBytes(32).toString('hex');
+}
+
+function provablyFairResult(serverSeed, clientSeed, nonce) {
+  const hmac = arcadeCrypto.createHmac('sha256', serverSeed);
+  hmac.update(`${clientSeed}:${nonce}`);
+  const hash = hmac.digest('hex');
+  const int = parseInt(hash.substring(0, 8), 16);
+  return int / 0xFFFFFFFF;
+}
+
+const WEB_MIN_STAKE = 2.00;
+const DISCORD_MIN_STAKE = 0.50;
+const HOUSE_EDGE = 0.05;
+
+// API: Get user's USD balance for arcade
+app.get('/api/arcade/balance', authenticateRequest, async (req, res) => {
+  const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+  res.json({ balance: bal?.usd_balance || 0, currency: 'USD', min_stake: WEB_MIN_STAKE });
+});
+
+// API: Get recent winners feed
+app.get('/api/arcade/winners', async (req, res) => {
+  const winners = await dbAll(`
+    SELECT gb.*, u.username FROM game_bets gb
+    JOIN users u ON gb.user_id = u.id
+    WHERE gb.payout > 0 AND gb.stake_currency = 'USD'
+    ORDER BY gb.created_at DESC LIMIT 20
+  `);
+  res.json(winners.map(w => ({
+    username: w.username, game: w.game_type, stake: w.stake_amount,
+    multiplier: w.multiplier, payout: w.payout, time: w.created_at
+  })));
+});
+
+// API: Get user's bet history
+app.get('/api/arcade/history', authenticateRequest, async (req, res) => {
+  const bets = await dbAll('SELECT * FROM game_bets WHERE user_id = ? ORDER BY created_at DESC LIMIT 50', [req.userId]);
+  res.json(bets);
+});
+
+// ===== HEADS OR TAILS =====
+app.post('/api/arcade/coinflip', authenticateRequest, async (req, res) => {
+  const { choice, stake, clientSeed } = req.body;
+  if (!choice || !['heads', 'tails'].includes(choice)) return res.status(400).json({ error: 'Choose heads or tails' });
+  const stakeAmount = parseFloat(stake);
+  if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
+
+  const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+  if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+
+  const serverSeed = generateServerSeed();
+  const cSeed = clientSeed || arcadeCrypto.randomBytes(8).toString('hex');
+  const nonce = Date.now();
+  const roll = provablyFairResult(serverSeed, cSeed, nonce);
+  const result = roll < 0.5 ? 'heads' : 'tails';
+  const won = result === choice;
+  const multiplier = won ? (2 - HOUSE_EDGE * 2) : 0;
+  const payout = won ? Math.floor(stakeAmount * multiplier * 100) / 100 : 0;
+
+  await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
+  if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+
+  await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'coinflip', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
+    [req.userId, stakeAmount, multiplier, payout, won ? 'won' : 'lost', JSON.stringify({ choice, result, roll: roll.toFixed(4) }), serverSeed, cSeed, nonce]);
+
+  res.json({ result, won, multiplier, payout, stake: stakeAmount, newBalance: (bal.usd_balance - stakeAmount + payout) });
+});
+
+// ===== SLOTS (3-reel) =====
+const SLOT_SYMBOLS = ['🍒', '🍋', '🔔', '⭐', '💎', '7️⃣', '🎮', '👾'];
+const SLOT_PAYOUTS = { '💎': 50, '7️⃣': 25, '⭐': 15, '🔔': 10, '🎮': 8, '👾': 6, '🍒': 5, '🍋': 3 };
+
+app.post('/api/arcade/slots', authenticateRequest, async (req, res) => {
+  const { stake, clientSeed } = req.body;
+  const stakeAmount = parseFloat(stake);
+  if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
+
+  const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+  if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+
+  const serverSeed = generateServerSeed();
+  const cSeed = clientSeed || arcadeCrypto.randomBytes(8).toString('hex');
+  const nonce = Date.now();
+  const reels = [];
+  for (let i = 0; i < 3; i++) {
+    const roll = provablyFairResult(serverSeed, cSeed, nonce + i);
+    reels.push(SLOT_SYMBOLS[Math.floor(roll * SLOT_SYMBOLS.length)]);
+  }
+
+  let multiplier = 0, result = 'lost';
+  if (reels[0] === reels[1] && reels[1] === reels[2]) {
+    multiplier = SLOT_PAYOUTS[reels[0]] * (1 - HOUSE_EDGE);
+    result = 'jackpot';
+  } else if (reels[0] === reels[1] || reels[1] === reels[2] || reels[0] === reels[2]) {
+    multiplier = 1.5 * (1 - HOUSE_EDGE);
+    result = 'won';
+  }
+
+  const payout = multiplier > 0 ? Math.floor(stakeAmount * multiplier * 100) / 100 : 0;
+  await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
+  if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+
+  await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'slots', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
+    [req.userId, stakeAmount, multiplier, payout, result, JSON.stringify({ reels }), serverSeed, cSeed, nonce]);
+
+  res.json({ reels, multiplier, payout, result, stake: stakeAmount, newBalance: (bal.usd_balance - stakeAmount + payout) });
+});
+
+// ===== CASTLE CRASH =====
+function generateCrashPoint(serverSeed, clientSeed, nonce) {
+  const roll = provablyFairResult(serverSeed, clientSeed, nonce);
+  if (roll < HOUSE_EDGE) return 1.00;
+  const crash = 1 / (1 - roll);
+  return Math.min(crash, 100);
+}
+
+app.post('/api/arcade/castle-crash/start', authenticateRequest, async (req, res) => {
+  const { stake, clientSeed } = req.body;
+  const stakeAmount = parseFloat(stake);
+  if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
+
+  const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+  if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+
+  const serverSeed = generateServerSeed();
+  const cSeed = clientSeed || arcadeCrypto.randomBytes(8).toString('hex');
+  const nonce = Date.now();
+  const crashPoint = generateCrashPoint(serverSeed, cSeed, nonce);
+
+  await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stakeAmount, req.userId]);
+
+  res.json({ sessionId: nonce, stake: stakeAmount, crashPoint, newBalance: bal.usd_balance - stakeAmount });
+});
+
+app.post('/api/arcade/castle-crash/cashout', authenticateRequest, async (req, res) => {
+  const { sessionId, multiplier, stake } = req.body;
+  const stakeAmount = parseFloat(stake);
+  const cashoutMult = parseFloat(multiplier);
+  if (isNaN(stakeAmount) || isNaN(cashoutMult) || cashoutMult < 1) return res.status(400).json({ error: 'Invalid cashout' });
+
+  const existing = await dbGet('SELECT id FROM game_bets WHERE user_id = ? AND game_type = ? AND nonce = ? AND result = ?', [req.userId, 'castle_crash', sessionId, 'cashed_out']);
+  if (existing) return res.status(400).json({ error: 'Already cashed out' });
+
+  const payout = Math.floor(stakeAmount * cashoutMult * 100) / 100;
+  await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+  await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'castle_crash', ?, 'USD', ?, ?, 'cashed_out', ?, ?)`,
+    [req.userId, stakeAmount, cashoutMult, payout, JSON.stringify({ cashoutMultiplier: cashoutMult }), sessionId]);
+
+  const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+  res.json({ cashedOut: true, multiplier: cashoutMult, payout, newBalance: bal?.usd_balance || 0 });
+});
+
+app.post('/api/arcade/castle-crash/crash', authenticateRequest, async (req, res) => {
+  const { sessionId, stake, crashPoint, multiplierAtCrash } = req.body;
+  const stakeAmount = parseFloat(stake);
+  await dbRun('UPDATE user_balances SET total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, req.userId]);
+  await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'castle_crash', ?, 'USD', 0, 0, 'crashed', ?, ?)`,
+    [req.userId, stakeAmount, JSON.stringify({ crashPoint, multiplierAtCrash }), sessionId]);
+
+  const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+  res.json({ crashed: true, newBalance: bal?.usd_balance || 0 });
+});
+
+// ===== PREDICTION MARKETS =====
+app.get('/api/predictions', async (req, res) => {
+  const markets = await dbAll('SELECT * FROM prediction_markets WHERE status = ? ORDER BY created_at DESC', ['open']);
+  res.json(markets.map(m => ({ ...m, options: JSON.parse(m.options_json) })));
+});
+
+app.post('/api/predictions/:id/bet', authenticateRequest, async (req, res) => {
+  const { chosen_option, stake } = req.body;
+  const stakeAmount = parseFloat(stake);
+  if (!chosen_option) return res.status(400).json({ error: 'Choose an option' });
+  if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
+
+  const market = await dbGet('SELECT * FROM prediction_markets WHERE id = ? AND status = ?', [req.params.id, 'open']);
+  if (!market) return res.status(404).json({ error: 'Market not found or closed' });
+
+  const options = JSON.parse(market.options_json);
+  if (!options.includes(chosen_option)) return res.status(400).json({ error: 'Invalid option' });
+
+  const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+  if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+
+  await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stakeAmount, req.userId]);
+  await dbRun(`INSERT INTO prediction_bets (user_id, market_id, chosen_option, stake_amount, stake_currency) VALUES (?, ?, ?, ?, 'USD')`, [req.userId, market.id, chosen_option, stakeAmount]);
+
+  res.json({ message: 'Bet placed', market: market.title, chosen_option, stake: stakeAmount });
+});
+
+app.get('/api/predictions/my-bets', authenticateRequest, async (req, res) => {
+  const bets = await dbAll(`SELECT pb.*, pm.title as market_title, pm.status as market_status, pm.resolved_option FROM prediction_bets pb JOIN prediction_markets pm ON pb.market_id = pm.id WHERE pb.user_id = ? ORDER BY pb.created_at DESC`, [req.userId]);
+  res.json(bets);
+});
+
+// API: Admin create prediction market
+app.post('/api/admin/prediction-market', authenticateRequest, async (req, res) => {
+  if (!req.isAdmin) return res.status(403).json({ error: 'Admin only' });
+  const { title, description, options, source_url, category, resolves_at } = req.body;
+  if (!title || !options || !Array.isArray(options) || options.length < 2) return res.status(400).json({ error: 'title and options (array, min 2) required' });
+
+  await dbRun(`INSERT INTO prediction_markets (title, description, options_json, source_url, category, resolves_at) VALUES (?, ?, ?, ?, ?, ?)`,
+    [title, description || '', JSON.stringify(options), source_url || '', category || 'anime', resolves_at || null]);
+
+  logSystemEvent('info', `Prediction market created`, `Title: ${title}, Options: ${options.join(', ')}`);
+  res.json({ message: 'Market created' });
+});
+
+// API: Admin resolve prediction market
+app.post('/api/admin/prediction-market/:id/resolve', authenticateRequest, async (req, res) => {
+  if (!req.isAdmin) return res.status(403).json({ error: 'Admin only' });
+  const { resolved_option } = req.body;
+  const market = await dbGet('SELECT * FROM prediction_markets WHERE id = ?', [req.params.id]);
+  if (!market) return res.status(404).json({ error: 'Market not found' });
+
+  const options = JSON.parse(market.options_json);
+  if (!options.includes(resolved_option)) return res.status(400).json({ error: 'Invalid option' });
+
+  await dbRun('UPDATE prediction_markets SET status = ?, resolved_option = ? WHERE id = ?', ['resolved', resolved_option, market.id]);
+
+  // Payout winners — split pool proportionally
+  const allBets = await dbAll('SELECT * FROM prediction_bets WHERE market_id = ? AND status = ?', [market.id, 'pending']);
+  const winningBets = allBets.filter(b => b.chosen_option === resolved_option);
+  const losingBets = allBets.filter(b => b.chosen_option !== resolved_option);
+  const totalPool = allBets.reduce((sum, b) => sum + b.stake_amount, 0);
+  const winningPool = winningBets.reduce((sum, b) => sum + b.stake_amount, 0);
+  const houseCut = totalPool * HOUSE_EDGE;
+
+  for (const bet of losingBets) {
+    await dbRun('UPDATE prediction_bets SET status = ?, payout = 0 WHERE id = ?', ['lost', bet.id]);
+  }
+  for (const bet of winningBets) {
+    const share = winningPool > 0 ? bet.stake_amount / winningPool : 0;
+    const payout = Math.floor((totalPool - houseCut) * share * 100) / 100;
+    await dbRun('UPDATE prediction_bets SET status = ?, payout = ? WHERE id = ?', ['won', payout, bet.id]);
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, bet.user_id]);
+  }
+
+  logSystemEvent('info', `Prediction market resolved`, `Market: ${market.title}, Winner: ${resolved_option}`);
+  res.json({ message: 'Market resolved', winners: winningBets.length, losers: losingBets.length });
 });
 
 // ============================================================
