@@ -1578,6 +1578,36 @@ async function initSchema() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS p2p_trades (
+      id INTEGER PRIMARY KEY,
+      trade_category TEXT NOT NULL,
+      listing_type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      game_type TEXT,
+      item_details TEXT,
+      price_amount REAL,
+      price_currency TEXT,
+      payment_methods TEXT,
+      seller_id INTEGER NOT NULL,
+      buyer_id INTEGER,
+      status TEXT DEFAULT 'open',
+      seller_confirmed INTEGER DEFAULT 0,
+      buyer_confirmed INTEGER DEFAULT 0,
+      seller_confirm_at TEXT,
+      buyer_confirm_at TEXT,
+      dispute_reason TEXT,
+      fee_percent REAL DEFAULT 5.0,
+      fee_amount REAL DEFAULT 0,
+      expires_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      completed_at TEXT,
+      FOREIGN KEY (seller_id) REFERENCES users(id),
+      FOREIGN KEY (buyer_id) REFERENCES users(id)
+    );
+  `);
 }
 async function initDatabaseAndSchema() {
   await ensureLegacySchema();
@@ -5249,6 +5279,299 @@ app.get('/api/admin/disputed-trades', checkAdminSession, async (req, res) => {
     ORDER BY et.created_at ASC
   `);
   res.json(trades);
+});
+
+// ============================================================
+// P2P TRADE SYSTEM (Gift Cards, Game Accounts, Token Swaps)
+// ============================================================
+
+// API: Create a P2P trade listing (gift card sale/swap, game account sale)
+app.post('/api/p2p-trades/list', authenticateRequest, async (req, res) => {
+  const { trade_category, listing_type, title, description, game_type, item_details, price_amount, price_currency, payment_methods } = req.body;
+
+  if (!trade_category || !listing_type || !title || !price_amount || price_amount <= 0) {
+    return res.status(400).json({ error: 'Missing required fields: trade_category, listing_type, title, price_amount' });
+  }
+
+  const validCategories = ['gift_card', 'game_account', 'token_swap', 'gold_send'];
+  if (!validCategories.includes(trade_category)) {
+    return res.status(400).json({ error: `Invalid trade category. Must be one of: ${validCategories.join(', ')}` });
+  }
+
+  const validListingTypes = ['sale', 'swap'];
+  if (!validListingTypes.includes(listing_type)) {
+    return res.status(400).json({ error: `Invalid listing type. Must be 'sale' or 'swap'` });
+  }
+
+  const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+  const feePercent = 5.0;
+
+  const result = await dbRun(`
+    INSERT INTO p2p_trades (trade_category, listing_type, title, description, game_type, item_details, price_amount, price_currency, payment_methods, seller_id, fee_percent, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [trade_category, listing_type, title, description || '', game_type || '', item_details || '', price_amount, price_currency || 'USD', payment_methods || 'BTC, PayPal', req.userId, feePercent, expiresAt]);
+
+  logSystemEvent('info', `P2P trade listing created`, `Trade ID: ${result.lastID}, Category: ${trade_category}, User: ${req.userId}`);
+
+  // Notify Telegram
+  const seller = await dbGet('SELECT username FROM users WHERE id = ?', [req.userId]);
+  const categoryLabels = { gift_card: 'Gift Card', game_account: 'Game Account', token_swap: 'Token Swap', gold_send: 'Gold Send' };
+  notifyNewSkinListing(title, game_type || categoryLabels[trade_category], price_amount, price_currency || 'USD', seller?.username || 'Unknown').catch(() => {});
+
+  res.json({ id: result.lastID, message: 'P2P trade listing created successfully', feePercent });
+});
+
+// API: Browse all open P2P trade listings
+app.get('/api/p2p-trades/listings', async (req, res) => {
+  const { category } = req.query;
+  let query = `
+    SELECT pt.*, seller.username as seller_name
+    FROM p2p_trades pt
+    JOIN users seller ON pt.seller_id = seller.id
+    WHERE pt.status = 'open'
+  `;
+  const params = [];
+  if (category) {
+    query += ` AND pt.trade_category = ?`;
+    params.push(category);
+  }
+  query += ` ORDER BY pt.created_at DESC`;
+  const listings = await dbAll(query, params);
+  res.json(listings);
+});
+
+// API: Get a specific P2P trade
+app.get('/api/p2p-trades/:id', async (req, res) => {
+  const trade = await dbGet(`
+    SELECT pt.*, seller.username as seller_name, buyer.username as buyer_name
+    FROM p2p_trades pt
+    JOIN users seller ON pt.seller_id = seller.id
+    LEFT JOIN users buyer ON pt.buyer_id = buyer.id
+    WHERE pt.id = ?
+  `, [req.params.id]);
+  if (!trade) return res.status(404).json({ error: 'Trade not found' });
+  res.json(trade);
+});
+
+// API: Buyer initiates purchase of a P2P listing
+app.post('/api/p2p-trades/:id/purchase', authenticateRequest, async (req, res) => {
+  const trade = await dbGet('SELECT * FROM p2p_trades WHERE id = ? AND status = ?', [req.params.id, 'open']);
+  if (!trade) return res.status(404).json({ error: 'Trade not available' });
+  if (trade.seller_id === req.userId) return res.status(400).json({ error: 'Cannot purchase your own listing' });
+
+  await dbRun('UPDATE p2p_trades SET buyer_id = ?, status = ? WHERE id = ?', [req.userId, 'pending', trade.id]);
+
+  logSystemEvent('info', `P2P trade purchase initiated`, `Trade ID: ${trade.id}, Buyer: ${req.userId}`);
+
+  res.json({
+    tradeId: trade.id,
+    message: 'Trade initiated! Contact the seller to arrange delivery. Once delivered, the seller confirms sending and you confirm receipt.',
+    instructions: trade.trade_category === 'gift_card'
+      ? 'Seller sends gift card code/details. Buyer redeems and confirms. 5% fee applies on completion.'
+      : trade.trade_category === 'game_account'
+      ? 'Seller transfers account credentials. Buyer changes password and confirms. 5% fee applies on completion.'
+      : 'Arrange the swap details between yourselves. Both confirm when satisfied. 5% fee applies on completion.',
+    expiresAt: trade.expires_at
+  });
+});
+
+// API: Seller confirms they delivered the item
+app.post('/api/p2p-trades/:id/seller-confirm', authenticateRequest, async (req, res) => {
+  const trade = await dbGet('SELECT * FROM p2p_trades WHERE id = ? AND seller_id = ?', [req.params.id, req.userId]);
+  if (!trade) return res.status(404).json({ error: 'Trade not found' });
+  if (trade.status !== 'pending') return res.status(400).json({ error: `Trade is already ${trade.status}` });
+
+  await dbRun('UPDATE p2p_trades SET seller_confirmed = 1, seller_confirm_at = CURRENT_TIMESTAMP, status = ? WHERE id = ?',
+    ['seller_sent', trade.id]);
+
+  logSystemEvent('info', `P2P seller confirmed delivery`, `Trade ID: ${trade.id}, Seller: ${req.userId}`);
+  res.json({ message: 'Confirmed! Waiting for buyer to confirm receipt.' });
+});
+
+// API: Buyer confirms they received the item — completes trade with 5% fee
+app.post('/api/p2p-trades/:id/buyer-confirm', authenticateRequest, async (req, res) => {
+  const trade = await dbGet('SELECT * FROM p2p_trades WHERE id = ? AND buyer_id = ?', [req.params.id, req.userId]);
+  if (!trade) return res.status(404).json({ error: 'Trade not found' });
+  if (trade.status !== 'seller_sent') return res.status(400).json({ error: `Seller must confirm sending first. Current status: ${trade.status}` });
+
+  // Calculate 5% fee
+  const feeAmount = trade.price_amount * (trade.fee_percent / 100);
+  const sellerReceives = trade.price_amount - feeAmount;
+
+  await dbRun('UPDATE p2p_trades SET buyer_confirmed = 1, buyer_confirm_at = CURRENT_TIMESTAMP, status = ?, fee_amount = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?',
+    ['completed', feeAmount, trade.id]);
+
+  logSystemEvent('info', `P2P trade completed`, `Trade ID: ${trade.id}, Fee: ${feeAmount} ${trade.price_currency} (${trade.fee_percent}%), Seller receives: ${sellerReceives} ${trade.price_currency}`);
+
+  res.json({
+    message: 'Trade completed! Both parties confirmed satisfaction.',
+    feeAmount,
+    feePercent: trade.fee_percent,
+    sellerReceives,
+    currency: trade.price_currency
+  });
+});
+
+// API: Raise dispute on P2P trade
+app.post('/api/p2p-trades/:id/dispute', authenticateRequest, async (req, res) => {
+  const { reason } = req.body;
+  const trade = await dbGet('SELECT * FROM p2p_trades WHERE id = ? AND (seller_id = ? OR buyer_id = ?)', [req.params.id, req.userId, req.userId]);
+  if (!trade) return res.status(404).json({ error: 'Trade not found' });
+  if (['completed', 'cancelled'].includes(trade.status)) return res.status(400).json({ error: 'Trade already finished' });
+
+  await dbRun('UPDATE p2p_trades SET status = ?, dispute_reason = ? WHERE id = ?', ['disputed', reason || 'No reason provided', trade.id]);
+  logSystemEvent('warning', `P2P trade dispute raised`, `Trade ID: ${trade.id}, By: ${req.userId}, Reason: ${reason}`);
+  res.json({ message: 'Dispute raised. An admin will review this trade.' });
+});
+
+// API: Cancel P2P trade
+app.post('/api/p2p-trades/:id/cancel', authenticateRequest, async (req, res) => {
+  const trade = await dbGet('SELECT * FROM p2p_trades WHERE id = ? AND (seller_id = ? OR buyer_id = ?)', [req.params.id, req.userId, req.userId]);
+  if (!trade) return res.status(404).json({ error: 'Trade not found' });
+  if (!['open', 'pending', 'seller_sent'].includes(trade.status)) return res.status(400).json({ error: `Cannot cancel trade in ${trade.status} state` });
+
+  await dbRun('UPDATE p2p_trades SET status = ? WHERE id = ?', ['cancelled', trade.id]);
+  logSystemEvent('info', `P2P trade cancelled`, `Trade ID: ${trade.id}, By: ${req.userId}`);
+  res.json({ message: 'Trade cancelled.' });
+});
+
+// API: Get user's active P2P trades
+app.get('/api/p2p-trades/my-trades', authenticateRequest, async (req, res) => {
+  const trades = await dbAll(`
+    SELECT pt.*, seller.username as seller_name, buyer.username as buyer_name
+    FROM p2p_trades pt
+    JOIN users seller ON pt.seller_id = seller.id
+    LEFT JOIN users buyer ON pt.buyer_id = buyer.id
+    WHERE (pt.seller_id = ? OR pt.buyer_id = ?) AND pt.status NOT IN ('completed', 'cancelled')
+    ORDER BY pt.created_at DESC
+  `, [req.userId, req.userId]);
+  res.json(trades);
+});
+
+// API: Get all trades across all trade types (unified trade reports)
+app.get('/api/trades/all', async (req, res) => {
+  const { status, category, limit } = req.query;
+  const maxLimit = Math.min(parseInt(limit) || 50, 100);
+  const statusFilter = status || 'all';
+
+  // Fetch skin trades (escrow)
+  let skinQuery = `
+    SELECT et.id, et.status, et.created_at, et.completed_at, et.price_tokens, et.token_type,
+           s.skin_name as item_title, s.game_type, s.image_url,
+           seller.username as seller_name, buyer.username as buyer_name,
+           'skin' as trade_type
+    FROM escrow_trades et
+    JOIN skins s ON et.skin_id = s.id
+    JOIN users seller ON et.seller_id = seller.id
+    JOIN users buyer ON et.buyer_id = buyer.id
+  `;
+  const skinParams = [];
+  if (statusFilter !== 'all') {
+    skinQuery += ` WHERE et.status = ?`;
+    skinParams.push(statusFilter);
+  }
+  skinQuery += ` ORDER BY et.created_at DESC LIMIT ?`;
+  skinParams.push(maxLimit);
+  const skinTrades = await dbAll(skinQuery, skinParams);
+
+  // Fetch P2P trades
+  let p2pQuery = `
+    SELECT pt.id, pt.trade_category, pt.listing_type, pt.title as item_title, pt.game_type, pt.description,
+           pt.price_amount, pt.price_currency, pt.status, pt.created_at, pt.completed_at,
+           pt.fee_percent, pt.fee_amount, pt.seller_confirmed, pt.buyer_confirmed,
+           seller.username as seller_name, buyer.username as buyer_name,
+           pt.trade_category as trade_type
+    FROM p2p_trades pt
+    JOIN users seller ON pt.seller_id = seller.id
+    LEFT JOIN users buyer ON pt.buyer_id = buyer.id
+  `;
+  const p2pParams = [];
+  const conditions = [];
+  if (statusFilter !== 'all') {
+    conditions.push('pt.status = ?');
+    p2pParams.push(statusFilter);
+  }
+  if (category) {
+    conditions.push('pt.trade_category = ?');
+    p2pParams.push(category);
+  }
+  if (conditions.length > 0) {
+    p2pQuery += ` WHERE ` + conditions.join(' AND ');
+  }
+  p2pQuery += ` ORDER BY pt.created_at DESC LIMIT ?`;
+  p2pParams.push(maxLimit);
+  const p2pTrades = await dbAll(p2pQuery, p2pParams);
+
+  // Fetch token swap trades
+  let tokenQuery = `
+    SELECT ttl.id, ttl.offer_token_type, ttl.offer_amount, ttl.want_token_type, ttl.want_amount,
+           ttl.status, ttl.created_at, ttl.fee_percent,
+           u.username as seller_name,
+           'token_swap' as trade_type,
+           (ttl.offer_token_type || ' -> ' || ttl.want_token_type) as item_title,
+           ttl.offer_amount as price_amount, ttl.offer_token_type as price_currency
+    FROM token_trade_listings ttl
+    JOIN users u ON ttl.user_id = u.id
+  `;
+  const tokenParams = [];
+  if (statusFilter !== 'all') {
+    tokenQuery += ` WHERE ttl.status = ?`;
+    tokenParams.push(statusFilter);
+  }
+  tokenQuery += ` ORDER BY ttl.created_at DESC LIMIT ?`;
+  tokenParams.push(maxLimit);
+  const tokenTrades = await dbAll(tokenQuery, tokenParams);
+
+  // Combine and sort by created_at desc
+  const allTrades = [...skinTrades, ...p2pTrades, ...tokenTrades];
+  allTrades.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+  res.json({
+    total: allTrades.length,
+    trades: allTrades.slice(0, maxLimit),
+    summary: {
+      skins: skinTrades.length,
+      p2p: p2pTrades.length,
+      tokenSwaps: tokenTrades.length
+    }
+  });
+});
+
+// API: Get trade statistics (for dashboard)
+app.get('/api/trades/stats', async (req, res) => {
+  const skinCompleted = await dbGet(`SELECT COUNT(*) as count, COALESCE(SUM(price_tokens), 0) as volume FROM escrow_trades WHERE status = 'completed'`);
+  const p2pCompleted = await dbGet(`SELECT COUNT(*) as count, COALESCE(SUM(price_amount), 0) as volume, COALESCE(SUM(fee_amount), 0) as fees FROM p2p_trades WHERE status = 'completed'`);
+  const tokenCompleted = await dbGet(`SELECT COUNT(*) as count FROM token_trade_listings WHERE status = 'completed'`);
+  const skinActive = await dbGet(`SELECT COUNT(*) as count FROM escrow_trades WHERE status NOT IN ('completed', 'cancelled')`);
+  const p2pActive = await dbGet(`SELECT COUNT(*) as count FROM p2p_trades WHERE status NOT IN ('completed', 'cancelled')`);
+  const tokenActive = await dbGet(`SELECT COUNT(*) as count FROM token_trade_listings WHERE status = 'open'`);
+  const skinOpen = await dbGet(`SELECT COUNT(*) as count FROM skins WHERE status = 'available'`);
+  const p2pOpen = await dbGet(`SELECT COUNT(*) as count FROM p2p_trades WHERE status = 'open'`);
+
+  res.json({
+    completed: {
+      skins: skinCompleted.count,
+      p2p: p2pCompleted.count,
+      tokenSwaps: tokenCompleted.count,
+      total: skinCompleted.count + p2pCompleted.count + tokenCompleted.count
+    },
+    active: {
+      skins: skinActive.count,
+      p2p: p2pActive.count,
+      tokenSwaps: tokenActive.count,
+      total: skinActive.count + p2pActive.count + tokenActive.count
+    },
+    open_listings: {
+      skins: skinOpen.count,
+      p2p: p2pOpen.count,
+      total: skinOpen.count + p2pOpen.count
+    },
+    volume: {
+      skins: skinCompleted.volume,
+      p2p: p2pCompleted.volume,
+      fees_collected: p2pCompleted.fees
+    }
+  });
 });
 
 // ============================================================

@@ -848,7 +848,7 @@
             <a href="#" onclick="showSection('clips')" id="nav-clips">Clips</a>
             <a href="#" onclick="showSection('community')" id="nav-community">Community</a>
             <a href="#" onclick="showSection('betting')" id="nav-betting">Predictions</a>
-            <a href="#" onclick="showSection('marketplace')" id="nav-marketplace">Marketplace</a>
+            <a href="#" onclick="showSection('marketplace')" id="nav-marketplace">Trades</a>
             <a href="#" onclick="showSection('gold-transfer')" id="nav-gold-transfer">Trade Hub</a>
             <a href="#" onclick="showSection('chat')" id="nav-chat">Chat</a>
             <a href="#" onclick="showSection('leaderboard')" id="nav-leaderboard">Ranks</a>
@@ -1220,37 +1220,39 @@
     </button>
 
     <div class="section" id="marketplace" style="display: none;">
-        <div class="info-banner"><strong>Marketplace</strong> — Buy and sell in-game items, skins, game accounts, and gift cards across CS2, Roblox, Fortnite, PUBG Mobile, Free Fire, Valorant, Call of Duty, and more. All trades are escrow-protected. Filter by game or token type. List your own items for sale.</div>
-        <h2 class="section-title">Marketplace</h2>
+        <div class="info-banner"><strong>Trade Reports</strong> — All trades across PixelPulse: CS2 skins, game accounts, gift card swaps/sales, token swaps, and Standoff2 gold sends. Every trade is P2P escrow-protected with a 5% service fee. Both parties confirm when satisfied — nobody leaves until everyone is happy.</div>
+        <h2 class="section-title">Trade Reports</h2>
+
+        <div id="tradeStats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px;"></div>
+
         <div style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-            <button class="btn btn-primary" onclick="showListSkinModal()">List Item</button>
+            <button class="btn btn-primary" onclick="showListSkinModal()">List Skin</button>
+            <button class="btn" style="background: #2f2f2f; color: #fff; border: 1px solid #333;" onclick="showListP2PModal()">List Gift Card / Account</button>
             <div style="flex: 1; min-width: 200px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-                <select id="skinFilterGame" onchange="loadSkins()" style="padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
-                    <option value="">All Games</option>
-                    <option value="CS2">CS2</option>
-                    <option value="Standoff2">Standoff 2</option>
-                    <option value="Roblox">Roblox</option>
-                    <option value="Fortnite">Fortnite</option>
-                    <option value="PUBG Mobile">PUBG Mobile</option>
-                    <option value="Free Fire">Free Fire</option>
-                    <option value="Valorant">Valorant</option>
-                    <option value="Call of Duty">Call of Duty</option>
-                    <option value="Genshin Impact">Genshin Impact</option>
-                    <option value="Clash of Clans">Clash of Clans</option>
+                <select id="tradeTabFilter" onchange="loadTradeReports()" style="padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                    <option value="all">All Trades</option>
+                    <option value="skin">Skin Trades</option>
+                    <option value="gift_card">Gift Cards</option>
+                    <option value="game_account">Game Accounts</option>
+                    <option value="token_swap">Token Swaps</option>
+                    <option value="completed">Completed</option>
+                    <option value="pending">In Progress</option>
+                    <option value="disputed">Disputed</option>
                 </select>
-                <select id="skinFilterToken" onchange="loadSkins()" style="padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
-                    <option value="">All Token Types</option>
+                <select id="tradeStatusFilter" onchange="loadTradeReports()" style="padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                    <option value="all">All Status</option>
+                    <option value="open">Open</option>
+                    <option value="pending">Pending</option>
+                    <option value="seller_sent">Seller Sent</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="disputed">Disputed</option>
                 </select>
-                <select id="skinFilterSort" onchange="loadSkins()" style="padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
-                    <option value="newest">Newest First</option>
-                    <option value="price-low">Price: Low to High</option>
-                    <option value="price-high">Price: High to Low</option>
-                </select>
-                <input type="text" id="skinFilterSearch" oninput="loadSkins()" placeholder="Search skin name..." style="flex: 1; min-width: 150px; padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
             </div>
         </div>
-        <div class="anime-grid" id="skinsGrid">
-            <div class="loading">Loading skins...</div>
+
+        <div id="tradeReportsGrid" style="display: flex; flex-direction: column; gap: 12px;">
+            <div class="loading">Loading trade reports...</div>
         </div>
     </div>
 
@@ -2291,7 +2293,7 @@
             } else if (section === 'betting') {
                 loadBettingMarkets();
             } else if (section === 'marketplace') {
-                loadSkins();
+                loadTradeReports();
             } else if (section === 'gold-transfer') {
                 loadGoldTransferWorkspace();
                 switchTradeHubTab('sendgold');
@@ -3050,6 +3052,220 @@
             } catch (error) {
                 console.error('Failed to load clips:', error);
                 document.getElementById('clipsGrid').innerHTML = '<div class="loading">Failed to load clips</div>';
+            }
+        }
+
+        async function loadTradeReports() {
+            const grid = document.getElementById('tradeReportsGrid');
+            const statsEl = document.getElementById('tradeStats');
+            grid.innerHTML = '<div class="loading">Loading trade reports...</div>';
+
+            const tabFilter = document.getElementById('tradeTabFilter')?.value || 'all';
+            const statusFilter = document.getElementById('tradeStatusFilter')?.value || 'all';
+
+            try {
+                let apiUrl = '/api/trades/all?limit=50';
+                if (tabFilter === 'completed' || tabFilter === 'pending' || tabFilter === 'disputed') {
+                    apiUrl = `/api/trades/all?status=${tabFilter}&limit=50`;
+                } else if (tabFilter !== 'all') {
+                    apiUrl = `/api/trades/all?category=${tabFilter}&limit=50`;
+                }
+                if (statusFilter !== 'all' && !apiUrl.includes('status=')) {
+                    apiUrl += `&status=${statusFilter}`;
+                }
+
+                const [tradesRes, statsRes] = await Promise.all([
+                    fetch(apiUrl),
+                    fetch('/api/trades/stats')
+                ]);
+                const tradesData = await tradesRes.json();
+                const stats = await statsRes.json();
+
+                // Render stats
+                statsEl.innerHTML = `
+                    <div style="background: linear-gradient(135deg, #1a2318, #171717); border: 1px solid #2d5438; border-radius: 10px; padding: 14px;">
+                        <div style="font-size: 11px; color: #8cdb9a; font-weight: 700; letter-spacing: 0.08em;">COMPLETED</div>
+                        <div style="font-size: 24px; font-weight: 700; color: #fff;">${stats.completed.total}</div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #1a1a2e, #171717); border: 1px solid #2a2a4a; border-radius: 10px; padding: 14px;">
+                        <div style="font-size: 11px; color: #7a8cff; font-weight: 700; letter-spacing: 0.08em;">ACTIVE</div>
+                        <div style="font-size: 24px; font-weight: 700; color: #fff;">${stats.active.total}</div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #2e1a1a, #171717); border: 1px solid #4a2a2a; border-radius: 10px; padding: 14px;">
+                        <div style="font-size: 11px; color: #ff7a7a; font-weight: 700; letter-spacing: 0.08em;">OPEN LISTINGS</div>
+                        <div style="font-size: 24px; font-weight: 700; color: #fff;">${stats.open_listings.total}</div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #2e2a1a, #171717); border: 1px solid #4a402a; border-radius: 10px; padding: 14px;">
+                        <div style="font-size: 11px; color: #ffc97a; font-weight: 700; letter-spacing: 0.08em;">FEES COLLECTED</div>
+                        <div style="font-size: 24px; font-weight: 700; color: #fff;">${stats.volume.fees_collected?.toFixed(2) || '0.00'}</div>
+                    </div>
+                `;
+
+                // Render trades
+                const trades = tradesData.trades || [];
+                if (trades.length === 0) {
+                    grid.innerHTML = '<div style="text-align:center; padding:40px; color:#999;">No trades found. Be the first to list an item!</div>';
+                    return;
+                }
+                grid.innerHTML = trades.map(t => renderTradeCard(t)).join('');
+            } catch (err) {
+                grid.innerHTML = '<div style="text-align:center; padding:20px; color:#e50914;">Failed to load trade reports. Try refreshing.</div>';
+            }
+        }
+
+        function renderTradeCard(trade) {
+            const typeIcons = { skin: '🔫', gift_card: '🎁', game_account: '🎮', token_swap: '🔄', gold_send: '🪙' };
+            const typeLabels = { skin: 'SKIN', gift_card: 'GIFT CARD', game_account: 'GAME ACCOUNT', token_swap: 'TOKEN SWAP', gold_send: 'GOLD SEND' };
+            const statusColors = {
+                open: '#4caf50', pending: '#ff9800', seller_sent: '#2196f3',
+                completed: '#4caf50', cancelled: '#f44336', disputed: '#e50914'
+            };
+            const statusLabels = {
+                open: 'OPEN', pending: 'IN PROGRESS', seller_sent: 'SELLER SENT',
+                completed: 'COMPLETED', cancelled: 'CANCELLED', disputed: 'DISPUTED'
+            };
+
+            const icon = typeIcons[trade.trade_type] || '📌';
+            const typeLabel = typeLabels[trade.trade_type] || trade.trade_type?.toUpperCase();
+            const status = trade.status || 'unknown';
+            const statusColor = statusColors[status] || '#888';
+            const statusLabel = statusLabels[status] || status.toUpperCase();
+
+            let priceDisplay = '';
+            if (trade.trade_type === 'skin') {
+                priceDisplay = trade.token_type === 'btc'
+                    ? `${parseFloat(trade.price_tokens).toFixed(8)} BTC`
+                    : `${trade.price_tokens} ${trade.token_type || ''} tokens`;
+            } else if (trade.trade_type === 'token_swap') {
+                priceDisplay = `${trade.offer_amount} ${trade.offer_token_type} → ${trade.want_amount} ${trade.want_token_type}`;
+            } else {
+                priceDisplay = `${trade.price_amount} ${trade.price_currency || 'USD'}`;
+            }
+
+            const date = new Date(trade.created_at).toLocaleDateString();
+            const feeInfo = trade.fee_percent ? ` | Fee: ${trade.fee_percent}%` : '';
+            const seller = trade.seller_name || 'Unknown';
+            const buyer = trade.buyer_name || '—';
+
+            let actions = '';
+            if (status === 'open' && trade.trade_type !== 'skin' && trade.trade_type !== 'token_swap') {
+                actions = `<button class="btn" style="background:#e50914;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;" onclick="purchaseP2PTrade(${trade.id})">Buy / Initiate</button>`;
+            } else if (status === 'open' && trade.trade_type === 'skin') {
+                actions = `<button class="btn" style="background:#e50914;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;" onclick="purchaseSkin(${trade.id})">Buy Skin</button>`;
+            }
+
+            return `
+                <div style="background: linear-gradient(135deg, #161616, #1a1a1a); border: 1px solid #2a2a2a; border-radius: 10px; padding: 16px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                    <div style="font-size: 28px;">${icon}</div>
+                    <div style="flex: 1; min-width: 200px;">
+                        <div style="font-size: 15px; font-weight: 600; margin-bottom: 4px;">${trade.item_title || 'Untitled'}</div>
+                        <div style="font-size: 12px; color: #aaa;">
+                            <span style="color: #e50914; font-weight: 600;">${typeLabel}</span>
+                            ${trade.game_type ? ` | Game: ${trade.game_type}` : ''}
+                            | Seller: ${seller} | Buyer: ${buyer}
+                            | ${date}${feeInfo}
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">${priceDisplay}</div>
+                        <div style="font-size: 11px; font-weight: 700; color: ${statusColor}; margin-bottom: 6px;">${statusLabel}</div>
+                        ${actions}
+                    </div>
+                </div>
+            `;
+        }
+
+        async function purchaseP2PTrade(tradeId) {
+            if (!sessionToken) { alert('Please login to initiate a trade'); return; }
+            if (!confirm('Initiate this trade? You will enter a P2P escrow flow with the seller.')) return;
+            try {
+                const res = await fetch(`/api/p2p-trades/${tradeId}/purchase`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    alert(data.message + '\n\n' + (data.instructions || ''));
+                    loadTradeReports();
+                } else {
+                    alert(data.error || 'Failed to initiate trade');
+                }
+            } catch (err) {
+                alert('Error initiating trade');
+            }
+        }
+
+        async function purchaseSkin(skinId) {
+            if (!sessionToken) { alert('Please login to purchase'); return; }
+            if (!confirm('Purchase this skin through escrow? Your payment will be held until you confirm receipt.')) return;
+            try {
+                const res = await fetch(`/api/skins/${skinId}/purchase`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    alert(data.message + '\n\n' + (data.instructions || ''));
+                    loadTradeReports();
+                } else {
+                    alert(data.error || 'Failed to purchase');
+                }
+            } catch (err) {
+                alert('Error purchasing skin');
+            }
+        }
+
+        function showListP2PModal() {
+            if (!sessionToken) { alert('Please login to list a trade'); return; }
+
+            const category = prompt('What are you listing?\n1. Gift Card\n2. Game Account\n3. Token Swap\n4. Gold Send\n\nEnter 1-4:');
+            const categoryMap = { '1': 'gift_card', '2': 'game_account', '3': 'token_swap', '4': 'gold_send' };
+            const tradeCategory = categoryMap[category];
+            if (!tradeCategory) { if (category) alert('Invalid choice'); return; }
+
+            const listingType = prompt('Sale or Swap?\n1. Sale (sell for payment)\n2. Swap (exchange for something)\n\nEnter 1 or 2:');
+            const typeMap = { '1': 'sale', '2': 'swap' };
+            const lt = typeMap[listingType];
+            if (!lt) { if (listingType) alert('Invalid choice'); return; }
+
+            const title = prompt('Title (e.g. "Steam $50 Gift Card" or "Valorant Account - Diamond Rank"):');
+            if (!title) return;
+
+            const description = prompt('Description (details about the item/account/card):') || '';
+            const gameType = prompt('Game (e.g. CS2, Roblox, Fortnite, Free Fire, or leave blank for gift cards):') || '';
+            const priceAmount = prompt('Price amount (e.g. 50):');
+            if (!priceAmount || parseFloat(priceAmount) <= 0) { alert('Invalid price'); return; }
+            const priceCurrency = prompt('Currency (USD, EUR, GBP, ZAR, BTC):', 'USD') || 'USD';
+            const paymentMethods = prompt('Accepted payment methods (e.g. BTC, PayPal, Bank Transfer):', 'BTC, PayPal') || 'BTC, PayPal';
+
+            submitP2PListing(tradeCategory, lt, title, description, gameType, parseFloat(priceAmount), priceCurrency, paymentMethods);
+        }
+
+        async function submitP2PListing(category, listingType, title, description, gameType, priceAmount, priceCurrency, paymentMethods) {
+            try {
+                const res = await fetch('/api/p2p-trades/list', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        trade_category: category,
+                        listing_type: listingType,
+                        title,
+                        description,
+                        game_type: gameType,
+                        price_amount: priceAmount,
+                        price_currency: priceCurrency,
+                        payment_methods: paymentMethods
+                    })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    alert(`Listing created! 5% service fee applies on completion.\nTrade ID: ${data.id}`);
+                    loadTradeReports();
+                } else {
+                    alert(data.error || 'Failed to create listing');
+                }
+            } catch (err) {
+                alert('Error creating listing');
             }
         }
 
