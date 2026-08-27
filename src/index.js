@@ -6369,6 +6369,114 @@ async function postDiscussionPrompt() {
   }
 }
 
+// --- Auto-update: Daily interactive poll with follow-up discussion ---
+const dailyPolls = [
+  {
+    question: '🎮 Which game would you most likely trade items on?',
+    options: ['CS2', 'Roblox', 'Fortnite', 'Free Fire', 'Valorant'],
+    followUp: 'Why did you pick that game? Is it because you have items to trade, or because the trading community is better there? 👇'
+  },
+  {
+    question: '📺 Best anime of 2025 so far?',
+    options: ['Solo Leveling S2', 'Jujutsu Kaisen S2', 'One Piece', 'Frieren', 'Dandadan'],
+    followUp: 'What makes your pick the best? Animation, story, or characters? Drop your reasoning below! 🎬'
+  },
+  {
+    question: '💰 What\'s the most you\'d spend on a single in-game item?',
+    options: ['Under $5', '$5-$20', '$20-$50', '$50-$100', 'Over $100'],
+    followUp: 'What item did you (or would you) buy at that price? Was it worth it? 💸'
+  },
+  {
+    question: '🏆 Best mobile game for trading?',
+    options: ['Free Fire', 'PUBG Mobile', 'Clash of Clans', 'Genshin Impact', 'Roblox'],
+    followUp: 'Have you ever traded in that game? How was the experience? Share below! 📱'
+  },
+  {
+    question: '⚔️ CS2 vs Valorant — which has better skins?',
+    options: ['CS2 all day', 'Valorant for sure', 'Both are equal', 'Don\'t care about skins'],
+    followUp: 'What\'s your favorite skin from the game you picked? Drop a name! 🔫'
+  },
+  {
+    question: '🤔 Would you buy a game account from another player?',
+    options: ['Yes, if it\'s safe', 'Yes, but only from friends', 'No, too risky', 'Never thought about it'],
+    followUp: 'What would make you trust an account trade? Escrow? Verification? Tell us below! 🔐'
+  },
+  {
+    question: '🎬 Best anime villain of all time?',
+    options: ['Sukuna (JJK)', 'Muzan (Demon Slayer)', 'Aizen (Bleach)', 'Shigaraki (MHA)', 'Hisoka (HxH)'],
+    followUp: 'What makes them the best villain? Power, personality, or backstory? Discuss! 😈'
+  },
+  {
+    question: '💎 What\'s more important in a game marketplace?',
+    options: ['Security/Escrow', 'Low fees', 'Wide game support', 'Fast transactions', 'Active community'],
+    followUp: 'Have you used PixelPulse yet? What\'s your experience been like? Let us know! 🏪'
+  },
+  {
+    question: '🎮 Which platform do you game on most?',
+    options: ['PC', 'Mobile', 'PlayStation', 'Xbox', 'Nintendo Switch'],
+    followUp: 'Do you trade items on that platform? What\'s the trading scene like? 🕹️'
+  },
+  {
+    question: '🔥 Most overrated game right now?',
+    options: ['Fortnite', 'Genshin Impact', 'Roblox', 'Valorant', 'None of these'],
+    followUp: 'Why do you think it\'s overrated? Or did you vote "none" — which game IS actually worth the hype? 👀'
+  },
+  {
+    question: '📺 Which anime should get a game next?',
+    options: ['Chainsaw Man', 'Spy x Family', 'Demon Slayer', 'Jujutsu Kaisen', 'Frieren'],
+    followUp: 'What genre would the game be? RPG? Fighting? Gacha? Pitch your idea below! 🎮'
+  },
+  {
+    question: '💸 Have you ever been scammed in a game trade?',
+    options: ['Yes, lost money', 'Yes, lost items', 'Almost, but escaped', 'Never', 'What\'s trading?'],
+    followUp: 'If you\'ve been scammed, what happened? (No names!) If not, how do you stay safe? ⚠️'
+  },
+  {
+    question: '🥊 Free Fire vs PUBG Mobile — which is better?',
+    options: ['Free Fire', 'PUBG Mobile', 'Both are equal', 'Neither, I prefer CoD'],
+    followUp: 'What makes your pick better? Gameplay, community, or events? Argue your case! 📱'
+  },
+  {
+    question: '🎯 If you had 1000 Robux right now, what would you do?',
+    options: ['Buy a Limited', 'Trade for profit', 'Buy game passes', 'Save them', 'Convert to real money'],
+    followUp: 'Have you ever traded Robux on PixelPulse? How did it go? Share below! 💰'
+  },
+  {
+    question: '🌟 What keeps you coming back to a gaming community?',
+    options: ['The people', 'Trading opportunities', 'Clips & content', 'Events & giveaways', 'Quizzes & games'],
+    followUp: 'What would YOU like to see more of in our community? Be honest — we\'re listening! 📢'
+  }
+];
+
+async function postDailyPoll() {
+  try {
+    if (!TELEGRAM_CHANNEL_ID || !bot?.telegram) return;
+    const poll = dailyPolls[Math.floor(Math.random() * dailyPolls.length)];
+
+    // Send the poll
+    await bot.telegram.sendPoll(
+      TELEGRAM_CHANNEL_ID,
+      poll.question,
+      poll.options,
+      { is_anonymous: false }
+    );
+
+    // Send follow-up discussion message 2 seconds later
+    setTimeout(async () => {
+      try {
+        const msg = `💬 Tell us more!\n\n${poll.followUp}\n\n👇 Reply below — we read everything!\n🎮 https://pixelpulse.zentriva-clubsync.online`;
+        await bot.telegram.sendMessage(TELEGRAM_CHANNEL_ID, msg);
+      } catch (e) {
+        console.error('Error posting poll follow-up:', e.message);
+      }
+    }, 2000);
+
+    console.log('Daily poll posted to Telegram');
+  } catch (err) {
+    console.error('Error posting daily poll:', err.message);
+  }
+}
+
 // --- Auto-update: New clip posted on webapp → notify Telegram ---
 async function notifyNewClip(clipTitle, gameType, username, videoUrl) {
   try {
@@ -6480,16 +6588,27 @@ function scheduleChannelUpdates() {
     setInterval(postQuizOfTheDay, 24 * 60 * 60 * 1000); // Daily
   }, msUntil12pm);
   
-  // Discussion prompt — every day at 4pm
-  const next4pm = new Date(now);
-  next4pm.setHours(16, 0, 0, 0);
-  if (next4pm < now) next4pm.setDate(next4pm.getDate() + 1);
-  const msUntil4pm = next4pm - now;
+  // Daily interactive poll with follow-up discussion — every day at 6pm
+  const next6pm = new Date(now);
+  next6pm.setHours(18, 0, 0, 0);
+  if (next6pm < now) next6pm.setDate(next6pm.getDate() + 1);
+  const msUntil6pm = next6pm - now;
+  
+  setTimeout(() => {
+    postDailyPoll();
+    setInterval(postDailyPoll, 24 * 60 * 60 * 1000); // Daily
+  }, msUntil6pm);
+  
+  // Discussion prompt — every day at 9pm (evening engagement)
+  const next9pm = new Date(now);
+  next9pm.setHours(21, 0, 0, 0);
+  if (next9pm < now) next9pm.setDate(next9pm.getDate() + 1);
+  const msUntil9pm = next9pm - now;
   
   setTimeout(() => {
     postDiscussionPrompt();
     setInterval(postDiscussionPrompt, 24 * 60 * 60 * 1000); // Daily
-  }, msUntil4pm);
+  }, msUntil9pm);
 }
 
 // Start Telegram bot
