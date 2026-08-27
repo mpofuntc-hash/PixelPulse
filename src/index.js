@@ -1674,13 +1674,13 @@ async function handleDiscordSlashCommand(interaction) {
     switch (interaction.commandName) {
       case 'start': {
         const embed = new EmbedBuilder()
-          .setTitle('🎮 PixelPulse - Gaming Clips & Predictions')
+          .setTitle('🎮 PixelPulse - Gaming Marketplace & Community')
           .setColor(0xe50914)
           .setDescription([
-            '🎬 **CLIPS** — Share CS2 & Standoff 2 highlights, get upvoted, win weekly prizes',
-            '🔮 **PREDICTIONS** — Predict match outcomes, anime events, win BTC prizes',
-            '💼 **MARKETPLACE** — Buy & sell skins with bot middleman escrow',
-            '🔄 **TRADE HUB** — Trade game tokens across 8 platforms (Steam, Standoff2, Roblox, Fortnite, PUBG Mobile, Valorant, Genshin, Free Fire)',
+            '🎬 **CLIPS** — Share highlights from any game, get upvoted, win weekly prizes',
+            '💼 **MARKETPLACE** — Buy & sell skins, game accounts, and gift cards — escrow protected',
+            '🔄 **TRADE HUB** — Swap tokens across 8+ platforms (Steam, Roblox, Fortnite, PUBG Mobile, Valorant, Genshin, Free Fire, Call of Duty)',
+            '🔮 **PREDICTIONS** — Predict esports matches and anime events, win BTC prizes',
             '',
             '🔗 **Start now:** https://pixelpulse.zentriva-clubsync.online'
           ].join('\n'));
@@ -2141,23 +2141,27 @@ async function updateITTicketStatus(ticketId, status, assignedTo = null) {
 // Bot commands - Gaming Focus
 bot.command('start', (ctx) => {
   const welcomeMessage = `
-🎮 Welcome to PixelPulse - Gaming Clips & Predictions!
+🎮 Welcome to PixelPulse - Gaming Marketplace & Community!
 
 🎬 CLIPS
-• Share your CS2 & Standoff 2 highlights
+• Share highlights from any game — CS2, Roblox, Fortnite, Valorant, and more
 • Get upvoted to win weekly prizes
 • Build your streak for bonus rewards
 
+💼 MARKETPLACE
+• Buy & sell skins, game accounts, and gift cards
+• CS2, Roblox, Fortnite, PUBG Mobile, Free Fire, Valorant, Call of Duty, and more
+• Escrow-protected trades for safe transactions
+
+🔄 TRADE HUB
+• Swap game tokens across all supported platforms
+• Send Gold to other players directly
+• 8+ token types supported
+
 🔮 PREDICTION MARKETS
-• Predict CS2 & Standoff 2 match outcomes
-• Predict anime release dates
+• Predict esports match outcomes and anime events
 • Win BTC prizes
 • 3% flat fee on all predictions
-
-💼 SKIN MARKETPLACE
-• Buy & sell CS2 & Standoff 2 skins
-• Bot middleman for secure trades
-• Instant transactions
 
 🔗 Start now: https://pixelpulse.zentriva-clubsync.online
 

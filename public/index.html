@@ -1023,20 +1023,20 @@
         <div class="hero-content">
             <div class="hero-tagline">⚔️ Welcome to the Pixel Kingdom ⚔️</div>
             <h1 class="hero-title">PixelPulse</h1>
-            <p class="hero-description">Trade game skins, swap tokens, predict esports, and climb the ranks. Your one-stop gaming marketplace powered by crypto.</p>
+            <p class="hero-description">Trade skins, swap tokens, sell game accounts, exchange gift cards, predict esports, and climb the ranks. Your all-in-one gaming marketplace — CS2, Roblox, Fortnite, PUBG Mobile, Free Fire, Valorant, Call of Duty, and more.</p>
             <div class="hero-buttons">
                 <button class="btn btn-primary" onclick="showAuthModal(); showRegisterForm();">🚀 Join Free</button>
-                <button class="btn btn-secondary" onclick="showSection('marketplace')">⚔️ Browse Skins</button>
-                <button class="btn btn-secondary" onclick="showSection('betting')">🎯 Try Predictions</button>
+                <button class="btn btn-secondary" onclick="showSection('marketplace')">Browse Marketplace</button>
+                <button class="btn btn-secondary" onclick="showSection('gold-transfer')">Swap Tokens</button>
             </div>
             <div class="hero-stats">
                 <div class="hero-stat">
-                    <div class="hero-stat-num">8+</div>
-                    <div class="hero-stat-label">Game Tokens</div>
+                    <div class="hero-stat-num">10+</div>
+                    <div class="hero-stat-label">Games Supported</div>
                 </div>
                 <div class="hero-stat">
-                    <div class="hero-stat-num">CS2</div>
-                    <div class="hero-stat-label">Skin Trading</div>
+                    <div class="hero-stat-num">P2P</div>
+                    <div class="hero-stat-label">Skins, Accounts & Gift Cards</div>
                 </div>
                 <div class="hero-stat">
                     <div class="hero-stat-num">BTC</div>
@@ -1063,12 +1063,12 @@
             <div class="how-card">
                 <div class="how-icon">💰</div>
                 <div class="how-title">2. Deposit Funds</div>
-                <div class="how-desc">Deposit BTC for CS2 skins or game tokens for other items. Link your Steam or Standoff 2 account.</div>
+                <div class="how-desc">Deposit BTC or game tokens. Link your Steam, Roblox, or game accounts. Trade skins, accounts, and gift cards across all major games.</div>
             </div>
             <div class="how-card">
                 <div class="how-icon">⚔️</div>
                 <div class="how-title">3. Trade & Buy</div>
-                <div class="how-desc">Browse the marketplace for skins, swap tokens with other players, or predict esports outcomes.</div>
+                <div class="how-desc">Browse the marketplace for skins, game accounts, and gift cards. Swap tokens with other players, or predict esports outcomes. All trades are escrow-protected.</div>
             </div>
             <div class="how-card">
                 <div class="how-icon">🏆</div>
@@ -1080,7 +1080,7 @@
 
     <div class="section" id="clips" style="display: none;">
         <h2 class="section-title">Gaming Clips</h2>
-        <div class="info-banner"><strong>Gaming Clips</strong> — Share your best CS2 & Standoff 2 moments. Upload clips, view others' highlights, and build your reputation in the community.</div>
+        <div class="info-banner"><strong>Gaming Clips</strong> — Share your best moments from any game — CS2, Roblox, Fortnite, Valorant, PUBG Mobile, Free Fire, Call of Duty, and more. Upload clips, view others' highlights, and build your reputation in the community.</div>
         <div style="margin-bottom: 20px;">
             <button class="btn btn-primary" onclick="showUploadModal()">Upload Clip</button>
         </div>
@@ -1208,15 +1208,23 @@
     </button>
 
     <div class="section" id="marketplace" style="display: none;">
-        <div class="info-banner"><strong>Skin Marketplace</strong> — Buy and sell CS2 skins (BTC) and Standoff 2 skins (tokens). All trades are escrow-protected. Filter by game, token type, or price. List your own skins for sale.</div>
-        <h2 class="section-title">Skin Marketplace</h2>
+        <div class="info-banner"><strong>Marketplace</strong> — Buy and sell in-game items, skins, game accounts, and gift cards across CS2, Roblox, Fortnite, PUBG Mobile, Free Fire, Valorant, Call of Duty, and more. All trades are escrow-protected. Filter by game or token type. List your own items for sale.</div>
+        <h2 class="section-title">Marketplace</h2>
         <div style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-            <button class="btn btn-primary" onclick="showListSkinModal()">List Skin</button>
+            <button class="btn btn-primary" onclick="showListSkinModal()">List Item</button>
             <div style="flex: 1; min-width: 200px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
                 <select id="skinFilterGame" onchange="loadSkins()" style="padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
                     <option value="">All Games</option>
                     <option value="CS2">CS2</option>
                     <option value="Standoff2">Standoff 2</option>
+                    <option value="Roblox">Roblox</option>
+                    <option value="Fortnite">Fortnite</option>
+                    <option value="PUBG Mobile">PUBG Mobile</option>
+                    <option value="Free Fire">Free Fire</option>
+                    <option value="Valorant">Valorant</option>
+                    <option value="Call of Duty">Call of Duty</option>
+                    <option value="Genshin Impact">Genshin Impact</option>
+                    <option value="Clash of Clans">Clash of Clans</option>
                 </select>
                 <select id="skinFilterToken" onchange="loadSkins()" style="padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
                     <option value="">All Token Types</option>
@@ -1414,7 +1422,7 @@
 
     <!-- Profile Section with Avatar & Banner System -->
     <div class="section" id="gold-transfer" style="display: none; max-width: 980px;">
-        <div class="info-banner"><strong>Trade Hub</strong> — Send Standoff 2 Gold to other players or trade game tokens across all supported platforms. Create listings, browse open trades, and swap tokens securely.</div>
+        <div class="info-banner"><strong>Trade Hub</strong> — Send Gold to other players or swap game tokens across all supported platforms — Steam, Roblox, Fortnite, PUBG Mobile, Free Fire, Valorant, Genshin Impact, and more. Create listings, browse open trades, and exchange tokens securely.</div>
         <h2 class="section-title">Trade Hub</h2>
 
         <!-- Sub-tab buttons -->
@@ -3113,7 +3121,7 @@
             if (!title) return;
             
             const description = prompt('Description:');
-            const gameType = prompt('Game type (CS2 or Standoff2):');
+            const gameType = prompt('Game type (e.g. CS2, Standoff2, Roblox, Fortnite, PUBG Mobile, Free Fire, Valorant, Call of Duty, Genshin Impact):');
             const videoUrl = prompt('Video URL (YouTube or Twitch):');
             
             fetch('/api/clips', {
@@ -3144,14 +3152,14 @@
             if (!skinName) return;
             
             const weapon = prompt('Weapon:');
-            const gameType = prompt('Game type (e.g. CS2, Standoff2, Valorant, PUBG Mobile, Fortnite, Roblox, Genshin Impact, Free Fire):');
+            const gameType = prompt('Game type (e.g. CS2, Standoff2, Roblox, Fortnite, PUBG Mobile, Free Fire, Valorant, Call of Duty, Genshin Impact, Clash of Clans):');
             if (!gameType) return;
             const rarity = prompt('Rarity:');
 
-            const isCS2 = gameType === 'CS2';
+            const isFiatPriced = ['CS2', 'Rust', 'Dota 2'].includes(gameType);
             let payload = { skin_name: skinName, weapon, game_type: gameType, rarity, float_value: 0, image_url: '' };
 
-            if (isCS2) {
+            if (isFiatPriced) {
                 // CS2 skins are priced in fiat
                 const fiatCurrency = prompt('Currency (USD, EUR, GBP, ZAR):', 'USD');
                 if (!fiatCurrency) return;
