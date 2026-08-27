@@ -1,5 +1,5 @@
-const Database = require('better-sqlite3');
-const db = new Database('./data/pixelpulse.db');
+const sqlite3 = require('sqlite3').verbose();
+const db = new sqlite3.Database('./data/pixelpulse.db');
 
 // Sample quizzes for anime engagement
 const quizzes = [
@@ -244,25 +244,20 @@ const quizzes = [
 ];
 
 // Insert quizzes
-const insertQuiz = db.prepare(`
-  INSERT INTO quizzes (anime_id, title, description, questions, reward_points, difficulty)
-  VALUES (?, ?, ?, ?, ?, ?)
-`);
+const insertSql = `INSERT INTO quizzes (anime_id, title, description, questions, reward_points, difficulty) VALUES (?, ?, ?, ?, ?, ?)`;
 
+let completed = 0;
 quizzes.forEach(quiz => {
-  try {
-    insertQuiz.run(
-      quiz.anime_id,
-      quiz.title,
-      quiz.description,
-      quiz.questions,
-      quiz.reward_points,
-      quiz.difficulty
-    );
-    console.log(`Inserted quiz: ${quiz.title}`);
-  } catch (error) {
-    console.error(`Error inserting quiz ${quiz.title}:`, error.message);
-  }
+  db.run(insertSql, [quiz.anime_id, quiz.title, quiz.description, quiz.questions, quiz.reward_points, quiz.difficulty], function(err) {
+    if (err) {
+      console.error(`Error inserting quiz ${quiz.title}:`, err.message);
+    } else {
+      console.log(`Inserted quiz: ${quiz.title}`);
+    }
+    completed++;
+    if (completed === quizzes.length) {
+      console.log('Quiz seeding complete!');
+      db.close();
+    }
+  });
 });
-
-console.log('Quiz seeding complete!');
