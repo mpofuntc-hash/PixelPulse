@@ -852,12 +852,12 @@
             <a href="#" onclick="showSection('gold-transfer')" id="nav-gold-transfer">Trade Hub</a>
             <a href="#" onclick="showSection('chat')" id="nav-chat">Chat</a>
             <a href="#" onclick="showSection('leaderboard')" id="nav-leaderboard">Ranks</a>
-            <a href="#" onclick="showSection('wallet')" id="nav-wallet">Wallet</a>
-            <a href="#" onclick="showSection('profile')" id="nav-profile" style="display:none; display: inline-flex; align-items: center; gap: 6px;">
+            <a href="#" onclick="showSection('wallet')" id="nav-wallet" style="display:none;">Wallet</a>
+            <a href="#" onclick="showSection('profile')" id="nav-profile" style="display:none;">
                 <span id="nav-avatar" style="width: 24px; height: 24px; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; background: #0f0f0f; border: 1px solid #444;"></span>
                 Profile
             </a>
-            <a href="#" onclick="showAuthModal()" id="nav-auth">Login</a>
+            <a href="#" onclick="showAuthModal()" id="nav-auth" style="background: #e50914; color: #fff; padding: 6px 18px; border-radius: 6px; font-weight: 600;">Login</a>
         </div>
         <div class="search-container">
             <input type="text" class="search-input" placeholder="Search clips..." id="searchInput">
@@ -1671,7 +1671,12 @@
                 currentUser = data.user;
                 localStorage.setItem('sessionToken', sessionToken);
                 document.getElementById('nav-auth').textContent = 'Logout';
+                document.getElementById('nav-auth').style.background = 'transparent';
+                document.getElementById('nav-auth').style.color = '#fff';
+                document.getElementById('nav-auth').style.padding = '0';
+                document.getElementById('nav-auth').style.fontWeight = 'normal';
                 document.getElementById('nav-profile').style.display = 'inline-flex';
+                document.getElementById('nav-wallet').style.display = '';
                 document.getElementById('signupPrompt').style.display = 'none';
                 closeAuthModal();
                 loadWalletData();
@@ -1731,7 +1736,13 @@
             currentUser = null;
             localStorage.removeItem('sessionToken');
             document.getElementById('nav-auth').textContent = 'Login';
+            document.getElementById('nav-auth').style.background = '#e50914';
+            document.getElementById('nav-auth').style.color = '#fff';
+            document.getElementById('nav-auth').style.padding = '6px 18px';
+            document.getElementById('nav-auth').style.borderRadius = '6px';
+            document.getElementById('nav-auth').style.fontWeight = '600';
             document.getElementById('nav-profile').style.display = 'none';
+            document.getElementById('nav-wallet').style.display = 'none';
             document.getElementById('nav-avatar').innerHTML = '';
             document.getElementById('signupPrompt').style.display = 'flex';
         }
@@ -4661,8 +4672,16 @@
         // Restore session UI state
         if (sessionToken) {
             document.getElementById('nav-auth').textContent = 'Logout';
+            document.getElementById('nav-auth').style.background = 'transparent';
+            document.getElementById('nav-auth').style.color = '#fff';
+            document.getElementById('nav-auth').style.padding = '0';
+            document.getElementById('nav-auth').style.fontWeight = 'normal';
             document.getElementById('nav-profile').style.display = 'inline-flex';
+            document.getElementById('nav-wallet').style.display = '';
             loadNavAvatar();
+        } else {
+            document.getElementById('nav-wallet').style.display = 'none';
+            document.getElementById('nav-profile').style.display = 'none';
         }
 
         // Show signup prompt for non-logged-in users after 8 seconds
