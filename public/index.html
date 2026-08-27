@@ -1225,9 +1225,11 @@
 
         <div id="tradeStats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px;"></div>
 
+        <div style="margin-bottom: 15px; padding: 10px 14px; background: #1a1a1a; border: 1px solid #333; border-radius: 8px; font-size: 13px; color: #aaa;">
+            Want to sell or swap? Go to <a href="#" onclick="showSection('gold-transfer'); switchTradeHubTab('listskin');" style="color: #e50914; font-weight: 600;">Trade Hub</a> to create a listing.
+        </div>
+
         <div style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-            <button class="btn btn-primary" onclick="showListSkinModal()">List Skin</button>
-            <button class="btn" style="background: #2f2f2f; color: #fff; border: 1px solid #333;" onclick="showListP2PModal()">List Gift Card / Account</button>
             <div style="flex: 1; min-width: 200px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
                 <select id="tradeTabFilter" onchange="loadTradeReports()" style="padding: 8px 12px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
                     <option value="all">All Trades</option>
@@ -1436,13 +1438,15 @@
 
     <!-- Profile Section with Avatar & Banner System -->
     <div class="section" id="gold-transfer" style="display: none; max-width: 980px;">
-        <div class="info-banner"><strong>Trade Hub</strong> — Send Gold to other players or swap game tokens across all supported platforms — Steam, Roblox, Fortnite, PUBG Mobile, Free Fire, Valorant, Genshin Impact, and more. Create listings, browse open trades, and exchange tokens securely.</div>
-        <h2 class="section-title">Trade Hub</h2>
+        <div class="info-banner"><strong>Trade Hub</strong> — Create your listings here: send Standoff2 gold, swap game tokens, list skins for sale, sell gift cards, or list game accounts for crypto. Everything you list here appears in the <strong>Trades</strong> section where other users can browse and buy.</div>
+        <h2 class="section-title">Trade Hub — Create Listings</h2>
 
         <!-- Sub-tab buttons -->
         <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 24px; flex-wrap: wrap;">
             <button class="btn btn-primary" id="tabBtn-sendgold" onclick="switchTradeHubTab('sendgold')" style="min-width: 140px;">⚔️ Send Gold</button>
-            <button class="btn btn-secondary" id="tabBtn-tradetokens" onclick="switchTradeHubTab('tradetokens')" style="min-width: 140px;">🔄 Trade Tokens</button>
+            <button class="btn btn-secondary" id="tabBtn-tradetokens" onclick="switchTradeHubTab('tradetokens')" style="min-width: 140px;">🔄 Swap Tokens</button>
+            <button class="btn btn-secondary" id="tabBtn-listskin" onclick="switchTradeHubTab('listskin')" style="min-width: 140px;">🔫 List Skin</button>
+            <button class="btn btn-secondary" id="tabBtn-listp2p" onclick="switchTradeHubTab('listp2p')" style="min-width: 140px;">🎁 Gift Card / Account</button>
         </div>
 
         <!-- Sub-tab: Send Gold -->
@@ -1476,6 +1480,28 @@
             <div style="margin-top:20px; background:#1a1a1a; border:1px solid #333; border-radius:10px; padding:20px;">
                 <h3 style="margin:0 0 12px;">Your transfer activity</h3>
                 <div id="goldTransferList" style="color:#999;">Log in to view your transfer history.</div>
+            </div>
+        </div>
+
+        <!-- Sub-tab: List Skin -->
+        <div id="tradehub-listskin" style="display: none;">
+            <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 10px; padding: 20px; max-width: 600px; margin: 0 auto;">
+                <h3 style="margin: 0 0 14px;">List a Skin for Sale</h3>
+                <div style="margin-bottom: 15px; padding: 12px; background: #2f2f2f; border-radius: 4px; font-size: 13px; color: #999;">
+                    List your in-game skin for sale. CS2 skins are priced in fiat (USD, EUR, GBP, ZAR). Other game skins are priced in game tokens. Your listing appears in the Trades section for buyers.
+                </div>
+                <button class="btn btn-primary" onclick="showListSkinModal()" style="width: 100%; padding: 14px; font-size: 16px;">+ Create Skin Listing</button>
+            </div>
+        </div>
+
+        <!-- Sub-tab: List Gift Card / Game Account -->
+        <div id="tradehub-listp2p" style="display: none;">
+            <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 10px; padding: 20px; max-width: 600px; margin: 0 auto;">
+                <h3 style="margin: 0 0 14px;">List a Gift Card or Game Account</h3>
+                <div style="margin-bottom: 15px; padding: 12px; background: #2f2f2f; border-radius: 4px; font-size: 13px; color: #999;">
+                    Sell gift cards (Steam, Google Play, PlayStation, etc.) or game accounts (Valorant, Fortnite, Roblox, etc.) for crypto or fiat. 5% service fee on completion. P2P escrow — both parties confirm when satisfied.
+                </div>
+                <button class="btn btn-primary" onclick="showListP2PModal()" style="width: 100%; padding: 14px; font-size: 16px;">+ Create Gift Card / Account Listing</button>
             </div>
         </div>
 
@@ -2320,7 +2346,7 @@
         }
 
         function switchTradeHubTab(tab) {
-            const tabs = ['sendgold', 'tradetokens'];
+            const tabs = ['sendgold', 'tradetokens', 'listskin', 'listp2p'];
             tabs.forEach(t => {
                 const panel = document.getElementById('tradehub-' + t);
                 const btn = document.getElementById('tabBtn-' + t);
