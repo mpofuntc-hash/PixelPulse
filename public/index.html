@@ -864,9 +864,9 @@
             top: 0; left: 0; right: 0; bottom: 0;
             background: repeating-linear-gradient(0deg, rgba(0,0,0,0.15), rgba(0,0,0,0.15) 1px, transparent 1px, transparent 3px);
             pointer-events: none;
-            z-index: 1;
+            z-index: 0;
         }
-        .arcade-game > * { position: relative; z-index: 2; }
+        .arcade-game > * { position: relative; z-index: 1; }
         .arcade-game h3 {
             font-size: 14px;
             letter-spacing: 2px;
@@ -970,6 +970,20 @@
             opacity: 0.5;
             cursor: not-allowed;
         }
+        .arcade-btn:active:not(:disabled) {
+            transform: scale(0.97);
+            background: #e50914;
+        }
+        .arcade-btn-cashout:active:not(:disabled) {
+            transform: scale(0.97);
+            background: #4caf50;
+        }
+        .arcade-choice-btn:active {
+            transform: scale(0.95);
+        }
+        .arcade-tab:active {
+            transform: scale(0.95);
+        }
         .arcade-btn-cashout {
             border-color: #4caf50;
             background: #1b3a1b;
@@ -1013,6 +1027,7 @@
             background: #e50914;
             color: #fff;
             box-shadow: 0 0 10px rgba(229,9,20,0.5);
+            transform: scale(0.97);
         }
         .arcade-payout {
             margin-top: 12px;
@@ -5339,7 +5354,7 @@
                         btn.disabled = false; btn.textContent = 'FLIP COIN';
                     }
                 }, 100);
-            } catch(e) { alert('Error playing coinflip'); btn.disabled = false; btn.textContent = 'FLIP COIN'; resultEl.classList.remove('flipping'); }
+            } catch(e) { console.error('Coinflip error:', e); alert('Error playing coinflip: ' + (e.message || 'unknown')); btn.disabled = false; btn.textContent = 'FLIP COIN'; resultEl.classList.remove('flipping'); }
         }
 
         async function playSlots() {
@@ -5371,7 +5386,7 @@
                         }
                         document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
                         btn.disabled = false; btn.textContent = 'SPIN';
-                    }).catch(() => { alert('Error'); btn.disabled=false; btn.textContent='SPIN'; });
+                    }).catch((e) => { console.error('Slots error:', e); alert('Error: ' + (e.message || 'unknown')); btn.disabled=false; btn.textContent='SPIN'; });
                 }
             }, 80);
         }
@@ -5397,7 +5412,7 @@
 
                 crashState = { active: true, sessionId: data.sessionId, stake: data.stake, crashPoint: data.crashPoint, currentMult: 1.0, cashedOut: false, crashed: false, animInterval: null };
                 document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
-                gameArea.style.display = 'block';
+                gameArea.style.display = 'flex';
                 setupArea.style.display = 'none';
                 cashoutBtn.style.display = 'block';
                 document.getElementById('crashMultiplier').textContent = '1.00x';
@@ -5432,6 +5447,7 @@
                             gameArea.style.display = 'none';
                             setupArea.style.display = 'block';
                             startBtn.disabled = false;
+                            resultEl.textContent = '';
                         }, 3000);
                         return;
                     }
@@ -5444,7 +5460,7 @@
                     const thiefEmojis = ['🦹','🚶','🦹','🏃'];
                     document.getElementById('crashThief').textContent = thiefEmojis[steps % thiefEmojis.length];
                 }, 100);
-            } catch(e) { alert('Error starting crash'); startBtn.disabled = false; }
+            } catch(e) { console.error('Crash start error:', e); alert('Error starting crash: ' + (e.message || 'unknown')); startBtn.disabled = false; }
         }
 
         async function cashoutCrash() {
@@ -5473,8 +5489,9 @@
                     document.getElementById('crashGameArea').style.display = 'none';
                     document.getElementById('crashSetupArea').style.display = 'block';
                     document.getElementById('crashStartBtn').disabled = false;
+                    document.getElementById('crashResult').textContent = '';
                 }, 3000);
-            } catch(e) { alert('Error cashing out'); }
+            } catch(e) { console.error('Crash cashout error:', e); alert('Error cashing out: ' + (e.message || 'unknown')); }
         }
 
         async function loadArcadeWinners() {
