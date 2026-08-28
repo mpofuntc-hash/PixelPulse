@@ -8852,8 +8852,6 @@ function scheduleChannelUpdates() {
 }
 
 // Start Telegram bot
-console.log('Attempting to launch Telegram bot...');
-
 // Schedule channel updates before launch (launch promise only resolves on stop)
 scheduleChannelUpdates();
 
