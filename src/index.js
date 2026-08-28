@@ -6345,6 +6345,7 @@ const HOUSE_EDGE = 0.05;
 
 // API: Get user's USD balance for arcade
 app.get('/api/arcade/balance', authenticateRequest, async (req, res) => {
+  if (req.isAdmin) return res.json({ balance: 10000, currency: 'USD', min_stake: WEB_MIN_STAKE, admin_test: true });
   const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
   res.json({ balance: bal?.usd_balance || 0, currency: 'USD', min_stake: WEB_MIN_STAKE });
 });
@@ -6376,8 +6377,10 @@ app.post('/api/arcade/coinflip', authenticateRequest, async (req, res) => {
   const stakeAmount = parseFloat(stake);
   if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
 
+  const isAdmin = req.isAdmin;
   const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
-  if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+  const currentBalance = isAdmin ? 10000 : (bal?.usd_balance || 0);
+  if (!isAdmin && (!bal || bal.usd_balance < stakeAmount)) return res.status(400).json({ error: 'Insufficient USD balance' });
 
   const serverSeed = generateServerSeed();
   const cSeed = clientSeed || arcadeCrypto.randomBytes(8).toString('hex');
@@ -6388,13 +6391,16 @@ app.post('/api/arcade/coinflip', authenticateRequest, async (req, res) => {
   const multiplier = won ? (2 - HOUSE_EDGE * 2) : 0;
   const payout = won ? Math.floor(stakeAmount * multiplier * 100) / 100 : 0;
 
-  await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
-  if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+  if (!isAdmin) {
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
+    if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+  }
 
   await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'coinflip', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
-    [req.userId, stakeAmount, multiplier, payout, won ? 'won' : 'lost', JSON.stringify({ choice, result, roll: roll.toFixed(4) }), serverSeed, cSeed, nonce]);
+    [req.userId, stakeAmount, multiplier, payout, won ? 'won' : 'lost', JSON.stringify({ choice, result, roll: roll.toFixed(4), admin_test: isAdmin }), serverSeed, cSeed, nonce]);
 
-  res.json({ result, won, multiplier, payout, stake: stakeAmount, newBalance: (bal.usd_balance - stakeAmount + payout) });
+  const newBalance = isAdmin ? (currentBalance - stakeAmount + payout) : (bal.usd_balance - stakeAmount + payout);
+  res.json({ result, won, multiplier, payout, stake: stakeAmount, newBalance });
 });
 
 // ===== SLOTS (3-reel) =====
@@ -6406,8 +6412,10 @@ app.post('/api/arcade/slots', authenticateRequest, async (req, res) => {
   const stakeAmount = parseFloat(stake);
   if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
 
+  const isAdmin = req.isAdmin;
   const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
-  if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+  const currentBalance = isAdmin ? 10000 : (bal?.usd_balance || 0);
+  if (!isAdmin && (!bal || bal.usd_balance < stakeAmount)) return res.status(400).json({ error: 'Insufficient USD balance' });
 
   const serverSeed = generateServerSeed();
   const cSeed = clientSeed || arcadeCrypto.randomBytes(8).toString('hex');
@@ -6428,13 +6436,16 @@ app.post('/api/arcade/slots', authenticateRequest, async (req, res) => {
   }
 
   const payout = multiplier > 0 ? Math.floor(stakeAmount * multiplier * 100) / 100 : 0;
-  await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
-  if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+  if (!isAdmin) {
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
+    if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+  }
 
   await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'slots', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
-    [req.userId, stakeAmount, multiplier, payout, result, JSON.stringify({ reels }), serverSeed, cSeed, nonce]);
+    [req.userId, stakeAmount, multiplier, payout, result, JSON.stringify({ reels, admin_test: isAdmin }), serverSeed, cSeed, nonce]);
 
-  res.json({ reels, multiplier, payout, result, stake: stakeAmount, newBalance: (bal.usd_balance - stakeAmount + payout) });
+  const newBalance = isAdmin ? (currentBalance - stakeAmount + payout) : (bal.usd_balance - stakeAmount + payout);
+  res.json({ reels, multiplier, payout, result, stake: stakeAmount, newBalance });
 });
 
 // ===== CASTLE CRASH =====
@@ -6450,17 +6461,20 @@ app.post('/api/arcade/castle-crash/start', authenticateRequest, async (req, res)
   const stakeAmount = parseFloat(stake);
   if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
 
+  const isAdmin = req.isAdmin;
   const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
-  if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+  const currentBalance = isAdmin ? 10000 : (bal?.usd_balance || 0);
+  if (!isAdmin && (!bal || bal.usd_balance < stakeAmount)) return res.status(400).json({ error: 'Insufficient USD balance' });
 
   const serverSeed = generateServerSeed();
   const cSeed = clientSeed || arcadeCrypto.randomBytes(8).toString('hex');
   const nonce = Date.now();
   const crashPoint = generateCrashPoint(serverSeed, cSeed, nonce);
 
-  await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stakeAmount, req.userId]);
+  if (!isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stakeAmount, req.userId]);
 
-  res.json({ sessionId: nonce, stake: stakeAmount, crashPoint, newBalance: bal.usd_balance - stakeAmount });
+  const newBalance = isAdmin ? (currentBalance - stakeAmount) : (bal.usd_balance - stakeAmount);
+  res.json({ sessionId: nonce, stake: stakeAmount, crashPoint, newBalance });
 });
 
 app.post('/api/arcade/castle-crash/cashout', authenticateRequest, async (req, res) => {
@@ -6469,27 +6483,41 @@ app.post('/api/arcade/castle-crash/cashout', authenticateRequest, async (req, re
   const cashoutMult = parseFloat(multiplier);
   if (isNaN(stakeAmount) || isNaN(cashoutMult) || cashoutMult < 1) return res.status(400).json({ error: 'Invalid cashout' });
 
+  const isAdmin = req.isAdmin;
   const existing = await dbGet('SELECT id FROM game_bets WHERE user_id = ? AND game_type = ? AND nonce = ? AND result = ?', [req.userId, 'castle_crash', sessionId, 'cashed_out']);
   if (existing) return res.status(400).json({ error: 'Already cashed out' });
 
   const payout = Math.floor(stakeAmount * cashoutMult * 100) / 100;
-  await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+  if (!isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
   await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'castle_crash', ?, 'USD', ?, ?, 'cashed_out', ?, ?)`,
-    [req.userId, stakeAmount, cashoutMult, payout, JSON.stringify({ cashoutMultiplier: cashoutMult }), sessionId]);
+    [req.userId, stakeAmount, cashoutMult, payout, JSON.stringify({ cashoutMultiplier: cashoutMult, admin_test: isAdmin }), sessionId]);
 
-  const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
-  res.json({ cashedOut: true, multiplier: cashoutMult, payout, newBalance: bal?.usd_balance || 0 });
+  let newBalance;
+  if (isAdmin) {
+    newBalance = 10000 - stakeAmount + payout;
+  } else {
+    const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    newBalance = bal?.usd_balance || 0;
+  }
+  res.json({ cashedOut: true, multiplier: cashoutMult, payout, newBalance });
 });
 
 app.post('/api/arcade/castle-crash/crash', authenticateRequest, async (req, res) => {
   const { sessionId, stake, crashPoint, multiplierAtCrash } = req.body;
   const stakeAmount = parseFloat(stake);
-  await dbRun('UPDATE user_balances SET total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, req.userId]);
+  const isAdmin = req.isAdmin;
+  if (!isAdmin) await dbRun('UPDATE user_balances SET total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, req.userId]);
   await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'castle_crash', ?, 'USD', 0, 0, 'crashed', ?, ?)`,
-    [req.userId, stakeAmount, JSON.stringify({ crashPoint, multiplierAtCrash }), sessionId]);
+    [req.userId, stakeAmount, JSON.stringify({ crashPoint, multiplierAtCrash, admin_test: isAdmin }), sessionId]);
 
-  const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
-  res.json({ crashed: true, newBalance: bal?.usd_balance || 0 });
+  let newBalance;
+  if (isAdmin) {
+    newBalance = 10000 - stakeAmount;
+  } else {
+    const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    newBalance = bal?.usd_balance || 0;
+  }
+  res.json({ crashed: true, newBalance });
 });
 
 // ===== PREDICTION MARKETS =====
