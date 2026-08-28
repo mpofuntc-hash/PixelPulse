@@ -1816,6 +1816,19 @@ async function registerDiscordSlashCommands() {
   if (!DISCORD_BOT_TOKEN || !discordClient?.application) return;
   const commands = [
     new SlashCommandBuilder().setName('start').setDescription('Welcome to PixelPulse'),
+    new SlashCommandBuilder().setName('gamble').setDescription('Step-by-step guide: how to start gambling with tokens or crypto'),
+    new SlashCommandBuilder().setName('convert').setDescription('Convert your game tokens to USD for gambling')
+      .addStringOption(opt => opt.setName('token').setDescription('Which game token to convert').setRequired(true).addChoices(
+        { name: 'Steam', value: 'steam' },
+        { name: 'Roblox (Robux)', value: 'roblox' },
+        { name: 'Fortnite (V-Bucks)', value: 'fortnite' },
+        { name: 'PUBG Mobile (UC)', value: 'pubgmobile' },
+        { name: 'Valorant (VP)', value: 'valorant' },
+        { name: 'Genshin (Crystals)', value: 'genshin' },
+        { name: 'Free Fire (Diamonds)', value: 'freefire' },
+        { name: 'Standoff 2', value: 'standoff2' }
+      ))
+      .addNumberOption(opt => opt.setName('amount').setDescription('Amount of tokens to convert').setRequired(true)),
     new SlashCommandBuilder().setName('markets').setDescription('View active prediction markets'),
     new SlashCommandBuilder().setName('clips').setDescription('View top clips'),
     new SlashCommandBuilder().setName('marketplace').setDescription('Browse skin marketplace'),
@@ -1855,16 +1868,124 @@ async function handleDiscordSlashCommand(interaction) {
     switch (interaction.commandName) {
       case 'start': {
         const embed = new EmbedBuilder()
-          .setTitle('🎮 PixelPulse - Gaming Marketplace & Community')
+          .setTitle('🎰 PixelPulse — Play. Trade. Win.')
           .setColor(0xe50914)
           .setDescription([
-            '🎬 **CLIPS** — Share highlights from any game, get upvoted, win weekly prizes',
-            '💼 **MARKETPLACE** — Buy & sell skins, game accounts, and gift cards — escrow protected',
-            '🔄 **TRADE HUB** — Swap tokens across 8+ platforms (Steam, Roblox, Fortnite, PUBG Mobile, Valorant, Genshin, Free Fire, Call of Duty)',
-            '🔮 **PREDICTIONS** — Predict esports matches and anime events, win BTC prizes',
+            '**🎰 GAMBLING — Play directly on Discord!**',
+            '`/coinflip` — Bet on heads or tails (min $0.50)',
+            '`/slots` — Spin the slot machine (min $0.50)',
+            '`/crash` — Castle Crash, cash out before the guard turns!',
+            '`/markets` — Bet on anime & gaming predictions',
             '',
-            '🔗 **Start now:** https://pixelpulse.zentriva-clubsync.online'
-          ].join('\n'));
+            '**💰 FUND YOUR ACCOUNT:**',
+            '`/gamble` — Step-by-step guide to start playing',
+            '`/convert` — Convert game tokens (Robux, V-Bucks, etc.) to USD',
+            '`/deposit` — Deposit crypto (BTC) to your balance',
+            '`/balance` — Check your USD balance',
+            '`/link` — Link your Discord to your PixelPulse account',
+            '',
+            '**🎮 OTHER FEATURES:**',
+            '🎬 Clips — Share highlights, get upvoted, win prizes',
+            '💼 Marketplace — Buy & sell skins, accounts, gift cards',
+            '🔄 Trade Hub — Swap tokens across 8+ platforms',
+            '',
+            '🔗 **Website:** https://pixelpulse.zentriva-clubsync.online',
+            '⚡ **New here? Run `/gamble` to get started in 3 easy steps!**'
+          ].join('\n'))
+          .setFooter({ text: 'PixelPulse — Play. Trade. Win.' });
+        await interaction.reply({ embeds: [embed] });
+        break;
+      }
+      case 'gamble': {
+        const userLinked = await dbGet('SELECT id, username FROM users WHERE discord_id = ?', [interaction.user.id]);
+        const embed = new EmbedBuilder()
+          .setTitle('🎰 How to Start Gambling on PixelPulse')
+          .setColor(0xe50914)
+          .setDescription([
+            '**3 EASY STEPS TO START PLAYING:**',
+            '',
+            '**STEP 1: Create & Link Your Account**',
+            '```1. Go to https://pixelpulse.zentriva-clubsync.online\n2. Register an account\n3. Come back here and type: /link <your-username>```',
+            userLinked ? `✅ **Already linked as ${userLinked.username}!** Skip to Step 2.` : '⬜ Not linked yet — do this first!',
+            '',
+            '**STEP 2: Fund Your Balance**',
+            'Choose one of these options:',
+            '',
+            '🟢 **Option A: Convert Game Tokens**',
+            '```/convert token:roblox amount:1000```',
+            'Converts your Robux, V-Bucks, Steam, PUBG UC, etc. to USD',
+            'Rates: 1000 Robux = $12.50 | 1000 V-Bucks = $10.00',
+            '',
+            '₿ **Option B: Deposit Crypto**',
+            '```/deposit amount:50```',
+            'Deposit BTC on the website → auto-converted to USD',
+            '',
+            '**STEP 3: Start Playing!**',
+            '```/coinflip choice:heads stake:5```',
+            '```/slots stake:5```',
+            '```/crash stake:5```',
+            '',
+            'Check your balance anytime: `/balance`',
+            'See recent winners: `/winners`',
+            '',
+            '🔗 **Website:** https://pixelpulse.zentriva-clubsync.online'
+          ].join('\n'))
+          .setFooter({ text: 'Minimum stake: $0.50 | All games are provably fair' });
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+        break;
+      }
+      case 'convert': {
+        const tokenType = interaction.options.getString('token');
+        const amount = interaction.options.getNumber('amount');
+        if (!amount || amount <= 0) {
+          await interaction.reply({ content: 'Amount must be greater than 0.', ephemeral: true });
+          return;
+        }
+        const user = await dbGet('SELECT id, username FROM users WHERE discord_id = ?', [interaction.user.id]);
+        if (!user) {
+          await interaction.reply({ content: 'Link your account first with `/link <username>`', ephemeral: true });
+          return;
+        }
+        const tokenInfo = TOKEN_TYPES[tokenType];
+        if (!tokenInfo) {
+          await interaction.reply({ content: 'Invalid token type.', ephemeral: true });
+          return;
+        }
+        const tokenCol = tokenInfo.column;
+        const userRow = await dbGet(`SELECT ${tokenCol} as tokens FROM users WHERE id = ?`, [user.id]);
+        const userTokens = userRow?.tokens || 0;
+        if (userTokens < amount) {
+          await interaction.reply({ content: `You only have ${userTokens} ${tokenInfo.label}. Earn tokens by trading on the marketplace or depositing on the website.`, ephemeral: true });
+          return;
+        }
+        const rateRow = await dbGet('SELECT rate_to_usd FROM token_rates WHERE token_type = ?', [tokenType]);
+        const rate = rateRow?.rate_to_usd || 0.01;
+        const usdAmount = Math.floor(amount * rate * 100) / 100;
+        if (usdAmount < 0.50) {
+          await interaction.reply({ content: `Converting ${amount} ${tokenInfo.label} = $${usdAmount.toFixed(2)}. Minimum conversion is $0.50. Try a larger amount.`, ephemeral: true });
+          return;
+        }
+        await dbRun(`UPDATE users SET ${tokenCol} = ${tokenCol} - ? WHERE id = ?`, [amount, user.id]);
+        await dbRun('INSERT OR IGNORE INTO user_balances (user_id, usd_balance) VALUES (?, 0)', [user.id]);
+        await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [usdAmount, user.id]);
+        await dbRun('INSERT INTO token_conversions (user_id, token_type, amount_tokens, usd_value, status, created_at) VALUES (?, ?, ?, ?, ?, datetime("now"))',
+          [user.id, tokenType, amount, usdAmount, 'completed']);
+        const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [user.id]);
+        const embed = new EmbedBuilder()
+          .setTitle(`${tokenInfo.icon} Token Conversion Complete!`)
+          .setColor(0x4caf50)
+          .setDescription([
+            `**Converted:** ${amount} ${tokenInfo.label}`,
+            `**Rate:** 1 token = $${rate.toFixed(4)}`,
+            `**Received:** $${usdAmount.toFixed(2)} USD`,
+            `**New arcade balance:** $${(bal?.usd_balance || 0).toFixed(2)}`,
+            '',
+            'You can now use this balance to play:',
+            '`/coinflip` `/slots` `/crash`',
+            '',
+            'Play on the website: https://pixelpulse.zentriva-clubsync.online'
+          ].join('\n'))
+          .setFooter({ text: 'PixelPulse — Play. Trade. Win.' });
         await interaction.reply({ embeds: [embed] });
         break;
       }
@@ -1959,23 +2080,30 @@ async function handleDiscordSlashCommand(interaction) {
           .setTitle('🆘 Help & Commands')
           .setColor(0xe50914)
           .setDescription([
+            '**🎰 GAMBLING:**',
+            '/gamble — Step-by-step guide to start playing',
+            '/coinflip — Bet on heads or tails (min $0.50)',
+            '/slots — Spin the slot machine (min $0.50)',
+            '/crash — Castle Crash game (min $0.50)',
+            '/markets — View prediction markets',
+            '/winners — View recent arcade winners',
+            '',
+            '**💰 FUNDING:**',
+            '/convert — Convert game tokens (Robux, V-Bucks, etc.) to USD',
+            '/deposit — Deposit BTC crypto to your arcade balance',
+            '/balance — Check your USD balance',
+            '/link — Link your Discord to PixelPulse account',
+            '',
+            '**🎮 OTHER:**',
             '/start — Welcome message',
-            '/markets — View betting markets',
             '/clips — View top clips',
             '/marketplace — Browse marketplace',
             '/quiz — Take a quiz and earn Royal Coins',
             '/stats — Platform statistics',
-            '/balance — Check your arcade USD balance',
-            '/deposit — Deposit USD to your arcade balance',
-            '/coinflip — Bet on heads or tails (min $0.50)',
-            '/slots — Spin the slot machine (min $0.50)',
-            '/crash — Castle Crash game (min $0.50)',
-            '/winners — View recent arcade winners',
-            '/link — Link your Discord to PixelPulse account',
             '/onboard — Pick your interests & unlock niche channels',
             '/help — This help message',
             '',
-            '💡 Share a YouTube or Twitch link in any channel to auto-upload it as a clip to PixelPulse!',
+            '💡 Share a YouTube or Twitch link in any channel to auto-upload it as a clip!',
             '',
             '🔗 Website: https://pixelpulse.zentriva-clubsync.online'
           ].join('\n'));
@@ -1989,11 +2117,14 @@ async function handleDiscordSlashCommand(interaction) {
           .setDescription([
             'Welcome to **PixelPulse**! Pick what you\'re into and we\'ll unlock channels just for you.',
             '',
-            'You can pick one or multiple — select all that apply:',
+            '🎰 **Gambling channels are already open to everyone!**',
+            'No need to select gambling — you can play `/coinflip`, `/slots`, `/crash` right now.',
+            'Type `/gamble` for a step-by-step guide to start playing.',
+            '',
+            'Select additional interests below to unlock more channels:',
             '',
             '🎌 **Anime** — Episode discussions, manga, predictions, clips',
             '🎮 **Gaming** — Clips, marketplace, token swaps, community',
-            '🎰 **Gambling** — Coinflip, slots, Castle Crash, prediction markets',
             '',
             'Use the dropdown below to select your interests!'
           ].join('\n'));
@@ -2004,11 +2135,10 @@ async function handleDiscordSlashCommand(interaction) {
               .setCustomId('onboard_select')
               .setPlaceholder('Select your interests...')
               .setMinValues(1)
-              .setMaxValues(3)
+              .setMaxValues(2)
               .addOptions([
                 { label: 'Anime', description: 'Episode discussions, manga, predictions, clips', value: 'anime', emoji: '🎌' },
-                { label: 'Gaming', description: 'Clips, marketplace, token swaps, community', value: 'gaming', emoji: '🎮' },
-                { label: 'Gambling', description: 'Coinflip, slots, Castle Crash, prediction markets', value: 'gambling', emoji: '🎰' }
+                { label: 'Gaming', description: 'Clips, marketplace, token swaps, community', value: 'gaming', emoji: '🎮' }
               ])
           );
 
@@ -2050,6 +2180,9 @@ async function handleDiscordSlashCommand(interaction) {
 
         // Create roles and channels for each niche
         for (const niche of NICHES) {
+          // Gambling channels are visible to everyone by default
+          const isGambling = niche.key === 'gambling';
+
           // Check if role exists
           let role = guild.roles.cache.find(r => r.name === `PixelPulse-${niche.name}`);
           if (!role) {
@@ -2065,14 +2198,20 @@ async function handleDiscordSlashCommand(interaction) {
           // Create category
           let category = guild.channels.cache.find(c => c.name === `PixelPulse ${niche.name}` && c.type === ChannelType.GuildCategory);
           if (!category) {
+            const permOverwrites = isGambling ? [
+              // Gambling: visible to everyone
+              { id: everyoneRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles] },
+              { id: discordClient.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] }
+            ] : [
+              // Other niches: gated behind role
+              { id: everyoneRole.id, deny: [PermissionFlagsBits.ViewChannel] },
+              { id: role.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles] },
+              { id: discordClient.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] }
+            ];
             category = await guild.channels.create({
               name: `PixelPulse ${niche.name}`,
               type: ChannelType.GuildCategory,
-              permissionOverwrites: [
-                { id: everyoneRole.id, deny: [PermissionFlagsBits.ViewChannel] },
-                { id: role.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles] },
-                { id: discordClient.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] }
-              ]
+              permissionOverwrites: permOverwrites
             });
             createdItems.push(`Category: ${category.name}`);
           }
@@ -2081,16 +2220,20 @@ async function handleDiscordSlashCommand(interaction) {
           for (const ch of niche.channels) {
             const existing = guild.channels.cache.find(c => c.name === ch.name && c.parentId === category.id);
             if (!existing) {
+              const chPerms = isGambling ? [
+                { id: everyoneRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles] },
+                { id: discordClient.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] }
+              ] : [
+                { id: everyoneRole.id, deny: [PermissionFlagsBits.ViewChannel] },
+                { id: role.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles] },
+                { id: discordClient.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] }
+              ];
               await guild.channels.create({
                 name: ch.name,
                 type: ChannelType.GuildText,
                 parent: category.id,
                 topic: ch.topic,
-                permissionOverwrites: [
-                  { id: everyoneRole.id, deny: [PermissionFlagsBits.ViewChannel] },
-                  { id: role.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles] },
-                  { id: discordClient.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] }
-                ]
+                permissionOverwrites: chPerms
               });
               createdItems.push(`Channel: #${ch.name}`);
             }
@@ -2114,20 +2257,28 @@ async function handleDiscordSlashCommand(interaction) {
 
         // Post a welcome message in the onboarding channel
         const welcomeEmbed = new EmbedBuilder()
-          .setTitle('🎮 Welcome to PixelPulse!')
+          .setTitle('🎰 Welcome to PixelPulse — Play. Trade. Win.')
           .setColor(0xe50914)
           .setDescription([
-            'PixelPulse is your hub for anime, gaming, and gambling.',
+            'PixelPulse is your hub for anime, gaming, and **gambling**.',
             '',
-            '**To get started:**',
-            'Type `/onboard` below to pick your interests.',
-            'You\'ll unlock channels matching what you\'re into.',
+            '**🎰 GAMBLING IS OPEN TO EVERYONE!**',
+            'No need to select anything — gambling channels are visible to all members.',
             '',
-            '🎌 **Anime** — Discussions, manga, predictions, clips',
-            '🎮 **Gaming** — Clips, marketplace, token swaps, community',
-            '🎰 **Gambling** — Coinflip, slots, Castle Crash, predictions',
+            '**Ready to play? 3 easy steps:**',
+            '`1.` Register at https://pixelpulse.zentriva-clubsync.online',
+            '`2.` Type `/link <username>` here to link your account',
+            '`3.` Type `/gamble` for a step-by-step guide',
             '',
-            'You can always change your interests by running `/onboard` again.',
+            '**Fund your balance with:**',
+            '🟢 `/convert` — Convert game tokens (Robux, V-Bucks, etc.) to USD',
+            '₿ `/deposit` — Deposit BTC crypto → auto-converted to USD',
+            '',
+            '**Then play:**',
+            '`/coinflip` `/slots` `/crash` — min stake $0.50',
+            '',
+            '🎌 **Anime** & 🎮 **Gaming** channels require `/onboard` selection.',
+            '🎰 **Gambling** channels are open to everyone!',
             '',
             '🔗 Website: https://pixelpulse.zentriva-clubsync.online'
           ].join('\n'))
@@ -2135,6 +2286,49 @@ async function handleDiscordSlashCommand(interaction) {
 
         await welcomeCh.send({ embeds: [welcomeEmbed] });
         createdItems.push('Posted welcome message in #welcome-onboarding');
+
+        // Post a gambling guide in the gambling-chat channel
+        const gamblingCh = guild.channels.cache.find(c => c.name === 'gambling-chat');
+        if (gamblingCh) {
+          const gamblingGuideEmbed = new EmbedBuilder()
+            .setTitle('🎰 How to Gamble on PixelPulse — Read Me First!')
+            .setColor(0xFFD700)
+            .setDescription([
+              '**WELCOME TO THE PIXELPULSE ARCADE!**',
+              '',
+              '**3 EASY STEPS TO START PLAYING:**',
+              '',
+              '**STEP 1: Link Your Account**',
+              '```Register at https://pixelpulse.zentriva-clubsync.online\nThen type: /link <your-username>```',
+              '',
+              '**STEP 2: Fund Your Balance**',
+              '',
+              '🟢 **Convert Game Tokens:**',
+              '```/convert token:roblox amount:1000```',
+              'Supported: Robux, V-Bucks, Steam, PUBG UC, Valorant VP, Genshin Crystals, Free Fire Diamonds, Standoff2',
+              '',
+              '₿ **Deposit Crypto (BTC):**',
+              '```/deposit amount:50```',
+              'Go to the website → Wallet → Deposit BTC',
+              '',
+              '**STEP 3: Start Playing!**',
+              '```/coinflip choice:heads stake:5```',
+              '```/slots stake:5```',
+              '```/crash stake:5```',
+              '',
+              '**USEFUL COMMANDS:**',
+              '`/balance` — Check your USD balance',
+              '`/winners` — See recent big winners',
+              '`/gamble` — Show this guide anytime',
+              '',
+              'All games are **provably fair** — verify any roll on the website.',
+              'Minimum stake: **$0.50** | Balance is shared between Discord & website.'
+            ].join('\n'))
+            .setFooter({ text: 'PixelPulse — Play. Trade. Win. | 18+ only — play responsibly' });
+
+          await gamblingCh.send({ embeds: [gamblingGuideEmbed] });
+          createdItems.push('Posted gambling guide in #gambling-chat');
+        }
 
         const resultEmbed = new EmbedBuilder()
           .setTitle('✅ Server Setup Complete!')
@@ -2487,8 +2681,7 @@ async function handleDiscordSelectMenu(interaction) {
 
     const ROLE_MAP = {
       'anime': 'PixelPulse-Anime',
-      'gaming': 'PixelPulse-Gaming',
-      'gambling': 'PixelPulse-Gambling'
+      'gaming': 'PixelPulse-Gaming'
     };
 
     const ALL_ROLES = Object.values(ROLE_MAP);
@@ -2511,7 +2704,7 @@ async function handleDiscordSelectMenu(interaction) {
       if (!roleName) continue;
       let role = guild.roles.cache.find(r => r.name === roleName);
       if (!role) {
-        const colors = { 'anime': 0xFF6B9D, 'gaming': 0x00E5FF, 'gambling': 0xFFD700 };
+        const colors = { 'anime': 0xFF6B9D, 'gaming': 0x00E5FF };
         role = await guild.roles.create({
           name: roleName,
           color: colors[key] || 0xe50914,
@@ -2525,7 +2718,7 @@ async function handleDiscordSelectMenu(interaction) {
       }
     }
 
-    const labels = { 'anime': '🎌 Anime', 'gaming': '🎮 Gaming', 'gambling': '🎰 Gambling' };
+    const labels = { 'anime': '🎌 Anime', 'gaming': '🎮 Gaming' };
     const selectedLabels = selected.map(s => labels[s]).join(', ');
 
     const embed = new EmbedBuilder()
@@ -2535,6 +2728,9 @@ async function handleDiscordSelectMenu(interaction) {
         `You selected: **${selectedLabels}**`,
         '',
         addedRoles.length > 0 ? `New channels unlocked: **${addedRoles.length}**` : 'Your channels are already unlocked.',
+        '',
+        '🎰 **Gambling channels are open to everyone** — no selection needed!',
+        'Type `/gamble` to learn how to start playing.',
         '',
         'You can change your interests anytime by running `/onboard` again.',
         '',
