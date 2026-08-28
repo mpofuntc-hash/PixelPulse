@@ -3626,6 +3626,100 @@ bot.on('text', (ctx) => {
   ctx.reply('Use /help to see available commands. Visit https://pixelpulse.zentriva-clubsync.online for anime streaming and predictions!');
 });
 
+// Post and pin game modules to the Telegram channel
+async function postAndPinGameModules() {
+  if (!TELEGRAM_CHANNEL_ID || !bot?.telegram) return;
+  try {
+    const { Markup } = require('telegraf');
+    const modulesMsg = `🎰 PIXELPULSE ARCADE — GAME MODULES\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `🪙 COIN FLIP\n` +
+      `Bet on Heads 👑 or Tails 👸\n` +
+      `Command: /coinflip heads 5\n` +
+      `Payout: 1.90x your stake\n\n` +
+      `🎰 SLOTS\n` +
+      `Spin 3 reels — match symbols to win!\n` +
+      `Command: /slots 5\n` +
+      `3x match = JACKPOT (up to 47.5x!)\n` +
+      `2x match = 1.42x your stake\n\n` +
+      `🏰 CASTLE CRASH\n` +
+      `Watch the multiplier rise — cash out before the guard turns!\n` +
+      `Command: /crash 5\n` +
+      `Click the CASH OUT button to secure your winnings!\n\n` +
+      `🔮 PREDICTION MARKETS\n` +
+      `Bet on anime & gaming events\n` +
+      `Command: /markets\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `💰 FUND YOUR BALANCE:\n` +
+      `💎 /buy 100 — Pay with Telegram Stars (1 Star = $0.015)\n` +
+      `₿ Deposit BTC on the website\n` +
+      `📊 /balance — Check your balance\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `⚡ QUICK START:\n` +
+      `1️⃣ /buy 100 (fund with Stars)\n` +
+      `2️⃣ /coinflip heads 5 (play!)\n` +
+      `3️⃣ /balance (check winnings)\n\n` +
+      `All games are provably fair!\n` +
+      `Min stake: $0.50\n\n` +
+      `🔗 Website: https://pixelpulse.zentriva-clubsync.online\n` +
+      `📱 Type /gamble for a full guide`;
+
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.url('🎮 Play on Website', 'https://pixelpulse.zentriva-clubsync.online'),
+        Markup.button.callback('💰 Buy Stars', 'buy_stars_info')
+      ],
+      [
+        Markup.button.callback('🪙 Coinflip', 'game_info_coinflip'),
+        Markup.button.callback('🎰 Slots', 'game_info_slots'),
+        Markup.button.callback('🏰 Crash', 'game_info_crash')
+      ]
+    ]);
+
+    const sent = await bot.telegram.sendMessage(TELEGRAM_CHANNEL_ID, modulesMsg, {
+      reply_markup: keyboard.reply_markup,
+      disable_web_page_preview: true
+    });
+
+    // Pin the message
+    await bot.telegram.pinChatMessage(TELEGRAM_CHANNEL_ID, sent.message_id, { disable_notification: false });
+    console.log('Game modules pinned to Telegram channel');
+    return sent.message_id;
+  } catch(e) { console.error('Error pinning game modules:', e); }
+}
+
+// Admin command to pin game modules
+bot.command('pingames', async (ctx) => {
+  // Only allow in private chat or from admin
+  const msgId = await postAndPinGameModules();
+  if (msgId) {
+    ctx.reply('✅ Game modules posted and pinned to the channel!');
+  } else {
+    ctx.reply('❌ Could not pin to channel. Make sure TELEGRAM_CHANNEL_ID is set and bot is admin in the channel.');
+  }
+});
+
+// Button callback handlers for game info
+bot.action('buy_stars_info', (ctx) => {
+  ctx.answerCbQuery();
+  ctx.reply(`💎 Buy USD Balance with Telegram Stars\n\nRates:\n• 10 Stars = $0.15\n• 50 Stars = $0.75\n• 100 Stars = $1.50\n• 500 Stars = $7.50\n• 1000 Stars = $15.00\n\nUsage: /buy 100\nMinimum: 10 Stars`);
+});
+
+bot.action('game_info_coinflip', (ctx) => {
+  ctx.answerCbQuery();
+  ctx.reply(`🪙 Coin Flip\n\nBet on Heads 👑 or Tails 👸\n\nUsage: /coinflip heads 5\nUsage: /coinflip tails 10\n\nWin: 1.90x your stake\nMin stake: $0.50`);
+});
+
+bot.action('game_info_slots', (ctx) => {
+  ctx.answerCbQuery();
+  ctx.reply(`🎰 Slots\n\nSpin 3 reels — match symbols to win!\n\nUsage: /slots 5\n\n💎💎💎 = 47.50x (JACKPOT!)\n7️⃣7️⃣7️⃣ = 23.75x\n⭐⭐⭐ = 14.25x\n2 of a kind = 1.42x\nMin stake: $0.50`);
+});
+
+bot.action('game_info_crash', (ctx) => {
+  ctx.answerCbQuery();
+  ctx.reply(`🏰 Castle Crash\n\nThe multiplier rises — cash out before the guard turns!\n\nUsage: /crash 5\n\nClick the CASH OUT button to lock in your winnings.\nHigher multiplier = bigger payout, but riskier!\nMin stake: $0.50`);
+});
+
 // Express middleware
 app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
@@ -8761,6 +8855,10 @@ function scheduleChannelUpdates() {
 bot.launch().then(() => {
   console.log('Telegram bot started');
   scheduleChannelUpdates();
+  // Auto-pin game modules to channel on startup
+  setTimeout(() => {
+    postAndPinGameModules();
+  }, 5000);
 }).catch(err => {
   console.error('Failed to start bot:', err);
 });
