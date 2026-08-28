@@ -8852,13 +8852,14 @@ function scheduleChannelUpdates() {
 }
 
 // Start Telegram bot
+console.log('Attempting to launch Telegram bot...');
 bot.launch().then(() => {
-  console.log('Telegram bot started');
+  console.log('Telegram bot started successfully');
   scheduleChannelUpdates();
   // Auto-pin game modules to channel on startup
   setTimeout(() => {
     postAndPinGameModules();
   }, 5000);
 }).catch(err => {
-  console.error('Failed to start bot:', err);
+  console.error('Failed to start Telegram bot:', err);
 });
