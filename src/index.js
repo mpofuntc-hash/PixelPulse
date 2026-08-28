@@ -1763,8 +1763,7 @@ if (DISCORD_BOT_TOKEN) {
     intents: [
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,
-      GatewayIntentBits.MessageContent,
-      GatewayIntentBits.GuildMembers
+      GatewayIntentBits.MessageContent
     ]
   });
 
