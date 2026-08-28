@@ -1714,6 +1714,15 @@ async function initSchema() {
 async function initDatabaseAndSchema() {
   await ensureLegacySchema();
   await initSchema();
+  // Migration: ensure usd_balance column exists in user_balances
+  try {
+    const cols = await dbAll('PRAGMA table_info(user_balances)');
+    if (cols.length > 0 && !cols.find(c => c.name === 'usd_balance')) {
+      console.log('Migrating: adding usd_balance column to user_balances...');
+      await dbExec('ALTER TABLE user_balances ADD COLUMN usd_balance REAL DEFAULT 0');
+      console.log('Migration complete: usd_balance column added.');
+    }
+  } catch(e) { console.error('Migration check failed:', e.message); }
   await initializeExchangeRates();
 }
 
@@ -6385,9 +6394,11 @@ app.post('/api/arcade/coinflip', authenticateRequest, async (req, res) => {
   if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
 
   const isAdmin = await isArcadeAdmin(req.userId);
-  const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
-  const currentBalance = isAdmin ? 10000 : (bal?.usd_balance || 0);
-  if (!isAdmin && (!bal || bal.usd_balance < stakeAmount)) return res.status(400).json({ error: 'Insufficient USD balance' });
+  let bal = null;
+  if (!isAdmin) {
+    bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+  }
 
   const serverSeed = generateServerSeed();
   const cSeed = clientSeed || arcadeCrypto.randomBytes(8).toString('hex');
@@ -6420,9 +6431,11 @@ app.post('/api/arcade/slots', authenticateRequest, async (req, res) => {
   if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
 
   const isAdmin = await isArcadeAdmin(req.userId);
-  const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
-  const currentBalance = isAdmin ? 10000 : (bal?.usd_balance || 0);
-  if (!isAdmin && (!bal || bal.usd_balance < stakeAmount)) return res.status(400).json({ error: 'Insufficient USD balance' });
+  let bal = null;
+  if (!isAdmin) {
+    bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+  }
 
   const serverSeed = generateServerSeed();
   const cSeed = clientSeed || arcadeCrypto.randomBytes(8).toString('hex');
@@ -6469,9 +6482,11 @@ app.post('/api/arcade/castle-crash/start', authenticateRequest, async (req, res)
   if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
 
   const isAdmin = await isArcadeAdmin(req.userId);
-  const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
-  const currentBalance = isAdmin ? 10000 : (bal?.usd_balance || 0);
-  if (!isAdmin && (!bal || bal.usd_balance < stakeAmount)) return res.status(400).json({ error: 'Insufficient USD balance' });
+  let bal = null;
+  if (!isAdmin) {
+    bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+  }
 
   const serverSeed = generateServerSeed();
   const cSeed = clientSeed || arcadeCrypto.randomBytes(8).toString('hex');
