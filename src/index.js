@@ -1846,7 +1846,7 @@ async function registerDiscordSlashCommands() {
       .addNumberOption(opt => opt.setName('stake').setDescription('Stake amount in USD (min 0.50)').setRequired(true)),
     new SlashCommandBuilder().setName('slots').setDescription('Spin the slots (min $0.50)')
       .addNumberOption(opt => opt.setName('stake').setDescription('Stake amount in USD (min 0.50)').setRequired(true)),
-    new SlashCommandBuilder().setName('crash').setDescription('Castle Crash — cash out before the guard turns! (min $0.50)')
+    new SlashCommandBuilder().setName('crash').setDescription('Police Chase — cash out before the cops catch the robber! (min $0.50)')
       .addNumberOption(opt => opt.setName('stake').setDescription('Stake amount in USD (min 0.50)').setRequired(true)),
     new SlashCommandBuilder().setName('winners').setDescription('View recent arcade winners'),
     new SlashCommandBuilder().setName('link').setDescription('Link your Discord to your PixelPulse account')
@@ -1874,7 +1874,7 @@ async function handleDiscordSlashCommand(interaction) {
             '**🎰 GAMBLING — Play directly on Discord!**',
             '`/coinflip` — Bet on heads or tails (min $0.50)',
             '`/slots` — Spin the slot machine (min $0.50)',
-            '`/crash` — Castle Crash, cash out before the guard turns!',
+            '`/crash` — Police Chase, cash out before the cops catch the robber!',
             '`/markets` — Bet on anime & gaming predictions',
             '',
             '**💰 FUND YOUR ACCOUNT:**',
@@ -2168,7 +2168,7 @@ async function handleDiscordSlashCommand(interaction) {
           { key: 'gambling', name: 'Gambling', color: 0xFFD700, emoji: '🎰', channels: [
             { name: 'coinflip', topic: 'Heads or tails — min stake $0.50. Use /coinflip to play!' },
             { name: 'slots', topic: 'Spin the slots — min stake $0.50. Use /slots to play!' },
-            { name: 'castle-crash', topic: 'Castle Crash — cash out before the guard turns! Use /crash to play!' },
+            { name: 'castle-crash', topic: 'Police Chase — cash out before the cops catch the robber! Use /crash to play!' },
             { name: 'prediction-markets', topic: 'Bet on anime, gaming, and community polls. Use /markets to view!' },
             { name: 'winners-feed', topic: 'Recent arcade winners — use /winners to see top payouts' },
             { name: 'gambling-chat', topic: 'Discuss strategies, share wins, talk about the games' }
@@ -2529,11 +2529,11 @@ async function handleDiscordSlashCommand(interaction) {
           );
 
         const embed = new EmbedBuilder()
-          .setTitle('🏰 Castle Crash')
+          .setTitle('🚨 Police Chase')
           .setColor(0xe50914)
           .setDescription([
-            '🦹 A thief sneaks down the castle corridor...',
-            'Guards patrol ahead. Cash out before they turn around!',
+            '🏃 A robber is on the run from the police!',
+            '🚔 The cops are chasing — cash out before they catch him!',
             '',
             `Stake: $${stake.toFixed(2)}`,
             `Multiplier: **1.00x**`,
@@ -2558,14 +2558,14 @@ async function handleDiscordSlashCommand(interaction) {
             crashed = true;
             clearInterval(updateInterval);
             await dbRun('UPDATE user_balances SET total_lost = total_lost + ? WHERE user_id = ?', [stake, user.id]);
-            await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'castle_crash', ?, 'USD', 0, 0, 'crashed', ?, ?)`,
+            await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'police_chase', ?, 'USD', 0, 0, 'crashed', ?, ?)`,
               [user.id, stake, JSON.stringify({ crashPoint, multiplierAtCrash: currentMult, source: 'discord' }), nonce]);
 
             const crashEmbed = EmbedBuilder.from(embed)
               .setColor(0xf44336)
               .setDescription([
-                '🚨 **GUARD TURNED AROUND!** 🚨',
-                '🦹 The thief was caught!',
+                '🚨 **THE POLICE CAUGHT THE ROBBER!** 🚨',
+                '🚔 The robber was busted!',
                 '',
                 `Crashed at **${crashPoint.toFixed(2)}x**`,
                 `You lost $${stake.toFixed(2)}`
@@ -2577,8 +2577,8 @@ async function handleDiscordSlashCommand(interaction) {
           const potentialPayout = Math.floor(stake * currentMult * 100) / 100;
           const updatedEmbed = EmbedBuilder.from(embed)
             .setDescription([
-              '🦹 The thief sneaks deeper into the castle...',
-              `Steps: ${Math.floor(elapsed * 2)} | Guards still facing away`,
+              '🏃 The robber keeps running from the police...',
+              `🚔 - - - > 🏃 Distance: ${Math.floor(elapsed * 2)}m | Cops still behind!`,
               '',
               `Stake: $${stake.toFixed(2)}`,
               `Multiplier: **${currentMult.toFixed(2)}x**`,
@@ -2608,7 +2608,7 @@ async function handleDiscordSlashCommand(interaction) {
             .setColor(0x4caf50)
             .setDescription([
               '💰 **CASHED OUT SUCCESSFULLY!**',
-              `🦹 The thief escaped with the treasure!`,
+              `💰 The robber escaped with the loot!`,
               '',
               `Multiplier: **${currentMult.toFixed(2)}x**`,
               `You won **$${payout.toFixed(2)}**`,
@@ -2627,7 +2627,7 @@ async function handleDiscordSlashCommand(interaction) {
             const timeoutEmbed = EmbedBuilder.from(embed)
               .setColor(0xf44336)
               .setDescription([
-                '⏰ **Time ran out! The guard caught the thief.**',
+                '⏰ **Time ran out! The police caught the robber.**',
                 '',
                 `You lost $${stake.toFixed(2)}`
               ].join('\n'));
@@ -3181,7 +3181,7 @@ bot.command('start', (ctx) => {
 🎰 GAMBLING — Play directly on Telegram!
 /coinflip heads 5 — Bet on heads or tails
 /slots 5 — Spin the slot machine
-/crash 5 — Castle Crash, cash out before the guard turns!
+/crash 5 — Police Chase, cash out before the cops catch the robber!
 /markets — View prediction markets
 
 💰 FUND YOUR ACCOUNT:
@@ -3284,7 +3284,7 @@ bot.command('help', (ctx) => {
 /gamble — Step-by-step guide to start playing
 /coinflip — Bet on heads or tails (min $0.50)
 /slots — Spin the slot machine (min $0.50)
-/crash — Castle Crash, cash out before the guard turns!
+/crash — Police Chase, cash out before the cops catch the robber!
 /balance — Check your USD balance
 /buy — Buy USD balance with Telegram Stars
 
@@ -3522,7 +3522,7 @@ bot.command('crash', async (ctx) => {
     await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stake, user.id]);
 
     const { Markup } = require('telegraf');
-    const msg = `🏰 Castle Crash\n\n🦹 A thief sneaks down the castle corridor...\nGuards patrol ahead. Cash out before they turn!\n\nStake: $${stake.toFixed(2)}\nMultiplier: 1.00x\nPotential: $${stake.toFixed(2)}\n\nClick CASH OUT to secure your winnings!`;
+    const msg = `🚔 POLICE CHASE\n\n🏃 A robber is on the run!\n🚔 The police are chasing — cash out before they catch him!\n\n🚔 - - - - - - - - - -> 🏃\n\nStake: $${stake.toFixed(2)}\nMultiplier: 1.00x\nPotential: $${stake.toFixed(2)}\n\nClick CASH OUT to secure your winnings!`;
     const keyboard = Markup.inlineKeyboard([
       Markup.button.callback('💰 CASH OUT', `crash_cashout_${user.id}_${nonce}_${stake}`)
     ]);
@@ -3548,7 +3548,7 @@ bot.command('crash', async (ctx) => {
           [user.id, stake, JSON.stringify({ crashPoint, multiplierAtCrash: currentMult, source: 'telegram' }), nonce]);
         try {
           await ctx.telegram.editMessageText(ctx.chat.id, sentMsg.message_id, undefined,
-            `🏰 Castle Crash\n\n🚨 GUARD TURNED AROUND!\n🦹 The thief was caught!\n\nCrashed at ${crashPoint.toFixed(2)}x\nYou lost $${stake.toFixed(2)}`);
+            `🚔 POLICE CHASE\n\n🚨 THE POLICE CAUGHT THE ROBBER!\n🚔 The robber was busted!\n\n🚔XX🚔\n\nCrashed at ${crashPoint.toFixed(2)}x\nYou lost $${stake.toFixed(2)}`);
         } catch(e) {}
         return;
       }
@@ -3556,7 +3556,7 @@ bot.command('crash', async (ctx) => {
       const potential = Math.floor(stake * currentMult * 100) / 100;
       try {
         await ctx.telegram.editMessageText(ctx.chat.id, sentMsg.message_id, undefined,
-          `🏰 Castle Crash\n\n🦹 The thief sneaks deeper...\nGuards still facing away\n\nStake: $${stake.toFixed(2)}\nMultiplier: ${currentMult.toFixed(2)}x\nPotential: $${potential.toFixed(2)}\n\nClick CASH OUT!`,
+          `🚔 POLICE CHASE\n\n🏃 The robber keeps running...\n🚔 - - - > 🏃 Cops still behind!\n\nStake: $${stake.toFixed(2)}\nMultiplier: ${currentMult.toFixed(2)}x\nPotential: $${potential.toFixed(2)}\n\nClick CASH OUT!`,
           { reply_markup: keyboard.reply_markup });
       } catch(e) {}
     }, 1500);
@@ -3579,7 +3579,7 @@ bot.command('crash', async (ctx) => {
           [user.id, stake, JSON.stringify({ crashPoint, multiplierAtCrash: game.currentMult, source: 'telegram', reason: 'timeout' }), nonce]);
         try {
           await ctx.telegram.editMessageText(ctx.chat.id, sentMsg.message_id, undefined,
-            `🏰 Castle Crash\n\n⏰ Time ran out! Guard caught the thief.\n\nYou lost $${stake.toFixed(2)}`);
+            `🚔 POLICE CHASE\n\n⏰ Time ran out! The police caught the robber.\n\nYou lost $${stake.toFixed(2)}`);
         } catch(e) {}
       }
       delete global.telegramCrashGames[`${user.id}_${nonce}`];
@@ -3615,7 +3615,7 @@ bot.action(/crash_cashout_(\d+)_(\d+)_([\d.]+)/, async (ctx) => {
 
     const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [userId]);
     await ctx.editMessageText(
-      `🏰 Castle Crash\n\n💰 CASHED OUT SUCCESSFULLY!\n🦹 The thief escaped with the treasure!\n\nMultiplier: ${game.currentMult.toFixed(2)}x\nWon: $${payout.toFixed(2)}\nStake: $${stake.toFixed(2)}\nBalance: $${(bal?.usd_balance || 0).toFixed(2)}`);
+      `🚔 POLICE CHASE\n\n💰 CASHED OUT SUCCESSFULLY!\n🏃 The robber escaped with the loot!\n\nMultiplier: ${game.currentMult.toFixed(2)}x\nWon: $${payout.toFixed(2)}\nStake: $${stake.toFixed(2)}\nBalance: $${(bal?.usd_balance || 0).toFixed(2)}`);
     ctx.answerCbQuery(`Cashed out at ${game.currentMult.toFixed(2)}x!`);
     delete global.telegramCrashGames[`${userId}_${nonce}`];
   } catch(e) { console.error('Telegram crash cashout error:', e); ctx.answerCbQuery('Error cashing out!'); }
@@ -3642,8 +3642,8 @@ async function postAndPinGameModules() {
       `Command: /slots 5\n` +
       `3x match = JACKPOT (up to 47.5x!)\n` +
       `2x match = 1.42x your stake\n\n` +
-      `🏰 CASTLE CRASH\n` +
-      `Watch the multiplier rise — cash out before the guard turns!\n` +
+      `🚔 POLICE CHASE\n` +
+      `The robber is running! Cash out before the cops catch him!\n` +
       `Command: /crash 5\n` +
       `Click the CASH OUT button to secure your winnings!\n\n` +
       `🔮 PREDICTION MARKETS\n` +
@@ -3717,7 +3717,7 @@ bot.action('game_info_slots', (ctx) => {
 
 bot.action('game_info_crash', (ctx) => {
   ctx.answerCbQuery();
-  ctx.reply(`🏰 Castle Crash\n\nThe multiplier rises — cash out before the guard turns!\n\nUsage: /crash 5\n\nClick the CASH OUT button to lock in your winnings.\nHigher multiplier = bigger payout, but riskier!\nMin stake: $0.50`);
+  ctx.reply(`🚔 Police Chase\n\nThe multiplier rises — cash out before the cops catch the robber!\n\nUsage: /crash 5\n\nClick the CASH OUT button to lock in your winnings.\nHigher multiplier = bigger payout, but riskier!\nMin stake: $0.50`);
 });
 
 // Express middleware

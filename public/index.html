@@ -1001,11 +1001,23 @@
             text-shadow: 3px 3px 0 #000;
             transition: color 0.3s;
         }
-        .arcade-thief {
-            font-size: 24px;
+        .arcade-chase-track {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            font-size: 20px;
             margin: 8px 0;
+            font-family: 'Courier New', monospace;
             text-shadow: 2px 2px 0 #000;
+            min-height: 32px;
         }
+        .chase-police { font-size: 22px; transition: transform 0.3s; }
+        .chase-robber { font-size: 22px; transition: transform 0.3s; }
+        .chase-gap { color: #666; font-size: 14px; letter-spacing: 1px; transition: all 0.3s; }
+        .chase-gap.closing { color: #ff9800; }
+        .chase-gap.danger { color: #f44336; animation: pulse 0.5s infinite; }
+        @keyframes pulse { 50% { opacity: 0.5; } }
         .arcade-btn {
             font-family: 'PressStart2P', 'Courier New', monospace;
             font-size: 12px;
@@ -1560,7 +1572,7 @@
         <div class="arcade-tabs">
             <button class="arcade-tab active" id="arcadeTab-coinflip" onclick="switchArcadeTab('coinflip')">🪙 COIN FLIP</button>
             <button class="arcade-tab" id="arcadeTab-slots" onclick="switchArcadeTab('slots')">🎰 SLOTS</button>
-            <button class="arcade-tab" id="arcadeTab-crash" onclick="switchArcadeTab('crash')">🏰 CASTLE CRASH</button>
+            <button class="arcade-tab" id="arcadeTab-crash" onclick="switchArcadeTab('crash')">🚔 POLICE CHASE</button>
             <button class="arcade-tab" id="arcadeTab-predictions" onclick="switchArcadeTab('predictions')">🔮 PREDICTIONS</button>
             <button class="arcade-tab" id="arcadeTab-winners" onclick="switchArcadeTab('winners')">🏆 WINNERS</button>
         </div>
@@ -1610,12 +1622,16 @@
         <!-- Castle Crash -->
         <div id="arcade-crash" style="display: none;">
             <div class="arcade-game" style="max-width: 600px;">
-                <h3>🏰 CASTLE CRASH</h3>
-                <p style="color: #888; font-size: 12px; margin-bottom: 16px;">A thief sneaks down the corridor. Cash out before the guard turns!</p>
+                <h3>🚔 POLICE CHASE</h3>
+                <p style="color: #888; font-size: 12px; margin-bottom: 16px;">The robber is on the run! Cash out before the police car catches him!</p>
                 <div id="crashGameArea" class="arcade-screen arcade-crash-screen" style="display: none; flex-direction: column; gap: 6px;">
                     <div id="crashMultiplier" class="arcade-mult" style="color: #4caf50;">1.00x</div>
-                    <div id="crashThief" class="arcade-thief">🦹</div>
-                    <div id="crashStatus" style="font-size: 12px; color: #888; font-family: 'Courier New', monospace;">THE THIEF IS SNEAKING...</div>
+                    <div id="crashVisualizer" class="arcade-chase-track">
+                        <span id="crashPolice" class="chase-police">🚔</span>
+                        <span id="crashGap" class="chase-gap">- - - - - - - - - -&gt;</span>
+                        <span id="crashRobber" class="chase-robber">🏃</span>
+                    </div>
+                    <div id="crashStatus" style="font-size: 12px; color: #888; font-family: 'Courier New', monospace;">THE ROBBER IS RUNNING...</div>
                     <div id="crashPotentialPayout" style="font-size: 12px; color: #aaa; font-family: 'Courier New', monospace;">POTENTIAL: $0.00</div>
                 </div>
                 <div id="crashSetupArea">
@@ -5493,7 +5509,8 @@
                             showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
                         }
                         document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
-                        btn.disabled = false; btn.textContent = 'SPIN';
+                        // Keep results on screen for 2.5s before re-enabling spin
+                        setTimeout(() => { btn.disabled = false; btn.textContent = 'SPIN'; }, 2500);
                     }).catch((e) => { console.error('Slots error:', e); alert('Error: ' + (e.message || 'unknown')); btn.disabled=false; btn.textContent='SPIN'; });
                 }
             }, 80);
@@ -5525,8 +5542,11 @@
                 cashoutBtn.style.display = 'block';
                 document.getElementById('crashMultiplier').textContent = '1.00x';
                 document.getElementById('crashMultiplier').style.color = '#4caf50';
-                document.getElementById('crashStatus').textContent = '🦹 THE THIEF IS SNEAKING...';
-                document.getElementById('crashThief').textContent = '🦹';
+                document.getElementById('crashStatus').textContent = '🏃 THE ROBBER IS RUNNING...';
+                document.getElementById('crashRobber').textContent = '🏃';
+                document.getElementById('crashPolice').textContent = '🚔';
+                document.getElementById('crashGap').className = 'chase-gap';
+                document.getElementById('crashGap').textContent = '- - - - - - - - - ->';
 
                 const startTime = Date.now();
                 crashState.animInterval = setInterval(() => {
@@ -5535,13 +5555,15 @@
                     crashState.currentMult = 1 + (elapsed * elapsed * 0.15);
 
                     if (crashState.currentMult >= crashState.crashPoint) {
-                        // CRASH
+                        // CAUGHT
                         crashState.crashed = true;
                         clearInterval(crashState.animInterval);
                         document.getElementById('crashMultiplier').textContent = `${crashState.crashPoint.toFixed(2)}x`;
                         document.getElementById('crashMultiplier').style.color = '#f44336';
-                        document.getElementById('crashStatus').innerHTML = '🚨 <strong>GUARD TURNED!</strong> The thief was caught!';
-                        document.getElementById('crashThief').textContent = '🚔';
+                        document.getElementById('crashStatus').innerHTML = '🚨 <strong>CAUGHT!</strong> The police caught the robber!';
+                        document.getElementById('crashRobber').textContent = '🚔';
+                        document.getElementById('crashGap').textContent = 'XX';
+                        document.getElementById('crashGap').className = 'chase-gap danger';
                         cashoutBtn.style.display = 'none';
                         resultEl.innerHTML = `❌ LOST $${crashState.stake.toFixed(2)}`;
                         showArcadeToast('loss', '🚨', 'CAUGHT!', `-$${crashState.stake.toFixed(2)}`);
@@ -5557,17 +5579,41 @@
                             setupArea.style.display = 'block';
                             startBtn.disabled = false;
                             resultEl.textContent = '';
-                        }, 3000);
+                        }, 4000);
                         return;
                     }
 
                     document.getElementById('crashMultiplier').textContent = `${crashState.currentMult.toFixed(2)}x`;
                     const potential = Math.floor(crashState.stake * crashState.currentMult * 100) / 100;
                     document.getElementById('crashPotentialPayout').textContent = `POTENTIAL: $${potential.toFixed(2)}`;
-                    // Thief animation
-                    const steps = Math.floor(elapsed * 2);
-                    const thiefEmojis = ['🦹','🚶','🦹','🏃'];
-                    document.getElementById('crashThief').textContent = thiefEmojis[steps % thiefEmojis.length];
+                    
+                    // Visualizer: gap shrinks as multiplier approaches crash point
+                    const ratio = crashState.currentMult / crashState.crashPoint;
+                    const gapEl = document.getElementById('crashGap');
+                    const robberEl = document.getElementById('crashRobber');
+                    const policeEl = document.getElementById('crashPolice');
+                    
+                    // Gap dashes reduce as police gets closer
+                    const totalDashes = 10;
+                    const remainingDashes = Math.max(1, Math.ceil(totalDashes * (1 - ratio)));
+                    gapEl.textContent = '- '.repeat(remainingDashes).trim() + '>';
+                    
+                    // Color changes based on danger
+                    if (ratio > 0.8) {
+                        gapEl.className = 'chase-gap danger';
+                    } else if (ratio > 0.5) {
+                        gapEl.className = 'chase-gap closing';
+                    } else {
+                        gapEl.className = 'chase-gap';
+                    }
+                    
+                    // Robber running animation
+                    const runSteps = ['🏃', '🏃‍♂️', '🏃'];
+                    robberEl.textContent = runSteps[Math.floor(elapsed * 4) % runSteps.length];
+                    
+                    // Police car siren flash
+                    const policeSteps = ['🚔', '🚓', '🚔'];
+                    policeEl.textContent = policeSteps[Math.floor(elapsed * 3) % policeSteps.length];
                 }, 100);
             } catch(e) { console.error('Crash start error:', e); alert('Error starting crash: ' + (e.message || 'unknown')); startBtn.disabled = false; }
         }
@@ -5589,8 +5635,10 @@
 
                 document.getElementById('crashMultiplier').textContent = `${crashState.currentMult.toFixed(2)}x`;
                 document.getElementById('crashMultiplier').style.color = '#4caf50';
-                document.getElementById('crashStatus').innerHTML = '💰 <strong>ESCAPED WITH THE TREASURE!</strong>';
-                document.getElementById('crashThief').textContent = '💰';
+                document.getElementById('crashStatus').innerHTML = '💰 <strong>ESCAPED! The robber got away!</strong>';
+                document.getElementById('crashRobber').textContent = '💰';
+                document.getElementById('crashGap').textContent = '- - - - - - - - - ->';
+                document.getElementById('crashGap').className = 'chase-gap';
                 document.getElementById('crashResult').innerHTML = `🎉 WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
                 document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
                 showArcadeToast('win', '💰', 'ESCAPED!', `+$${data.payout.toFixed(2)}`);
