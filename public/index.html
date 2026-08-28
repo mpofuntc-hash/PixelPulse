@@ -838,6 +838,218 @@
             background: #e50914;
             color: #fff;
         }
+
+        /* ===== ARCADE PIXELATED THEME ===== */
+        @font-face {
+            font-family: 'PressStart2P';
+            src: url('https://fonts.gstatic.com/s/pressstart2p/v15/e3t4euO8T-267oIAQAu6jDQyK3nVivM.woff2') format('woff2');
+            font-display: swap;
+        }
+        .arcade-game {
+            max-width: 520px;
+            margin: 0 auto;
+            background: #0d0d0d;
+            border: 2px solid #e50914;
+            border-radius: 4px;
+            padding: 24px;
+            text-align: center;
+            box-shadow: 0 0 20px rgba(229,9,20,0.15), inset 0 0 30px rgba(0,0,0,0.5);
+            font-family: 'PressStart2P', 'Courier New', monospace;
+            position: relative;
+            overflow: hidden;
+        }
+        .arcade-game::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(0deg, rgba(0,0,0,0.15), rgba(0,0,0,0.15) 1px, transparent 1px, transparent 3px);
+            pointer-events: none;
+            z-index: 1;
+        }
+        .arcade-game > * { position: relative; z-index: 2; }
+        .arcade-game h3 {
+            font-size: 14px;
+            letter-spacing: 2px;
+            margin-bottom: 16px;
+            color: #e50914;
+            text-shadow: 2px 2px 0 #000;
+        }
+        .arcade-game p, .arcade-game label {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .arcade-screen {
+            background: #111;
+            border: 2px solid #333;
+            border-radius: 4px;
+            padding: 20px 16px;
+            margin: 16px auto;
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.8);
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .arcade-screen-coin {
+            font-size: 56px;
+            animation: coinPulse 0.8s ease-in-out infinite alternate;
+        }
+        @keyframes coinPulse {
+            from { transform: scale(1); }
+            to { transform: scale(1.1); }
+        }
+        .arcade-screen-coin.flipping {
+            animation: coinFlip 0.1s linear infinite;
+        }
+        @keyframes coinFlip {
+            0% { transform: rotateY(0deg) scale(1); }
+            50% { transform: rotateY(90deg) scale(1.2); }
+            100% { transform: rotateY(180deg) scale(1); }
+        }
+        .arcade-slots-reels {
+            font-size: 40px;
+            gap: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: nowrap;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        .arcade-slots-reels span {
+            display: inline-block;
+            min-width: 60px;
+            text-align: center;
+            text-shadow: 2px 2px 0 #000;
+        }
+        .arcade-slots-reels span.jackpot {
+            animation: jackpotGlow 0.5s ease-in-out infinite alternate;
+        }
+        @keyframes jackpotGlow {
+            from { text-shadow: 2px 2px 0 #000, 0 0 5px #ffd700; }
+            to { text-shadow: 2px 2px 0 #000, 0 0 20px #ffd700, 0 0 30px #ff8c00; }
+        }
+        .arcade-crash-screen {
+            background: linear-gradient(180deg, #1a0a00 0%, #0d0d0d 100%);
+            border: 2px solid #4a2c00;
+            min-height: 140px;
+        }
+        .arcade-mult {
+            font-size: 36px;
+            font-weight: 800;
+            font-family: 'PressStart2P', 'Courier New', monospace;
+            text-shadow: 3px 3px 0 #000;
+            transition: color 0.3s;
+        }
+        .arcade-thief {
+            font-size: 24px;
+            margin: 8px 0;
+            text-shadow: 2px 2px 0 #000;
+        }
+        .arcade-btn {
+            font-family: 'PressStart2P', 'Courier New', monospace;
+            font-size: 12px;
+            letter-spacing: 1px;
+            padding: 14px 20px;
+            border: 2px solid #e50914;
+            background: #1a1a1a;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            border-radius: 4px;
+            width: 100%;
+        }
+        .arcade-btn:hover {
+            background: #e50914;
+            box-shadow: 0 0 15px rgba(229,9,20,0.5);
+        }
+        .arcade-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .arcade-btn-cashout {
+            border-color: #4caf50;
+            background: #1b3a1b;
+            font-size: 14px;
+            font-weight: 700;
+        }
+        .arcade-btn-cashout:hover {
+            background: #4caf50;
+            box-shadow: 0 0 15px rgba(76,175,80,0.5);
+        }
+        .arcade-input {
+            font-family: 'Courier New', monospace;
+            background: #0a0a0a;
+            border: 2px solid #444;
+            border-radius: 4px;
+            padding: 10px 14px;
+            color: #fff;
+            width: 140px;
+            text-align: center;
+            font-size: 16px;
+        }
+        .arcade-input:focus {
+            border-color: #e50914;
+            outline: none;
+        }
+        .arcade-choice-btn {
+            font-family: 'Courier New', monospace;
+            min-width: 120px;
+            padding: 10px 20px;
+            border: 2px solid #444;
+            background: #1a1a1a;
+            color: #aaa;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .arcade-choice-btn:hover { border-color: #e50914; color: #fff; }
+        .arcade-choice-btn.selected {
+            border-color: #e50914;
+            background: #e50914;
+            color: #fff;
+            box-shadow: 0 0 10px rgba(229,9,20,0.5);
+        }
+        .arcade-payout {
+            margin-top: 12px;
+            font-size: 13px;
+            color: #888;
+            font-family: 'Courier New', monospace;
+        }
+        .arcade-info {
+            margin-top: 10px;
+            font-size: 11px;
+            color: #555;
+            font-family: 'Courier New', monospace;
+        }
+        .arcade-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .arcade-tab {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            padding: 8px 16px;
+            border: 2px solid #333;
+            background: #1a1a1a;
+            color: #888;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .arcade-tab:hover { border-color: #555; color: #ccc; }
+        .arcade-tab.active {
+            border-color: #e50914;
+            background: #e50914;
+            color: #fff;
+            box-shadow: 0 0 10px rgba(229,9,20,0.4);
+        }
     </style>
 </head>
 <body>
@@ -1244,82 +1456,78 @@
         <div class="info-banner"><strong>PixelPulse Arcade</strong> — Provably fair games with USD stakes. Play Coin Flip, Slots, Castle Crash, and prediction markets. Minimum stake $2 on web, $0.50 on Discord. 5% house edge.</div>
 
         <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
-            <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 10px 18px;">
-                <span style="color: #888; font-size: 13px;">Arcade Balance:</span>
+            <div style="background: #0d0d0d; border: 2px solid #e50914; border-radius: 4px; padding: 10px 18px; font-family: 'Courier New', monospace;">
+                <span style="color: #888; font-size: 13px;">ARCADE BALANCE:</span>
                 <span id="arcadeBalance" style="color: #4caf50; font-weight: 700; font-size: 18px;">$0.00</span>
             </div>
             <button class="btn btn-secondary" onclick="showSection('wallet')" style="font-size: 13px;">Deposit</button>
             <button class="btn btn-secondary" onclick="loadArcadeHistory()" style="font-size: 13px;">My History</button>
         </div>
 
-        <div style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;">
-            <button class="btn btn-primary" id="arcadeTab-coinflip" onclick="switchArcadeTab('coinflip')">🪙 Coin Flip</button>
-            <button class="btn btn-secondary" id="arcadeTab-slots" onclick="switchArcadeTab('slots')">🎰 Slots</button>
-            <button class="btn btn-secondary" id="arcadeTab-crash" onclick="switchArcadeTab('crash')">🏰 Castle Crash</button>
-            <button class="btn btn-secondary" id="arcadeTab-predictions" onclick="switchArcadeTab('predictions')">🔮 Predictions</button>
-            <button class="btn btn-secondary" id="arcadeTab-winners" onclick="switchArcadeTab('winners')">🏆 Winners</button>
+        <div class="arcade-tabs">
+            <button class="arcade-tab active" id="arcadeTab-coinflip" onclick="switchArcadeTab('coinflip')">🪙 COIN FLIP</button>
+            <button class="arcade-tab" id="arcadeTab-slots" onclick="switchArcadeTab('slots')">🎰 SLOTS</button>
+            <button class="arcade-tab" id="arcadeTab-crash" onclick="switchArcadeTab('crash')">🏰 CASTLE CRASH</button>
+            <button class="arcade-tab" id="arcadeTab-predictions" onclick="switchArcadeTab('predictions')">🔮 PREDICTIONS</button>
+            <button class="arcade-tab" id="arcadeTab-winners" onclick="switchArcadeTab('winners')">🏆 WINNERS</button>
         </div>
 
         <!-- Coin Flip -->
         <div id="arcade-coinflip" style="display: block;">
-            <div style="max-width: 500px; margin: 0 auto; background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 30px; text-align: center;">
-                <h3 style="margin-bottom: 20px;">🪙 Heads or Tails</h3>
-                <div id="coinflipResult" style="font-size: 64px; margin: 20px 0; min-height: 80px; display: flex; align-items: center; justify-content: center;">🪙</div>
+            <div class="arcade-game">
+                <h3>🪙 HEADS OR TAILS</h3>
+                <div class="arcade-screen"><div id="coinflipResult" class="arcade-screen-coin">🪙</div></div>
                 <div style="margin-bottom: 16px;">
-                    <label style="color: #888; font-size: 13px; display: block; margin-bottom: 6px;">Choose:</label>
+                    <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">CHOOSE:</label>
                     <div style="display: flex; gap: 10px; justify-content: center;">
-                        <button class="btn btn-secondary" id="coinflipChoice-heads" onclick="selectCoinflipChoice('heads')" style="min-width: 100px;">Heads</button>
-                        <button class="btn btn-secondary" id="coinflipChoice-tails" onclick="selectCoinflipChoice('tails')" style="min-width: 100px;">Tails</button>
+                        <button class="arcade-choice-btn" id="coinflipChoice-heads" onclick="selectCoinflipChoice('heads')">HEADS</button>
+                        <button class="arcade-choice-btn" id="coinflipChoice-tails" onclick="selectCoinflipChoice('tails')">TAILS</button>
                     </div>
                 </div>
                 <div style="margin-bottom: 16px;">
-                    <label style="color: #888; font-size: 13px; display: block; margin-bottom: 6px;">Stake (USD, min $2):</label>
-                    <input type="number" id="coinflipStake" value="2" min="2" step="0.50" style="background: #0f0f0f; border: 1px solid #444; border-radius: 6px; padding: 8px 12px; color: #fff; width: 120px; text-align: center;">
+                    <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">STAKE (USD, MIN $2):</label>
+                    <input type="number" id="coinflipStake" value="2" min="2" step="0.50" class="arcade-input">
                 </div>
-                <button class="btn btn-primary" onclick="playCoinflip()" id="coinflipPlayBtn" style="width: 100%; font-size: 16px; padding: 12px;">Flip Coin</button>
-                <div id="coinflipPayout" style="margin-top: 12px; font-size: 14px; color: #888;"></div>
+                <button class="arcade-btn" onclick="playCoinflip()" id="coinflipPlayBtn">FLIP COIN</button>
+                <div id="coinflipPayout" class="arcade-payout"></div>
             </div>
         </div>
 
         <!-- Slots -->
         <div id="arcade-slots" style="display: none;">
-            <div style="max-width: 500px; margin: 0 auto; background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 30px; text-align: center;">
-                <h3 style="margin-bottom: 20px;">🎰 Slot Machine</h3>
-                <div id="slotsReels" style="font-size: 56px; margin: 20px 0; min-height: 80px; display: flex; align-items: center; justify-content: center; gap: 15px; background: #0f0f0f; border: 1px solid #444; border-radius: 8px; padding: 20px;">
-                    <span>❓</span><span>❓</span><span>❓</span>
-                </div>
+            <div class="arcade-game">
+                <h3>🎰 SLOT MACHINE</h3>
+                <div class="arcade-screen"><div id="slotsReels" class="arcade-slots-reels"><span>❓</span><span>❓</span><span>❓</span></div></div>
                 <div style="margin-bottom: 16px;">
-                    <label style="color: #888; font-size: 13px; display: block; margin-bottom: 6px;">Stake (USD, min $2):</label>
-                    <input type="number" id="slotsStake" value="2" min="2" step="0.50" style="background: #0f0f0f; border: 1px solid #444; border-radius: 6px; padding: 8px 12px; color: #fff; width: 120px; text-align: center;">
+                    <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">STAKE (USD, MIN $2):</label>
+                    <input type="number" id="slotsStake" value="2" min="2" step="0.50" class="arcade-input">
                 </div>
-                <button class="btn btn-primary" onclick="playSlots()" id="slotsPlayBtn" style="width: 100%; font-size: 16px; padding: 12px;">Spin</button>
-                <div id="slotsPayout" style="margin-top: 12px; font-size: 14px; color: #888;"></div>
-                <div style="margin-top: 12px; font-size: 12px; color: #666;">
-                    3x 💎 = 50x | 3x 7️⃣ = 25x | 3x ⭐ = 15x | 2 match = 1.5x
-                </div>
+                <button class="arcade-btn" onclick="playSlots()" id="slotsPlayBtn">SPIN</button>
+                <div id="slotsPayout" class="arcade-payout"></div>
+                <div class="arcade-info">3x 💎 = 50x | 3x 7️⃣ = 25x | 3x ⭐ = 15x | 2 match = 1.5x</div>
             </div>
         </div>
 
         <!-- Castle Crash -->
         <div id="arcade-crash" style="display: none;">
-            <div style="max-width: 600px; margin: 0 auto; background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 30px; text-align: center;">
-                <h3 style="margin-bottom: 8px;">🏰 Castle Crash</h3>
-                <p style="color: #888; font-size: 13px; margin-bottom: 20px;">A thief sneaks down the corridor. Cash out before the guard turns around!</p>
-                <div id="crashGameArea" style="display: none; background: #0f0f0f; border: 1px solid #444; border-radius: 8px; padding: 20px; margin-bottom: 16px;">
-                    <div id="crashMultiplier" style="font-size: 48px; font-weight: 800; color: #4caf50; margin: 10px 0;">1.00x</div>
-                    <div id="crashThief" style="font-size: 28px; margin: 10px 0;">🦹</div>
-                    <div id="crashStatus" style="font-size: 14px; color: #888;">The thief is sneaking...</div>
-                    <div id="crashPotentialPayout" style="font-size: 14px; color: #aaa; margin-top: 8px;">Potential payout: $0.00</div>
+            <div class="arcade-game" style="max-width: 600px;">
+                <h3>🏰 CASTLE CRASH</h3>
+                <p style="color: #888; font-size: 12px; margin-bottom: 16px;">A thief sneaks down the corridor. Cash out before the guard turns!</p>
+                <div id="crashGameArea" class="arcade-screen arcade-crash-screen" style="display: none; flex-direction: column; gap: 6px;">
+                    <div id="crashMultiplier" class="arcade-mult" style="color: #4caf50;">1.00x</div>
+                    <div id="crashThief" class="arcade-thief">🦹</div>
+                    <div id="crashStatus" style="font-size: 12px; color: #888; font-family: 'Courier New', monospace;">The thief is sneaking...</div>
+                    <div id="crashPotentialPayout" style="font-size: 12px; color: #aaa; font-family: 'Courier New', monospace;">Potential payout: $0.00</div>
                 </div>
                 <div id="crashSetupArea">
                     <div style="margin-bottom: 16px;">
-                        <label style="color: #888; font-size: 13px; display: block; margin-bottom: 6px;">Stake (USD, min $2):</label>
-                        <input type="number" id="crashStake" value="2" min="2" step="0.50" style="background: #0f0f0f; border: 1px solid #444; border-radius: 6px; padding: 8px 12px; color: #fff; width: 120px; text-align: center;">
+                        <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">STAKE (USD, MIN $2):</label>
+                        <input type="number" id="crashStake" value="2" min="2" step="0.50" class="arcade-input">
                     </div>
-                    <button class="btn btn-primary" onclick="startCrash()" id="crashStartBtn" style="width: 100%; font-size: 16px; padding: 12px;">Start Game</button>
+                    <button class="arcade-btn" onclick="startCrash()" id="crashStartBtn">START GAME</button>
                 </div>
-                <button class="btn btn-primary" onclick="cashoutCrash()" id="crashCashoutBtn" style="display: none; width: 100%; font-size: 18px; padding: 14px; background: #4caf50; color: #fff; border: none; border-radius: 6px; font-weight: 700; margin-top: 12px;">💰 CASH OUT</button>
-                <div id="crashResult" style="margin-top: 12px; font-size: 14px; color: #888;"></div>
+                <button class="arcade-btn arcade-btn-cashout" onclick="cashoutCrash()" id="crashCashoutBtn" style="display: none; margin-top: 12px;">💰 CASH OUT</button>
+                <div id="crashResult" class="arcade-payout"></div>
             </div>
         </div>
 
@@ -1344,9 +1552,9 @@
 
         <!-- History Modal -->
         <div id="arcadeHistoryModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center;">
-            <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;">
+            <div style="background: #0d0d0d; border: 2px solid #e50914; border-radius: 4px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                    <h3>My Arcade History</h3>
+                    <h3 style="color: #e50914; font-family: 'PressStart2P', 'Courier New', monospace; font-size: 14px;">MY ARCADE HISTORY</h3>
                     <button onclick="document.getElementById('arcadeHistoryModal').style.display='none'" style="background: none; border: none; color: #888; font-size: 24px; cursor: pointer;">&times;</button>
                 </div>
                 <div id="arcadeHistoryList"></div>
@@ -5067,9 +5275,8 @@
                 const btn = document.getElementById('arcadeTab-' + t);
                 if (panel) panel.style.display = t === tab ? 'block' : 'none';
                 if (btn) {
-                    btn.classList.remove('btn-primary');
-                    btn.classList.add('btn-secondary');
-                    if (t === tab) { btn.classList.remove('btn-secondary'); btn.classList.add('btn-primary'); }
+                    btn.classList.remove('active');
+                    if (t === tab) btn.classList.add('active');
                 }
             });
             if (tab === 'winners') loadArcadeWinners();
@@ -5090,13 +5297,10 @@
             coinflipChoice = choice;
             ['heads', 'tails'].forEach(c => {
                 const btn = document.getElementById('coinflipChoice-' + c);
-                if (btn) {
-                    btn.classList.remove('btn-primary');
-                    btn.classList.add('btn-secondary');
-                }
+                if (btn) btn.classList.remove('selected');
             });
             const selBtn = document.getElementById('coinflipChoice-' + choice);
-            if (selBtn) { selBtn.classList.remove('btn-secondary'); selBtn.classList.add('btn-primary'); }
+            if (selBtn) selBtn.classList.add('selected');
         }
 
         async function playCoinflip() {
@@ -5106,8 +5310,8 @@
             const btn = document.getElementById('coinflipPlayBtn');
             const resultEl = document.getElementById('coinflipResult');
             const payoutEl = document.getElementById('coinflipPayout');
-            btn.disabled = true; btn.textContent = 'Flipping...';
-            resultEl.textContent = '🪙';
+            btn.disabled = true; btn.textContent = 'FLIPPING...';
+            resultEl.classList.add('flipping');
             payoutEl.textContent = '';
 
             try {
@@ -5116,26 +5320,26 @@
                     body: JSON.stringify({ choice: coinflipChoice, stake })
                 });
                 const data = await res.json();
-                if (!res.ok) { alert(data.error); btn.disabled = false; btn.textContent = 'Flip Coin'; return; }
+                if (!res.ok) { alert(data.error); btn.disabled = false; btn.textContent = 'FLIP COIN'; resultEl.classList.remove('flipping'); return; }
 
-                // Animate coin flip
                 let flips = 0;
                 const flipAnim = setInterval(() => {
                     resultEl.textContent = flips % 2 === 0 ? '🪙' : '🥈';
                     flips++;
                     if (flips > 8) {
                         clearInterval(flipAnim);
+                        resultEl.classList.remove('flipping');
                         resultEl.textContent = data.result === 'heads' ? '🪙' : '🥈';
                         if (data.won) {
-                            payoutEl.innerHTML = `🎉 Won <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
+                            payoutEl.innerHTML = `🎉 WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
                         } else {
-                            payoutEl.innerHTML = `❌ Lost $${data.stake.toFixed(2)}`;
+                            payoutEl.innerHTML = `❌ LOST $${data.stake.toFixed(2)}`;
                         }
                         document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
-                        btn.disabled = false; btn.textContent = 'Flip Coin';
+                        btn.disabled = false; btn.textContent = 'FLIP COIN';
                     }
                 }, 100);
-            } catch(e) { alert('Error playing coinflip'); btn.disabled = false; btn.textContent = 'Flip Coin'; }
+            } catch(e) { alert('Error playing coinflip'); btn.disabled = false; btn.textContent = 'FLIP COIN'; resultEl.classList.remove('flipping'); }
         }
 
         async function playSlots() {
@@ -5144,7 +5348,7 @@
             const btn = document.getElementById('slotsPlayBtn');
             const reelsEl = document.getElementById('slotsReels');
             const payoutEl = document.getElementById('slotsPayout');
-            btn.disabled = true; btn.textContent = 'Spinning...';
+            btn.disabled = true; btn.textContent = 'SPINNING...';
             payoutEl.textContent = '';
 
             const symbols = ['🍒','🍋','🔔','⭐','💎','7️⃣','🎮','👾'];
@@ -5154,21 +5358,20 @@
                 spins++;
                 if (spins > 12) {
                     clearInterval(spinAnim);
-                    // Now call the API
                     fetch('/api/arcade/slots', {
                         method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
                         body: JSON.stringify({ stake })
                     }).then(res => res.json()).then(data => {
-                        if (data.error) { alert(data.error); btn.disabled=false; btn.textContent='Spin'; return; }
-                        reelsEl.innerHTML = data.reels.map(r => `<span>${r}</span>`).join('');
+                        if (data.error) { alert(data.error); btn.disabled=false; btn.textContent='SPIN'; return; }
+                        reelsEl.innerHTML = data.reels.map(r => `<span${data.result === 'jackpot' ? ' class="jackpot"' : ''}>${r}</span>`).join('');
                         if (data.payout > 0) {
-                            payoutEl.innerHTML = `${data.result === 'jackpot' ? '🎉 JACKPOT! ' : '✅ '}<span style="color:#4caf50;font-weight:700">Won $${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
+                            payoutEl.innerHTML = `${data.result === 'jackpot' ? '🎉 JACKPOT! ' : '✅ '}<span style="color:#4caf50;font-weight:700">WON $${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
                         } else {
-                            payoutEl.innerHTML = `❌ Lost $${data.stake.toFixed(2)}`;
+                            payoutEl.innerHTML = `❌ LOST $${data.stake.toFixed(2)}`;
                         }
                         document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
-                        btn.disabled = false; btn.textContent = 'Spin';
-                    }).catch(() => { alert('Error'); btn.disabled=false; btn.textContent='Spin'; });
+                        btn.disabled = false; btn.textContent = 'SPIN';
+                    }).catch(() => { alert('Error'); btn.disabled=false; btn.textContent='SPIN'; });
                 }
             }, 80);
         }
@@ -5214,10 +5417,10 @@
                         clearInterval(crashState.animInterval);
                         document.getElementById('crashMultiplier').textContent = `${crashState.crashPoint.toFixed(2)}x`;
                         document.getElementById('crashMultiplier').style.color = '#f44336';
-                        document.getElementById('crashStatus').innerHTML = '🚨 <strong>GUARD TURNED AROUND!</strong> The thief was caught!';
+                        document.getElementById('crashStatus').innerHTML = '🚨 <strong>GUARD TURNED!</strong> The thief was caught!';
                         document.getElementById('crashThief').textContent = '🚔';
                         cashoutBtn.style.display = 'none';
-                        resultEl.innerHTML = `❌ Lost $${crashState.stake.toFixed(2)}`;
+                        resultEl.innerHTML = `❌ LOST $${crashState.stake.toFixed(2)}`;
                         // Record crash
                         fetch('/api/arcade/castle-crash/crash', {
                             method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
@@ -5235,7 +5438,7 @@
 
                     document.getElementById('crashMultiplier').textContent = `${crashState.currentMult.toFixed(2)}x`;
                     const potential = Math.floor(crashState.stake * crashState.currentMult * 100) / 100;
-                    document.getElementById('crashPotentialPayout').textContent = `Potential payout: $${potential.toFixed(2)}`;
+                    document.getElementById('crashPotentialPayout').textContent = `POTENTIAL: $${potential.toFixed(2)}`;
                     // Thief animation
                     const steps = Math.floor(elapsed * 2);
                     const thiefEmojis = ['🦹','🚶','🦹','🏃'];
@@ -5261,9 +5464,9 @@
 
                 document.getElementById('crashMultiplier').textContent = `${crashState.currentMult.toFixed(2)}x`;
                 document.getElementById('crashMultiplier').style.color = '#4caf50';
-                document.getElementById('crashStatus').innerHTML = '💰 <strong>Escaped with the treasure!</strong>';
+                document.getElementById('crashStatus').innerHTML = '💰 <strong>ESCAPED WITH THE TREASURE!</strong>';
                 document.getElementById('crashThief').textContent = '💰';
-                document.getElementById('crashResult').innerHTML = `🎉 Won <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
+                document.getElementById('crashResult').innerHTML = `🎉 WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
                 document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
 
                 setTimeout(() => {
