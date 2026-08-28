@@ -1762,8 +1762,7 @@ if (DISCORD_BOT_TOKEN) {
   discordClient = new Client({
     intents: [
       GatewayIntentBits.Guilds,
-      GatewayIntentBits.GuildMessages,
-      GatewayIntentBits.MessageContent
+      GatewayIntentBits.GuildMessages
     ]
   });
 
