@@ -840,6 +840,40 @@
         }
 
         /* ===== ARCADE PIXELATED THEME ===== */
+        .arcade-toast {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            padding: 20px 40px;
+            border-radius: 8px;
+            font-family: 'PressStart2P', monospace;
+            font-size: 18px;
+            z-index: 99999;
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: none;
+            text-align: center;
+            border: 4px solid;
+        }
+        .arcade-toast.show {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
+        }
+        .arcade-toast.win {
+            background: #1b3a1b;
+            border-color: #4caf50;
+            color: #4caf50;
+            box-shadow: 0 0 30px rgba(76,175,80,0.6);
+        }
+        .arcade-toast.loss {
+            background: #3a1b1b;
+            border-color: #f44336;
+            color: #f44336;
+            box-shadow: 0 0 30px rgba(244,67,54,0.6);
+        }
+        .arcade-toast .toast-icon { font-size: 32px; display: block; margin-bottom: 8px; }
+        .arcade-toast .toast-amount { font-size: 22px; margin-top: 4px; }
         @font-face {
             font-family: 'PressStart2P';
             src: url('https://fonts.gstatic.com/s/pressstart2p/v15/e3t4euO8T-267oIAQAu6jDQyK3nVivM.woff2') format('woff2');
@@ -1060,16 +1094,15 @@
             box-shadow: 0 0 15px rgba(229,9,20,0.6), inset 0 0 10px rgba(0,0,0,0.3);
             transform: scale(0.97);
         }
-        .arcade-choice-btn.selected .choice-icon {
-            text-shadow: 2px 2px 0 #000;
-            filter: grayscale(0) opacity(1) drop-shadow(0 0 6px rgba(255,255,255,0.8));
-            transform: scale(1.3);
-        }
         .arcade-choice-btn.selected .choice-label {
             text-shadow: 2px 2px 0 #000;
         }
         .arcade-choice-btn:not(.selected) .choice-icon {
-            filter: grayscale(0.8) opacity(0.4);
+            filter: grayscale(1) opacity(0.3);
+        }
+        .arcade-choice-btn.selected .choice-icon {
+            filter: grayscale(0) opacity(1) drop-shadow(0 0 8px rgba(255,255,255,0.9)) drop-shadow(0 0 4px rgba(229,9,20,0.8));
+            transform: scale(1.4);
         }
         .arcade-payout {
             margin-top: 12px;
@@ -1470,6 +1503,9 @@
             <div class="loading">Loading markets...</div>
         </div>
     </div>
+
+    <!-- Arcade Toast Notification -->
+    <div id="arcadeToast" class="arcade-toast"></div>
 
     <!-- Bet Slip Panel (Betway-style accumulator) -->
     <div id="betSlipPanel" style="position: fixed; right: 20px; top: 100px; width: 340px; background: #1a1a1a; border: 1px solid #333; border-radius: 12px; z-index: 999; box-shadow: 0 8px 24px rgba(0,0,0,0.6); display: none; max-height: 80vh; overflow-y: auto;">
@@ -5320,9 +5356,11 @@
         }
 
         // Telegram WebApp setup
-        const tg = window.Telegram.WebApp;
-        tg.ready();
-        tg.expand();
+        if (window.Telegram && window.Telegram.WebApp) {
+            const tg = window.Telegram.WebApp;
+            tg.ready();
+            tg.expand();
+        }
 
         // ============================================================
         // ARCADE — GAMES & PREDICTIONS
@@ -5330,6 +5368,15 @@
 
         let coinflipChoice = null;
         let crashState = { active: false, sessionId: null, stake: 0, crashPoint: 0, currentMult: 1.0, cashedOut: false, crashed: false, animInterval: null };
+
+        function showArcadeToast(type, icon, title, amount) {
+            const toast = document.getElementById('arcadeToast');
+            if (!toast) return;
+            toast.className = 'arcade-toast ' + (type === 'win' ? 'win' : 'loss');
+            toast.innerHTML = `<span class="toast-icon">${icon}</span>${title}<div class="toast-amount">${amount}</div>`;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+        }
 
         function switchArcadeTab(tab) {
             const tabs = ['coinflip', 'slots', 'crash', 'predictions', 'winners'];
@@ -5404,8 +5451,10 @@
                         resultEl.innerHTML = `<div class="arcade-coin-inner"><span>${finalIcon}</span><span class="coin-label">${finalLabel}</span></div>`;
                         if (data.won) {
                             payoutEl.innerHTML = `🎉 WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
+                            showArcadeToast('win', '🎉', 'YOU WON!', `+$${data.payout.toFixed(2)}`);
                         } else {
                             payoutEl.innerHTML = `❌ LOST $${data.stake.toFixed(2)}`;
+                            showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
                         }
                         document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
                         btn.disabled = false; btn.textContent = 'FLIP COIN';
@@ -5438,8 +5487,10 @@
                         reelsEl.innerHTML = data.reels.map(r => `<span${data.result === 'jackpot' ? ' class="jackpot"' : ''}>${r}</span>`).join('');
                         if (data.payout > 0) {
                             payoutEl.innerHTML = `${data.result === 'jackpot' ? '🎉 JACKPOT! ' : '✅ '}<span style="color:#4caf50;font-weight:700">WON $${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
+                            showArcadeToast('win', data.result === 'jackpot' ? '🎉' : '✅', data.result === 'jackpot' ? 'JACKPOT!' : 'YOU WON!', `+$${data.payout.toFixed(2)}`);
                         } else {
                             payoutEl.innerHTML = `❌ LOST $${data.stake.toFixed(2)}`;
+                            showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
                         }
                         document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
                         btn.disabled = false; btn.textContent = 'SPIN';
@@ -5493,6 +5544,7 @@
                         document.getElementById('crashThief').textContent = '🚔';
                         cashoutBtn.style.display = 'none';
                         resultEl.innerHTML = `❌ LOST $${crashState.stake.toFixed(2)}`;
+                        showArcadeToast('loss', '🚨', 'CAUGHT!', `-$${crashState.stake.toFixed(2)}`);
                         // Record crash
                         fetch('/api/arcade/castle-crash/crash', {
                             method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
@@ -5541,6 +5593,7 @@
                 document.getElementById('crashThief').textContent = '💰';
                 document.getElementById('crashResult').innerHTML = `🎉 WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
                 document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+                showArcadeToast('win', '💰', 'ESCAPED!', `+$${data.payout.toFixed(2)}`);
 
                 setTimeout(() => {
                     document.getElementById('crashGameArea').style.display = 'none';
