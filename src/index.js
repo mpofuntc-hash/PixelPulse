@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
-const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, REST, Routes, ChannelType } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, REST, Routes, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, PermissionFlagsBits } = require('discord.js');
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const app = express();
@@ -1773,8 +1773,20 @@ if (DISCORD_BOT_TOKEN) {
   });
 
   discordClient.on('interactionCreate', async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
-    await handleDiscordSlashCommand(interaction);
+    try {
+      if (interaction.isChatInputCommand()) {
+        await handleDiscordSlashCommand(interaction);
+      } else if (interaction.isButton()) {
+        await handleDiscordButton(interaction);
+      } else if (interaction.isStringSelectMenu()) {
+        await handleDiscordSelectMenu(interaction);
+      }
+    } catch (err) {
+      console.error('Discord interaction error:', err);
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({ content: 'Error processing interaction.', ephemeral: true }).catch(() => {});
+      }
+    }
   });
 
   discordClient.on('messageCreate', async (message) => {
@@ -1801,6 +1813,9 @@ async function registerDiscordSlashCommands() {
     new SlashCommandBuilder().setName('stats').setDescription('Platform statistics'),
     new SlashCommandBuilder().setName('quiz').setDescription('Take a gaming or anime quiz and earn Royal Coins'),
     new SlashCommandBuilder().setName('help').setDescription('Get help'),
+    new SlashCommandBuilder().setName('onboard').setDescription('Pick your interests and get access to matching channels'),
+    new SlashCommandBuilder().setName('setup-server').setDescription('Admin: Create roles & channels for anime, gaming, gambling niches')
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
     new SlashCommandBuilder().setName('balance').setDescription('Check your arcade USD balance'),
     new SlashCommandBuilder().setName('deposit').setDescription('Get deposit instructions for arcade funds')
       .addStringOption(opt => opt.setName('amount').setDescription('Amount in USD to deposit').setRequired(true)),
@@ -1948,6 +1963,7 @@ async function handleDiscordSlashCommand(interaction) {
             '/crash — Castle Crash game (min $0.50)',
             '/winners — View recent arcade winners',
             '/link — Link your Discord to PixelPulse account',
+            '/onboard — Pick your interests & unlock niche channels',
             '/help — This help message',
             '',
             '💡 Share a YouTube or Twitch link in any channel to auto-upload it as a clip to PixelPulse!',
@@ -1955,6 +1971,174 @@ async function handleDiscordSlashCommand(interaction) {
             '🔗 Website: https://pixelpulse.zentriva-clubsync.online'
           ].join('\n'));
         await interaction.reply({ embeds: [embed] });
+        break;
+      }
+      case 'onboard': {
+        const embed = new EmbedBuilder()
+          .setTitle('🎯 Choose Your Interests')
+          .setColor(0xe50914)
+          .setDescription([
+            'Welcome to **PixelPulse**! Pick what you\'re into and we\'ll unlock channels just for you.',
+            '',
+            'You can pick one or multiple — select all that apply:',
+            '',
+            '🎌 **Anime** — Episode discussions, manga, predictions, clips',
+            '🎮 **Gaming** — Clips, marketplace, token swaps, community',
+            '🎰 **Gambling** — Coinflip, slots, Castle Crash, prediction markets',
+            '',
+            'Use the dropdown below to select your interests!'
+          ].join('\n'));
+
+        const row = new ActionRowBuilder()
+          .addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId('onboard_select')
+              .setPlaceholder('Select your interests...')
+              .setMinValues(1)
+              .setMaxValues(3)
+              .addOptions([
+                { label: 'Anime', description: 'Episode discussions, manga, predictions, clips', value: 'anime', emoji: '🎌' },
+                { label: 'Gaming', description: 'Clips, marketplace, token swaps, community', value: 'gaming', emoji: '🎮' },
+                { label: 'Gambling', description: 'Coinflip, slots, Castle Crash, prediction markets', value: 'gambling', emoji: '🎰' }
+              ])
+          );
+
+        await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+        break;
+      }
+      case 'setup-server': {
+        await interaction.deferReply({ ephemeral: true });
+        const guild = interaction.guild;
+        if (!guild) { await interaction.editReply('This command can only be used in a server.'); return; }
+
+        const NICHES = [
+          { key: 'anime', name: 'Anime', color: 0xFF6B9D, emoji: '🎌', channels: [
+            { name: 'anime-discussion', topic: 'Discuss ongoing and completed anime series' },
+            { name: 'manga-talk', topic: 'Manga discussions, recommendations and spoilers' },
+            { name: 'anime-predictions', topic: 'Bet on anime outcomes — which series will top the charts?' },
+            { name: 'anime-clips', topic: 'Share your favorite anime clips and moments' },
+            { name: 'anime-recommendations', topic: 'Get and give anime recommendations' }
+          ]},
+          { key: 'gaming', name: 'Gaming', color: 0x00E5FF, emoji: '🎮', channels: [
+            { name: 'gaming-clips', topic: 'Share your best gaming clips — auto-uploaded to PixelPulse' },
+            { name: 'marketplace', topic: 'Buy, sell, and swap CS2 skins, game accounts, and tokens' },
+            { name: 'token-swaps', topic: 'Trade game tokens — V-Bucks, Standoff2 gold, and more' },
+            { name: 'gaming-discussion', topic: 'General gaming discussion across all titles' },
+            { name: 'find-players', topic: 'Find teammates and gaming partners' }
+          ]},
+          { key: 'gambling', name: 'Gambling', color: 0xFFD700, emoji: '🎰', channels: [
+            { name: 'coinflip', topic: 'Heads or tails — min stake $0.50. Use /coinflip to play!' },
+            { name: 'slots', topic: 'Spin the slots — min stake $0.50. Use /slots to play!' },
+            { name: 'castle-crash', topic: 'Castle Crash — cash out before the guard turns! Use /crash to play!' },
+            { name: 'prediction-markets', topic: 'Bet on anime, gaming, and community polls. Use /markets to view!' },
+            { name: 'winners-feed', topic: 'Recent arcade winners — use /winners to see top payouts' },
+            { name: 'gambling-chat', topic: 'Discuss strategies, share wins, talk about the games' }
+          ]}
+        ];
+
+        const everyoneRole = guild.roles.everyone;
+        const createdItems = [];
+
+        // Create roles and channels for each niche
+        for (const niche of NICHES) {
+          // Check if role exists
+          let role = guild.roles.cache.find(r => r.name === `PixelPulse-${niche.name}`);
+          if (!role) {
+            role = await guild.roles.create({
+              name: `PixelPulse-${niche.name}`,
+              color: niche.color,
+              mentionable: true,
+              reason: 'PixelPulse onboarding system'
+            });
+            createdItems.push(`Role: ${role.name}`);
+          }
+
+          // Create category
+          let category = guild.channels.cache.find(c => c.name === `PixelPulse ${niche.name}` && c.type === ChannelType.GuildCategory);
+          if (!category) {
+            category = await guild.channels.create({
+              name: `PixelPulse ${niche.name}`,
+              type: ChannelType.GuildCategory,
+              permissionOverwrites: [
+                { id: everyoneRole.id, deny: [PermissionFlagsBits.ViewChannel] },
+                { id: role.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles] },
+                { id: discordClient.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] }
+              ]
+            });
+            createdItems.push(`Category: ${category.name}`);
+          }
+
+          // Create channels under category
+          for (const ch of niche.channels) {
+            const existing = guild.channels.cache.find(c => c.name === ch.name && c.parentId === category.id);
+            if (!existing) {
+              await guild.channels.create({
+                name: ch.name,
+                type: ChannelType.GuildText,
+                parent: category.id,
+                topic: ch.topic,
+                permissionOverwrites: [
+                  { id: everyoneRole.id, deny: [PermissionFlagsBits.ViewChannel] },
+                  { id: role.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles] },
+                  { id: discordClient.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] }
+                ]
+              });
+              createdItems.push(`Channel: #${ch.name}`);
+            }
+          }
+        }
+
+        // Create a general welcome channel (visible to everyone)
+        let welcomeCh = guild.channels.cache.find(c => c.name === 'welcome-onboarding' && c.type === ChannelType.GuildText);
+        if (!welcomeCh) {
+          welcomeCh = await guild.channels.create({
+            name: 'welcome-onboarding',
+            type: ChannelType.GuildText,
+            topic: 'New members: type /onboard to pick your interests and unlock channels!',
+            permissionOverwrites: [
+              { id: everyoneRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
+              { id: discordClient.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] }
+            ]
+          });
+          createdItems.push('Channel: #welcome-onboarding');
+        }
+
+        // Post a welcome message in the onboarding channel
+        const welcomeEmbed = new EmbedBuilder()
+          .setTitle('🎮 Welcome to PixelPulse!')
+          .setColor(0xe50914)
+          .setDescription([
+            'PixelPulse is your hub for anime, gaming, and gambling.',
+            '',
+            '**To get started:**',
+            'Type `/onboard` below to pick your interests.',
+            'You\'ll unlock channels matching what you\'re into.',
+            '',
+            '🎌 **Anime** — Discussions, manga, predictions, clips',
+            '🎮 **Gaming** — Clips, marketplace, token swaps, community',
+            '🎰 **Gambling** — Coinflip, slots, Castle Crash, predictions',
+            '',
+            'You can always change your interests by running `/onboard` again.',
+            '',
+            '🔗 Website: https://pixelpulse.zentriva-clubsync.online'
+          ].join('\n'))
+          .setFooter({ text: 'PixelPulse — Play. Trade. Win.' });
+
+        await welcomeCh.send({ embeds: [welcomeEmbed] });
+        createdItems.push('Posted welcome message in #welcome-onboarding');
+
+        const resultEmbed = new EmbedBuilder()
+          .setTitle('✅ Server Setup Complete!')
+          .setColor(0x4caf50)
+          .setDescription([
+            `Created ${createdItems.length} items:`,
+            ...createdItems.map(item => `• ${item}`),
+            '',
+            'Members can now use `/onboard` to pick their interests and unlock niche channels.',
+            'A welcome message has been posted in #welcome-onboarding.'
+          ].join('\n'));
+
+        await interaction.editReply({ embeds: [resultEmbed] });
         break;
       }
       case 'link': {
@@ -2274,6 +2458,81 @@ async function handleDiscordSlashCommand(interaction) {
     console.error('Discord slash command error:', err);
     if (interaction.deferred) await interaction.editReply('Error processing command.');
     else if (!interaction.replied) await interaction.reply('Error processing command.');
+  }
+}
+
+// Discord button interaction handler
+async function handleDiscordButton(interaction) {
+  if (interaction.customId === 'crash_cashout') {
+    // Handled by the crash game collector — ignore here
+    return;
+  }
+}
+
+// Discord select menu interaction handler
+async function handleDiscordSelectMenu(interaction) {
+  if (interaction.customId === 'onboard_select') {
+    const selected = interaction.values;
+    const guild = interaction.guild;
+    if (!guild) { await interaction.reply({ content: 'This can only be used in a server.', ephemeral: true }); return; }
+
+    const ROLE_MAP = {
+      'anime': 'PixelPulse-Anime',
+      'gaming': 'PixelPulse-Gaming',
+      'gambling': 'PixelPulse-Gambling'
+    };
+
+    const ALL_ROLES = Object.values(ROLE_MAP);
+    const member = interaction.member;
+
+    // Remove roles that weren't selected
+    for (const roleName of ALL_ROLES) {
+      if (!selected.some(s => ROLE_MAP[s] === roleName)) {
+        const role = guild.roles.cache.find(r => r.name === roleName);
+        if (role && member.roles.cache.has(role.id)) {
+          await member.roles.remove(role).catch(() => {});
+        }
+      }
+    }
+
+    // Add selected roles
+    const addedRoles = [];
+    for (const key of selected) {
+      const roleName = ROLE_MAP[key];
+      if (!roleName) continue;
+      let role = guild.roles.cache.find(r => r.name === roleName);
+      if (!role) {
+        const colors = { 'anime': 0xFF6B9D, 'gaming': 0x00E5FF, 'gambling': 0xFFD700 };
+        role = await guild.roles.create({
+          name: roleName,
+          color: colors[key] || 0xe50914,
+          mentionable: true,
+          reason: 'PixelPulse onboarding — auto-created role'
+        });
+      }
+      if (!member.roles.cache.has(role.id)) {
+        await member.roles.add(role).catch(() => {});
+        addedRoles.push(roleName);
+      }
+    }
+
+    const labels = { 'anime': '🎌 Anime', 'gaming': '🎮 Gaming', 'gambling': '🎰 Gambling' };
+    const selectedLabels = selected.map(s => labels[s]).join(', ');
+
+    const embed = new EmbedBuilder()
+      .setTitle('✅ Interests Updated!')
+      .setColor(0x4caf50)
+      .setDescription([
+        `You selected: **${selectedLabels}**`,
+        '',
+        addedRoles.length > 0 ? `New channels unlocked: **${addedRoles.length}**` : 'Your channels are already unlocked.',
+        '',
+        'You can change your interests anytime by running `/onboard` again.',
+        '',
+        '🔗 Visit the website: https://pixelpulse.zentriva-clubsync.online'
+      ].join('\n'));
+
+    await interaction.update({ embeds: [embed], components: [] });
   }
 }
 
