@@ -6406,7 +6406,7 @@ app.post('/api/arcade/coinflip', authenticateRequest, async (req, res) => {
   await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'coinflip', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
     [req.userId, stakeAmount, multiplier, payout, won ? 'won' : 'lost', JSON.stringify({ choice, result, roll: roll.toFixed(4), admin_test: isAdmin }), serverSeed, cSeed, nonce]);
 
-  const newBalance = isAdmin ? (currentBalance - stakeAmount + payout) : (bal.usd_balance - stakeAmount + payout);
+  const newBalance = isAdmin ? 10000 : (bal.usd_balance - stakeAmount + payout);
   res.json({ result, won, multiplier, payout, stake: stakeAmount, newBalance });
 });
 
@@ -6451,7 +6451,7 @@ app.post('/api/arcade/slots', authenticateRequest, async (req, res) => {
   await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'slots', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
     [req.userId, stakeAmount, multiplier, payout, result, JSON.stringify({ reels, admin_test: isAdmin }), serverSeed, cSeed, nonce]);
 
-  const newBalance = isAdmin ? (currentBalance - stakeAmount + payout) : (bal.usd_balance - stakeAmount + payout);
+  const newBalance = isAdmin ? 10000 : (bal.usd_balance - stakeAmount + payout);
   res.json({ reels, multiplier, payout, result, stake: stakeAmount, newBalance });
 });
 
@@ -6480,7 +6480,7 @@ app.post('/api/arcade/castle-crash/start', authenticateRequest, async (req, res)
 
   if (!isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stakeAmount, req.userId]);
 
-  const newBalance = isAdmin ? (currentBalance - stakeAmount) : (bal.usd_balance - stakeAmount);
+  const newBalance = isAdmin ? 10000 : (bal.usd_balance - stakeAmount);
   res.json({ sessionId: nonce, stake: stakeAmount, crashPoint, newBalance });
 });
 
@@ -6501,7 +6501,7 @@ app.post('/api/arcade/castle-crash/cashout', authenticateRequest, async (req, re
 
   let newBalance;
   if (isAdmin) {
-    newBalance = 10000 - stakeAmount + payout;
+    newBalance = 10000;
   } else {
     const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
     newBalance = bal?.usd_balance || 0;
@@ -6519,7 +6519,7 @@ app.post('/api/arcade/castle-crash/crash', authenticateRequest, async (req, res)
 
   let newBalance;
   if (isAdmin) {
-    newBalance = 10000 - stakeAmount;
+    newBalance = 10000;
   } else {
     const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
     newBalance = bal?.usd_balance || 0;
