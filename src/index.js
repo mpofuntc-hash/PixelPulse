@@ -8853,13 +8853,21 @@ function scheduleChannelUpdates() {
 
 // Start Telegram bot
 console.log('Attempting to launch Telegram bot...');
+
+// Schedule channel updates before launch (launch promise only resolves on stop)
+scheduleChannelUpdates();
+
+// Auto-pin game modules to channel after bot starts polling
+setTimeout(() => {
+  postAndPinGameModules();
+}, 8000);
+
 bot.launch().then(() => {
-  console.log('Telegram bot started successfully');
-  scheduleChannelUpdates();
-  // Auto-pin game modules to channel on startup
-  setTimeout(() => {
-    postAndPinGameModules();
-  }, 5000);
+  console.log('Telegram bot stopped gracefully');
 }).catch(err => {
   console.error('Failed to start Telegram bot:', err);
 });
+
+// Enable graceful stop
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
