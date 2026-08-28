@@ -893,12 +893,36 @@
             text-overflow: ellipsis;
         }
         .arcade-screen-coin {
-            font-size: 56px;
+            font-size: 48px;
             animation: coinPulse 0.8s ease-in-out infinite alternate;
+            font-family: 'PressStart2P', monospace;
+            text-shadow: 3px 3px 0 #000, -1px -1px 0 #e50914;
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 4px solid #e50914;
+            background: radial-gradient(circle, #2a2a2a 0%, #111 100%);
+            box-shadow: 0 0 20px rgba(229,9,20,0.3), inset 0 0 20px rgba(0,0,0,0.8);
+            margin: 0 auto;
+        }
+        .arcade-screen-coin .coin-label {
+            font-size: 10px;
+            color: #e50914;
+            margin-top: 4px;
+            text-shadow: 2px 2px 0 #000;
+        }
+        .arcade-coin-inner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
         }
         @keyframes coinPulse {
-            from { transform: scale(1); }
-            to { transform: scale(1.1); }
+            from { transform: scale(1); box-shadow: 0 0 20px rgba(229,9,20,0.3), inset 0 0 20px rgba(0,0,0,0.8); }
+            to { transform: scale(1.05); box-shadow: 0 0 30px rgba(229,9,20,0.5), inset 0 0 20px rgba(0,0,0,0.8); }
         }
         .arcade-screen-coin.flipping {
             animation: coinFlip 0.1s linear infinite;
@@ -1011,23 +1035,33 @@
         }
         .arcade-choice-btn {
             font-family: 'Courier New', monospace;
-            min-width: 120px;
-            padding: 10px 20px;
-            border: 2px solid #444;
+            padding: 12px 24px;
             background: #1a1a1a;
-            color: #aaa;
+            border: 3px solid #444;
+            color: #888;
+            font-family: 'PressStart2P', monospace;
+            font-size: 14px;
             cursor: pointer;
             border-radius: 4px;
-            font-size: 14px;
-            transition: all 0.2s;
+            transition: all 0.15s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            min-width: 100px;
         }
-        .arcade-choice-btn:hover { border-color: #e50914; color: #fff; }
+        .arcade-choice-btn:hover { border-color: #e50914; color: #fff; transform: translateY(-2px); }
+        .arcade-choice-btn .choice-icon { font-size: 28px; }
+        .arcade-choice-btn .choice-label { font-size: 12px; }
         .arcade-choice-btn.selected {
             border-color: #e50914;
             background: #e50914;
             color: #fff;
-            box-shadow: 0 0 10px rgba(229,9,20,0.5);
+            box-shadow: 0 0 15px rgba(229,9,20,0.6), inset 0 0 10px rgba(0,0,0,0.3);
             transform: scale(0.97);
+        }
+        .arcade-choice-btn.selected .choice-icon {
+            text-shadow: 2px 2px 0 #000;
         }
         .arcade-payout {
             margin-top: 12px;
@@ -1490,13 +1524,19 @@
         <!-- Coin Flip -->
         <div id="arcade-coinflip" style="display: block;">
             <div class="arcade-game">
-                <h3>🪙 HEADS OR TAILS</h3>
-                <div class="arcade-screen"><div id="coinflipResult" class="arcade-screen-coin">🪙</div></div>
+                <h3>👑 HEADS OR TAILS</h3>
+                <div class="arcade-screen"><div id="coinflipResult" class="arcade-screen-coin"><div class="arcade-coin-inner"><span>👑</span><span class="coin-label">WAITING</span></div></div></div>
                 <div style="margin-bottom: 16px;">
-                    <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">CHOOSE:</label>
-                    <div style="display: flex; gap: 10px; justify-content: center;">
-                        <button class="arcade-choice-btn" id="coinflipChoice-heads" onclick="selectCoinflipChoice('heads')">HEADS</button>
-                        <button class="arcade-choice-btn" id="coinflipChoice-tails" onclick="selectCoinflipChoice('tails')">TAILS</button>
+                    <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">CHOOSE YOUR SIDE:</label>
+                    <div style="display: flex; gap: 12px; justify-content: center;">
+                        <button class="arcade-choice-btn" id="coinflipChoice-heads" onclick="selectCoinflipChoice('heads')">
+                            <span class="choice-icon">👑</span>
+                            <span class="choice-label">HEADS</span>
+                        </button>
+                        <button class="arcade-choice-btn" id="coinflipChoice-tails" onclick="selectCoinflipChoice('tails')">
+                            <span class="choice-icon">👸</span>
+                            <span class="choice-label">TAILS</span>
+                        </button>
                     </div>
                 </div>
                 <div style="margin-bottom: 16px;">
@@ -1531,8 +1571,8 @@
                 <div id="crashGameArea" class="arcade-screen arcade-crash-screen" style="display: none; flex-direction: column; gap: 6px;">
                     <div id="crashMultiplier" class="arcade-mult" style="color: #4caf50;">1.00x</div>
                     <div id="crashThief" class="arcade-thief">🦹</div>
-                    <div id="crashStatus" style="font-size: 12px; color: #888; font-family: 'Courier New', monospace;">The thief is sneaking...</div>
-                    <div id="crashPotentialPayout" style="font-size: 12px; color: #aaa; font-family: 'Courier New', monospace;">Potential payout: $0.00</div>
+                    <div id="crashStatus" style="font-size: 12px; color: #888; font-family: 'Courier New', monospace;">THE THIEF IS SNEAKING...</div>
+                    <div id="crashPotentialPayout" style="font-size: 12px; color: #aaa; font-family: 'Courier New', monospace;">POTENTIAL: $0.00</div>
                 </div>
                 <div id="crashSetupArea">
                     <div style="margin-bottom: 16px;">
@@ -5316,6 +5356,11 @@
             });
             const selBtn = document.getElementById('coinflipChoice-' + choice);
             if (selBtn) selBtn.classList.add('selected');
+            // Update coin display to show selection
+            const resultEl = document.getElementById('coinflipResult');
+            const icon = choice === 'heads' ? '👑' : '👸';
+            const label = choice === 'heads' ? 'HEADS' : 'TAILS';
+            resultEl.innerHTML = `<div class="arcade-coin-inner"><span>${icon}</span><span class="coin-label">${label}</span></div>`;
         }
 
         async function playCoinflip() {
@@ -5339,12 +5384,16 @@
 
                 let flips = 0;
                 const flipAnim = setInterval(() => {
-                    resultEl.textContent = flips % 2 === 0 ? '🪙' : '🥈';
+                    const flipIcon = flips % 2 === 0 ? '👑' : '👸';
+                    const flipLabel = flips % 2 === 0 ? 'HEADS' : 'TAILS';
+                    resultEl.innerHTML = `<div class="arcade-coin-inner"><span>${flipIcon}</span><span class="coin-label">${flipLabel}</span></div>`;
                     flips++;
                     if (flips > 8) {
                         clearInterval(flipAnim);
                         resultEl.classList.remove('flipping');
-                        resultEl.textContent = data.result === 'heads' ? '🪙' : '🥈';
+                        const finalIcon = data.result === 'heads' ? '👑' : '👸';
+                        const finalLabel = data.result === 'heads' ? 'HEADS' : 'TAILS';
+                        resultEl.innerHTML = `<div class="arcade-coin-inner"><span>${finalIcon}</span><span class="coin-label">${finalLabel}</span></div>`;
                         if (data.won) {
                             payoutEl.innerHTML = `🎉 WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
                         } else {
@@ -5417,7 +5466,7 @@
                 cashoutBtn.style.display = 'block';
                 document.getElementById('crashMultiplier').textContent = '1.00x';
                 document.getElementById('crashMultiplier').style.color = '#4caf50';
-                document.getElementById('crashStatus').textContent = '🦹 The thief is sneaking...';
+                document.getElementById('crashStatus').textContent = '🦹 THE THIEF IS SNEAKING...';
                 document.getElementById('crashThief').textContent = '🦹';
 
                 const startTime = Date.now();
