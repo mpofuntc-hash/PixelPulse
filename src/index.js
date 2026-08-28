@@ -3176,36 +3176,28 @@ async function updateITTicketStatus(ticketId, status, assignedTo = null) {
 // Bot commands - Gaming Focus
 bot.command('start', (ctx) => {
   const welcomeMessage = `
-🎮 Welcome to PixelPulse - Gaming Marketplace & Community!
+🎰 PixelPulse — Play. Trade. Win.
 
-🎬 CLIPS
-• Share highlights from any game — CS2, Roblox, Fortnite, Valorant, and more
-• Get upvoted to win weekly prizes
-• Build your streak for bonus rewards
+🎰 GAMBLING — Play directly on Telegram!
+/coinflip heads 5 — Bet on heads or tails
+/slots 5 — Spin the slot machine
+/crash 5 — Castle Crash, cash out before the guard turns!
+/markets — View prediction markets
 
-💼 MARKETPLACE
-• Buy & sell skins, game accounts, and gift cards
-• CS2, Roblox, Fortnite, PUBG Mobile, Free Fire, Valorant, Call of Duty, and more
-• Escrow-protected trades for safe transactions
+💰 FUND YOUR ACCOUNT:
+/buy 100 — Buy USD balance with Telegram Stars (1 Star = $0.015)
+/balance — Check your USD balance
+Or deposit BTC on the website
 
-🔄 TRADE HUB
-• Swap game tokens across all supported platforms
-• Send Gold to other players directly
-• 8+ token types supported
+🎮 OTHER:
+/clips — View top clips
+/marketplace — Browse marketplace
+/stats — Platform statistics
+/help — All commands
 
-🔮 PREDICTION MARKETS
-• Predict esports match outcomes and anime events
-• Win BTC prizes
-• 3% flat fee on all predictions
+⚡ New here? Type /gamble for a step-by-step guide!
 
-🔗 Start now: https://pixelpulse.zentriva-clubsync.online
-
-Commands:
-/clips - View top clips
-/markets - View active prediction markets
-/marketplace - Browse skin marketplace
-/stats - Platform statistics
-/help - Get help
+🔗 Website: https://pixelpulse.zentriva-clubsync.online
   `;
   ctx.reply(welcomeMessage);
 });
@@ -3288,17 +3280,345 @@ bot.command('help', (ctx) => {
   const helpMessage = `
 🆘 Help & Commands
 
-/start - Welcome message
-/markets - View betting markets
-/news - Latest anime news
-/stats - Platform statistics
-/help - This help message
+🎰 GAMBLING:
+/gamble — Step-by-step guide to start playing
+/coinflip — Bet on heads or tails (min $0.50)
+/slots — Spin the slot machine (min $0.50)
+/crash — Castle Crash, cash out before the guard turns!
+/balance — Check your USD balance
+/buy — Buy USD balance with Telegram Stars
+
+🎮 OTHER:
+/markets — View prediction markets
+/clips — View top clips
+/marketplace — Browse marketplace
+/stats — Platform statistics
+/help — This help message
 
 🔗 Website: https://pixelpulse.zentriva-clubsync.online
-
-For support, contact: @PixelPulseSupport
   `;
   ctx.reply(helpMessage);
+});
+
+// ===== TELEGRAM ARCADE GAMBLING =====
+
+const TELEGRAM_MIN_STAKE = 0.50;
+const STARS_TO_USD_RATE = 0.015; // 1 Telegram Star = $0.015
+
+// Helper: get or create Telegram user
+async function getTelegramUser(ctx) {
+  const tgId = ctx.from.id;
+  let user = await dbGet('SELECT id, username FROM users WHERE telegram_id = ?', [tgId]);
+  if (!user) {
+    const username = ctx.from.username || `tg_${tgId}`;
+    await dbRun('INSERT OR IGNORE INTO users (telegram_id, username, subscription_status) VALUES (?, ?, ?)', [tgId, username, 'free']);
+    user = await dbGet('SELECT id, username FROM users WHERE telegram_id = ?', [tgId]);
+  }
+  return user;
+}
+
+bot.command('gamble', (ctx) => {
+  const msg = `
+🎰 How to Start Gambling on PixelPulse
+
+3 EASY STEPS:
+
+STEP 1: Your Account
+✅ You're already registered! Your Telegram account is auto-linked.
+
+STEP 2: Fund Your Balance
+🟢 Option A: Buy with Telegram Stars
+/buy — Pay with Stars (1 Star = $0.015)
+   Example: 100 Stars = $1.50
+
+₿ Option B: Deposit Crypto
+Go to https://pixelpulse.zentriva-clubsync.online
+Login → Wallet → Deposit BTC
+
+STEP 3: Start Playing!
+/coinflip heads 5 — Bet $5 on heads
+/slots 5 — Spin slots with $5 stake
+/crash 5 — Castle Crash with $5 stake
+
+USEFUL:
+/balance — Check your balance
+/markets — View prediction markets
+
+All games are provably fair!
+Minimum stake: $${TELEGRAM_MIN_STAKE}
+  `;
+  ctx.reply(msg);
+});
+
+bot.command('balance', async (ctx) => {
+  try {
+    const user = await getTelegramUser(ctx);
+    const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [user.id]);
+    const balance = bal?.usd_balance || 0;
+    ctx.reply(`💰 Your Arcade Balance\n\nUSD: $${balance.toFixed(2)}\n\nUse /buy to add funds with Telegram Stars\nUse /coinflip, /slots, or /crash to play!`);
+  } catch(e) { ctx.reply('Error checking balance. Try again.'); }
+});
+
+// Telegram Stars payment — buy USD balance
+bot.command('buy', async (ctx) => {
+  try {
+    const user = await getTelegramUser(ctx);
+    const starsAmount = parseInt(ctx.message.text.split(' ')[1]);
+    if (!starsAmount || starsAmount < 10) {
+      ctx.reply(`💎 Buy USD Balance with Telegram Stars\n\nRates:\n• 10 Stars = $0.15\n• 50 Stars = $0.75\n• 100 Stars = $1.50\n• 500 Stars = $7.50\n• 1000 Stars = $15.00\n\nUsage: /buy 100\nMinimum: 10 Stars`);
+      return;
+    }
+    const usdAmount = Math.floor(starsAmount * STARS_TO_USD_RATE * 100) / 100;
+    if (usdAmount < TELEGRAM_MIN_STAKE) {
+      ctx.reply(`Minimum purchase is 10 Stars ($0.15). You tried ${starsAmount} Stars = $${usdAmount.toFixed(2)}.`);
+      return;
+    }
+    await bot.telegram.sendInvoice(ctx.chat.id, {
+      title: `${starsAmount} Stars → $${usdAmount.toFixed(2)} Arcade Balance`,
+      description: `Add $${usdAmount.toFixed(2)} USD to your PixelPulse arcade balance. Use it to play /coinflip, /slots, and /crash!`,
+      payload: JSON.stringify({ userId: user.id, stars: starsAmount, usd: usdAmount }),
+      currency: 'XTR',
+      prices: [{ label: `${starsAmount} Stars`, amount: starsAmount }],
+      provider_token: ''
+    });
+  } catch(e) { console.error('Telegram buy error:', e); ctx.reply('Error creating payment. Try again.'); }
+});
+
+// Handle successful Telegram Stars payment
+bot.on('pre_checkout_query', async (ctx) => {
+  try {
+    await ctx.answerPreCheckoutQuery(true);
+  } catch(e) { console.error('Pre-checkout error:', e); }
+});
+
+bot.on('successful_payment', async (ctx) => {
+  try {
+    const payload = JSON.parse(ctx.message.successful_payment.invoice_payload);
+    const { userId, usd } = payload;
+    await dbRun('INSERT OR IGNORE INTO user_balances (user_id, usd_balance) VALUES (?, 0)', [userId]);
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [usd, userId]);
+    const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [userId]);
+    ctx.reply(`✅ Payment received!\n\n+$${usd.toFixed(2)} added to your balance.\nNew balance: $${(bal?.usd_balance || 0).toFixed(2)}\n\nNow play: /coinflip, /slots, or /crash!`);
+  } catch(e) { console.error('Payment processing error:', e); ctx.reply('Payment received but error crediting balance. Contact support.'); }
+});
+
+// Coinflip
+bot.command('coinflip', async (ctx) => {
+  try {
+    const args = ctx.message.text.split(' ');
+    const choice = args[1]?.toLowerCase();
+    const stake = parseFloat(args[2]);
+
+    if (!choice || !['heads', 'tails'].includes(choice)) {
+      ctx.reply('Usage: /coinflip heads 5\n\nChoices: heads or tails\nMin stake: $' + TELEGRAM_MIN_STAKE);
+      return;
+    }
+    if (!stake || stake < TELEGRAM_MIN_STAKE) {
+      ctx.reply(`Minimum stake is $${TELEGRAM_MIN_STAKE}\nUsage: /coinflip heads 5`);
+      return;
+    }
+
+    const user = await getTelegramUser(ctx);
+    const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [user.id]);
+    if (!bal || bal.usd_balance < stake) {
+      ctx.reply(`Insufficient balance: $${(bal?.usd_balance || 0).toFixed(2)}\n\nUse /buy to add funds with Telegram Stars!`);
+      return;
+    }
+
+    const serverSeed = generateServerSeed();
+    const cSeed = arcadeCrypto.randomBytes(8).toString('hex');
+    const nonce = Date.now();
+    const roll = provablyFairResult(serverSeed, cSeed, nonce);
+    const result = roll < 0.5 ? 'heads' : 'tails';
+    const won = result === choice;
+    const multiplier = won ? (2 - HOUSE_EDGE * 2) : 0;
+    const payout = won ? Math.floor(stake * multiplier * 100) / 100 : 0;
+
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stake, stake, user.id]);
+    if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, user.id]);
+    await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'coinflip', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
+      [user.id, stake, multiplier, payout, won ? 'won' : 'lost', JSON.stringify({ choice, result, source: 'telegram' }), serverSeed, cSeed, nonce]);
+
+    const newBal = bal.usd_balance - stake + payout;
+    const icon = result === 'heads' ? '👑' : '👸';
+    const msg = won
+      ? `🪙 Coin Flip\n\n${icon} Result: ${result.toUpperCase()}\nYou chose: ${choice}\n\n🎉 WON $${payout.toFixed(2)} (${multiplier.toFixed(2)}x)\nStake: $${stake.toFixed(2)}\nBalance: $${newBal.toFixed(2)}`
+      : `🪙 Coin Flip\n\n${icon} Result: ${result.toUpperCase()}\nYou chose: ${choice}\n\n❌ LOST $${stake.toFixed(2)}\nBalance: $${newBal.toFixed(2)}`;
+    ctx.reply(msg);
+  } catch(e) { console.error('Telegram coinflip error:', e); ctx.reply('Error playing coinflip. Try again.'); }
+});
+
+// Slots
+bot.command('slots', async (ctx) => {
+  try {
+    const args = ctx.message.text.split(' ');
+    const stake = parseFloat(args[1]);
+
+    if (!stake || stake < TELEGRAM_MIN_STAKE) {
+      ctx.reply(`Usage: /slots 5\nMin stake: $${TELEGRAM_MIN_STAKE}`);
+      return;
+    }
+
+    const user = await getTelegramUser(ctx);
+    const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [user.id]);
+    if (!bal || bal.usd_balance < stake) {
+      ctx.reply(`Insufficient balance: $${(bal?.usd_balance || 0).toFixed(2)}\n\nUse /buy to add funds with Telegram Stars!`);
+      return;
+    }
+
+    const serverSeed = generateServerSeed();
+    const cSeed = arcadeCrypto.randomBytes(8).toString('hex');
+    const nonce = Date.now();
+    const reels = [];
+    for (let i = 0; i < 3; i++) {
+      const roll = provablyFairResult(serverSeed, cSeed, nonce + i);
+      reels.push(SLOT_SYMBOLS[Math.floor(roll * SLOT_SYMBOLS.length)]);
+    }
+    let multiplier = 0, result = 'lost';
+    if (reels[0] === reels[1] && reels[1] === reels[2]) {
+      multiplier = SLOT_PAYOUTS[reels[0]] * (1 - HOUSE_EDGE);
+      result = 'jackpot';
+    } else if (reels[0] === reels[1] || reels[1] === reels[2] || reels[0] === reels[2]) {
+      multiplier = 1.5 * (1 - HOUSE_EDGE);
+      result = 'won';
+    }
+    const payout = multiplier > 0 ? Math.floor(stake * multiplier * 100) / 100 : 0;
+
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stake, stake, user.id]);
+    if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, user.id]);
+    await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'slots', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
+      [user.id, stake, multiplier, payout, result, JSON.stringify({ reels, source: 'telegram' }), serverSeed, cSeed, nonce]);
+
+    const newBal = bal.usd_balance - stake + payout;
+    const resultText = result === 'jackpot' ? `🎉 JACKPOT! 3x ${reels[0]}` : result === 'won' ? '✅ Two of a kind!' : '❌ No match';
+    const msg = `🎰 Slots\n\n# ${reels.join(' | ')}\n\n${resultText}\n${payout > 0 ? `Won $${payout.toFixed(2)} (${multiplier.toFixed(2)}x)` : `Lost $${stake.toFixed(2)}`}\nBalance: $${newBal.toFixed(2)}`;
+    ctx.reply(msg);
+  } catch(e) { console.error('Telegram slots error:', e); ctx.reply('Error playing slots. Try again.'); }
+});
+
+// Castle Crash
+bot.command('crash', async (ctx) => {
+  try {
+    const args = ctx.message.text.split(' ');
+    const stake = parseFloat(args[1]);
+
+    if (!stake || stake < TELEGRAM_MIN_STAKE) {
+      ctx.reply(`Usage: /crash 5\nMin stake: $${TELEGRAM_MIN_STAKE}`);
+      return;
+    }
+
+    const user = await getTelegramUser(ctx);
+    const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [user.id]);
+    if (!bal || bal.usd_balance < stake) {
+      ctx.reply(`Insufficient balance: $${(bal?.usd_balance || 0).toFixed(2)}\n\nUse /buy to add funds with Telegram Stars!`);
+      return;
+    }
+
+    const serverSeed = generateServerSeed();
+    const cSeed = arcadeCrypto.randomBytes(8).toString('hex');
+    const nonce = Date.now();
+    const crashPoint = generateCrashPoint(serverSeed, cSeed, nonce);
+
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stake, user.id]);
+
+    const { Markup } = require('telegraf');
+    const msg = `🏰 Castle Crash\n\n🦹 A thief sneaks down the castle corridor...\nGuards patrol ahead. Cash out before they turn!\n\nStake: $${stake.toFixed(2)}\nMultiplier: 1.00x\nPotential: $${stake.toFixed(2)}\n\nClick CASH OUT to secure your winnings!`;
+    const keyboard = Markup.inlineKeyboard([
+      Markup.button.callback('💰 CASH OUT', `crash_cashout_${user.id}_${nonce}_${stake}`)
+    ]);
+
+    await ctx.reply(msg, keyboard);
+    const sentMsg = await ctx.telegram.sendMessage(ctx.chat.id, '⏳ Game starting...', { reply_markup: keyboard.reply_markup });
+
+    let currentMult = 1.00;
+    const startTime = Date.now();
+    let crashed = false;
+    let cashedOut = false;
+
+    const updateInterval = setInterval(async () => {
+      if (cashedOut || crashed) { clearInterval(updateInterval); return; }
+      const elapsed = (Date.now() - startTime) / 1000;
+      currentMult = 1 + (elapsed * elapsed * 0.15);
+
+      if (currentMult >= crashPoint) {
+        crashed = true;
+        clearInterval(updateInterval);
+        await dbRun('UPDATE user_balances SET total_lost = total_lost + ? WHERE user_id = ?', [stake, user.id]);
+        await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'castle_crash', ?, 'USD', 0, 0, 'crashed', ?, ?)`,
+          [user.id, stake, JSON.stringify({ crashPoint, multiplierAtCrash: currentMult, source: 'telegram' }), nonce]);
+        try {
+          await ctx.telegram.editMessageText(ctx.chat.id, sentMsg.message_id, undefined,
+            `🏰 Castle Crash\n\n🚨 GUARD TURNED AROUND!\n🦹 The thief was caught!\n\nCrashed at ${crashPoint.toFixed(2)}x\nYou lost $${stake.toFixed(2)}`);
+        } catch(e) {}
+        return;
+      }
+
+      const potential = Math.floor(stake * currentMult * 100) / 100;
+      try {
+        await ctx.telegram.editMessageText(ctx.chat.id, sentMsg.message_id, undefined,
+          `🏰 Castle Crash\n\n🦹 The thief sneaks deeper...\nGuards still facing away\n\nStake: $${stake.toFixed(2)}\nMultiplier: ${currentMult.toFixed(2)}x\nPotential: $${potential.toFixed(2)}\n\nClick CASH OUT!`,
+          { reply_markup: keyboard.reply_markup });
+      } catch(e) {}
+    }, 1500);
+
+    // Store game state for button callback
+    if (!global.telegramCrashGames) global.telegramCrashGames = {};
+    global.telegramCrashGames[`${user.id}_${nonce}`] = {
+      updateInterval, currentMult, stake, crashPoint, cashedOut, crashed,
+      user, startTime, ctx, sentMsg, keyboard, bal
+    };
+
+    // Auto-crash after 60 seconds
+    setTimeout(async () => {
+      const game = global.telegramCrashGames[`${user.id}_${nonce}`];
+      if (game && !game.cashedOut && !game.crashed) {
+        game.crashed = true;
+        clearInterval(game.updateInterval);
+        await dbRun('UPDATE user_balances SET total_lost = total_lost + ? WHERE user_id = ?', [stake, user.id]);
+        await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'castle_crash', ?, 'USD', 0, 0, 'crashed', ?, ?)`,
+          [user.id, stake, JSON.stringify({ crashPoint, multiplierAtCrash: game.currentMult, source: 'telegram', reason: 'timeout' }), nonce]);
+        try {
+          await ctx.telegram.editMessageText(ctx.chat.id, sentMsg.message_id, undefined,
+            `🏰 Castle Crash\n\n⏰ Time ran out! Guard caught the thief.\n\nYou lost $${stake.toFixed(2)}`);
+        } catch(e) {}
+      }
+      delete global.telegramCrashGames[`${user.id}_${nonce}`];
+    }, 60000);
+  } catch(e) { console.error('Telegram crash error:', e); ctx.reply('Error starting crash game. Try again.'); }
+});
+
+// Handle crash cashout button
+bot.action(/crash_cashout_(\d+)_(\d+)_([\d.]+)/, async (ctx) => {
+  try {
+    const userId = parseInt(ctx.match[1]);
+    const nonce = parseInt(ctx.match[2]);
+    const stake = parseFloat(ctx.match[3]);
+
+    if (ctx.from.id !== userId) {
+      ctx.answerCbQuery('This is not your game!');
+      return;
+    }
+
+    const game = global.telegramCrashGames?.[`${userId}_${nonce}`];
+    if (!game || game.cashedOut || game.crashed) {
+      ctx.answerCbQuery('Game already ended!');
+      return;
+    }
+
+    game.cashedOut = true;
+    clearInterval(game.updateInterval);
+
+    const payout = Math.floor(stake * game.currentMult * 100) / 100;
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, userId]);
+    await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'castle_crash', ?, 'USD', ?, ?, 'cashed_out', ?, ?)`,
+      [userId, stake, game.currentMult, payout, JSON.stringify({ cashoutMultiplier: game.currentMult, source: 'telegram' }), nonce]);
+
+    const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [userId]);
+    await ctx.editMessageText(
+      `🏰 Castle Crash\n\n💰 CASHED OUT SUCCESSFULLY!\n🦹 The thief escaped with the treasure!\n\nMultiplier: ${game.currentMult.toFixed(2)}x\nWon: $${payout.toFixed(2)}\nStake: $${stake.toFixed(2)}\nBalance: $${(bal?.usd_balance || 0).toFixed(2)}`);
+    ctx.answerCbQuery(`Cashed out at ${game.currentMult.toFixed(2)}x!`);
+    delete global.telegramCrashGames[`${userId}_${nonce}`];
+  } catch(e) { console.error('Telegram crash cashout error:', e); ctx.answerCbQuery('Error cashing out!'); }
 });
 
 // Handle text messages
