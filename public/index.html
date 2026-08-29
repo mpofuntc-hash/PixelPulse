@@ -1152,6 +1152,287 @@
             color: #fff;
             box-shadow: 0 0 10px rgba(229,9,20,0.4);
         }
+        /* ===== STAKE-LIKE GAME CARD SECTIONS ===== */
+        .game-section-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 14px;
+            margin-bottom: 20px;
+        }
+        .game-card {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #2a2a4a;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.25s;
+            position: relative;
+            overflow: hidden;
+        }
+        .game-card:hover {
+            border-color: #00d4ff;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,212,255,0.2);
+        }
+        .game-card .game-card-icon { font-size: 36px; margin-bottom: 8px; }
+        .game-card .game-card-title { font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+        .game-card .game-card-desc { font-size: 11px; color: #888; }
+        .game-card .game-card-edge { font-size: 10px; color: #555; margin-top: 6px; }
+        /* ===== MINES ===== */
+        .mines-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 6px;
+            max-width: 360px;
+            margin: 16px auto;
+        }
+        .mine-card {
+            aspect-ratio: 1;
+            background: linear-gradient(135deg, #1e2a4a 0%, #0f1629 100%);
+            border: 2px solid #2a3a5a;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .mine-card:hover:not(.revealed):not(.disabled) {
+            border-color: #00d4ff;
+            transform: scale(1.05);
+            box-shadow: 0 0 12px rgba(0,212,255,0.3);
+        }
+        .mine-card.revealed {
+            cursor: default;
+            transform: scale(0.95);
+        }
+        .mine-card.safe {
+            background: linear-gradient(135deg, #1a3a1a 0%, #0d2a0d 100%);
+            border-color: #4caf50;
+            box-shadow: 0 0 10px rgba(76,175,80,0.3);
+        }
+        .mine-card.bomb {
+            background: linear-gradient(135deg, #3a1a1a 0%, #2a0d0d 100%);
+            border-color: #f44336;
+            box-shadow: 0 0 15px rgba(244,67,54,0.5);
+            animation: bombShake 0.4s;
+        }
+        @keyframes bombShake { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-4px);} 75%{transform:translateX(4px);} }
+        .mine-card.disabled { opacity: 0.4; cursor: not-allowed; }
+        /* ===== DICE ===== */
+        .dice-display {
+            font-size: 56px;
+            margin: 16px 0;
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            min-height: 70px;
+            align-items: center;
+        }
+        .dice-face {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, #fff 0%, #ddd 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            font-weight: 800;
+            color: #1a1a2e;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4), inset 0 -3px 6px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        .dice-face.rolling { animation: diceRoll 0.5s linear infinite; }
+        @keyframes diceRoll { 0%{transform:rotate(0);} 100%{transform:rotate(360deg);} }
+        .dice-prediction-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 4px;
+            max-width: 420px;
+            margin: 12px auto;
+        }
+        .dice-pred-btn {
+            padding: 10px 4px;
+            border: 2px solid #2a2a4a;
+            background: #111;
+            color: #aaa;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+            transition: all 0.15s;
+        }
+        .dice-pred-btn:hover { border-color: #00d4ff; color: #fff; }
+        .dice-pred-btn.selected {
+            border-color: #00d4ff;
+            background: rgba(0,212,255,0.15);
+            color: #00d4ff;
+            box-shadow: 0 0 10px rgba(0,212,255,0.3);
+        }
+        .dice-pred-btn .payout-info { font-size: 9px; color: #666; }
+        .dice-pred-btn.selected .payout-info { color: #00d4ff; }
+        /* ===== PLINKO ===== */
+        .plinko-board {
+            position: relative;
+            max-width: 400px;
+            margin: 16px auto;
+            padding: 20px 10px;
+            background: linear-gradient(180deg, #0f1629 0%, #1a1a2e 100%);
+            border-radius: 12px;
+            border: 2px solid #2a2a4a;
+        }
+        .plinko-pegs {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 8px;
+        }
+        .plinko-row {
+            display: flex;
+            gap: 20px;
+        }
+        .plinko-peg {
+            width: 6px;
+            height: 6px;
+            background: #4a4a6a;
+            border-radius: 50%;
+        }
+        .plinko-slots {
+            display: flex;
+            justify-content: space-between;
+            gap: 2px;
+        }
+        .plinko-slot {
+            flex: 1;
+            text-align: center;
+            padding: 6px 2px;
+            border-radius: 4px 4px 0 0;
+            font-size: 10px;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+        }
+        .plinko-ball {
+            position: absolute;
+            font-size: 20px;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            transition: all 0.3s;
+        }
+        .plinko-risk-btn {
+            padding: 6px 14px;
+            border: 2px solid #2a2a4a;
+            background: #111;
+            color: #888;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+            transition: all 0.15s;
+        }
+        .plinko-risk-btn:hover { border-color: #555; color: #ccc; }
+        .plinko-risk-btn.active {
+            border-color: #00d4ff;
+            background: rgba(0,212,255,0.15);
+            color: #00d4ff;
+        }
+        /* ===== PVP COLOR GUESS ===== */
+        .pvp-arena {
+            max-width: 500px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        .pvp-scoreboard {
+            display: flex;
+            justify-content: space-between;
+            margin: 16px 0;
+            gap: 12px;
+        }
+        .pvp-player {
+            flex: 1;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #2a2a4a;
+            border-radius: 10px;
+            padding: 16px;
+            transition: all 0.3s;
+        }
+        .pvp-player.you { border-color: #00d4ff; }
+        .pvp-player.opponent { border-color: #ff6b6b; }
+        .pvp-player.active-turn {
+            box-shadow: 0 0 15px rgba(0,212,255,0.4);
+            transform: scale(1.03);
+        }
+        .pvp-player .pvp-name { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+        .pvp-player .pvp-score { font-size: 28px; font-weight: 800; }
+        .pvp-color-btn {
+            padding: 16px 32px;
+            border: 3px solid;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+            transition: all 0.2s;
+            margin: 8px;
+        }
+        .pvp-color-btn.red {
+            border-color: #ff4444;
+            background: rgba(255,68,68,0.1);
+            color: #ff4444;
+        }
+        .pvp-color-btn.red:hover, .pvp-color-btn.red.selected {
+            background: rgba(255,68,68,0.3);
+            box-shadow: 0 0 15px rgba(255,68,68,0.4);
+        }
+        .pvp-color-btn.blue {
+            border-color: #4444ff;
+            background: rgba(68,68,255,0.1);
+            color: #4444ff;
+        }
+        .pvp-color-btn.blue:hover, .pvp-color-btn.blue.selected {
+            background: rgba(68,68,255,0.3);
+            box-shadow: 0 0 15px rgba(68,68,255,0.4);
+        }
+        .pvp-round-history {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            margin: 12px 0;
+            flex-wrap: wrap;
+        }
+        .pvp-round-badge {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-family: 'Courier New', monospace;
+            background: #1a1a2e;
+            border: 1px solid #2a2a4a;
+        }
+        .pvp-round-badge.win { border-color: #4caf50; color: #4caf50; }
+        .pvp-round-badge.loss { border-color: #f44336; color: #f44336; }
+        .pvp-queue-status {
+            padding: 30px;
+            text-align: center;
+            color: #888;
+            font-size: 14px;
+        }
+        .pvp-queue-spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid #2a2a4a;
+            border-top-color: #00d4ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 12px;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -1558,7 +1839,7 @@
     </button>
 
     <div class="section" id="arcade" style="display: none;">
-        <div class="info-banner"><strong>PixelPulse Arcade</strong> — Provably fair games with USD stakes. Play Coin Flip, Slots, Castle Crash, and prediction markets. Minimum stake $2 on web, $0.50 on Discord. 5% house edge.</div>
+        <div class="info-banner"><strong>PixelPulse Arcade</strong> — Provably fair games with USD stakes. 8 game modules with house edge. Minimum stake $2 on web, $0.50 on Discord/Telegram.</div>
 
         <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
             <div style="background: #0d0d0d; border: 2px solid #e50914; border-radius: 4px; padding: 10px 18px; font-family: 'Courier New', monospace;">
@@ -1573,6 +1854,10 @@
             <button class="arcade-tab active" id="arcadeTab-coinflip" onclick="switchArcadeTab('coinflip')">🪙 COIN FLIP</button>
             <button class="arcade-tab" id="arcadeTab-slots" onclick="switchArcadeTab('slots')">🎰 SLOTS</button>
             <button class="arcade-tab" id="arcadeTab-crash" onclick="switchArcadeTab('crash')">🚔 POLICE CHASE</button>
+            <button class="arcade-tab" id="arcadeTab-mines" onclick="switchArcadeTab('mines')">💣 MINES</button>
+            <button class="arcade-tab" id="arcadeTab-dice" onclick="switchArcadeTab('dice')">🎲 DICE</button>
+            <button class="arcade-tab" id="arcadeTab-plinko" onclick="switchArcadeTab('plinko')">🔵 PLINKO</button>
+            <button class="arcade-tab" id="arcadeTab-pvp" onclick="switchArcadeTab('pvp')">⚔️ PVP</button>
             <button class="arcade-tab" id="arcadeTab-predictions" onclick="switchArcadeTab('predictions')">🔮 PREDICTIONS</button>
             <button class="arcade-tab" id="arcadeTab-winners" onclick="switchArcadeTab('winners')">🏆 WINNERS</button>
         </div>
@@ -1643,6 +1928,139 @@
                 </div>
                 <button class="arcade-btn arcade-btn-cashout" onclick="cashoutCrash()" id="crashCashoutBtn" style="display: none; margin-top: 12px;">💰 CASH OUT</button>
                 <div id="crashResult" class="arcade-payout"></div>
+            </div>
+        </div>
+
+        <!-- Mines -->
+        <div id="arcade-mines" style="display: none;">
+            <div class="arcade-game" style="max-width: 500px;">
+                <h3>💣 MINES</h3>
+                <p style="color: #888; font-size: 12px; margin-bottom: 16px;">Pick cards and avoid the mines! Cash out anytime.</p>
+                <div id="minesSetupArea">
+                    <div style="margin-bottom: 12px;">
+                        <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">NUMBER OF MINES:</label>
+                        <div style="display: flex; gap: 6px; justify-content: center; flex-wrap: wrap;">
+                            <button class="plinko-risk-btn active" onclick="selectMineCount(3, this)" id="mineCount3">3 MINES</button>
+                            <button class="plinko-risk-btn" onclick="selectMineCount(5, this)" id="mineCount5">5 MINES</button>
+                            <button class="plinko-risk-btn" onclick="selectMineCount(7, this)" id="mineCount7">7 MINES</button>
+                            <button class="plinko-risk-btn" onclick="selectMineCount(10, this)" id="mineCount10">10 MINES</button>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">STAKE (USD, MIN $2):</label>
+                        <input type="number" id="minesStake" value="2" min="2" step="0.50" class="arcade-input">
+                    </div>
+                    <button class="arcade-btn" onclick="startMines()" id="minesStartBtn">START GAME</button>
+                </div>
+                <div id="minesGameArea" style="display: none;">
+                    <div class="mines-grid" id="minesGrid"></div>
+                    <div style="display: flex; justify-content: space-between; margin: 12px 0; font-size: 12px; font-family: 'Courier New', monospace;">
+                        <span style="color: #aaa;">MULTIPLIER: <span id="minesMult" style="color: #00d4ff; font-weight: 700;">1.00x</span></span>
+                        <span style="color: #aaa;">POTENTIAL: <span id="minesPotential" style="color: #4caf50; font-weight: 700;">$0.00</span></span>
+                    </div>
+                    <button class="arcade-btn arcade-btn-cashout" onclick="cashoutMines()" id="minesCashoutBtn">💰 CASH OUT</button>
+                </div>
+                <div id="minesResult" class="arcade-payout"></div>
+            </div>
+        </div>
+
+        <!-- Dice -->
+        <div id="arcade-dice" style="display: none;">
+            <div class="arcade-game" style="max-width: 500px;">
+                <h3>🎲 DICE ROLL</h3>
+                <p style="color: #888; font-size: 12px; margin-bottom: 16px;">Predict the sum of two dice (2-12). Higher payout for rare numbers!</p>
+                <div class="dice-display" id="diceDisplay">
+                    <div class="dice-face" id="die1">?</div>
+                    <div class="dice-face" id="die2">?</div>
+                </div>
+                <div style="margin-bottom: 8px;">
+                    <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">PREDICT THE SUM:</label>
+                    <div class="dice-prediction-grid" id="dicePredGrid"></div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">STAKE (USD, MIN $2):</label>
+                    <input type="number" id="diceStake" value="2" min="2" step="0.50" class="arcade-input">
+                </div>
+                <button class="arcade-btn" onclick="playDice()" id="dicePlayBtn">ROLL DICE</button>
+                <div id="diceResult" class="arcade-payout"></div>
+                <div class="arcade-info">2 or 12 = 30x | 3 or 11 = 17x | 7 = 5x | 5% house edge</div>
+            </div>
+        </div>
+
+        <!-- Plinko -->
+        <div id="arcade-plinko" style="display: none;">
+            <div class="arcade-game" style="max-width: 500px;">
+                <h3>🔵 PLINKO</h3>
+                <p style="color: #888; font-size: 12px; margin-bottom: 16px;">Drop the ball and watch it bounce! Edge slots pay the most.</p>
+                <div style="margin-bottom: 12px;">
+                    <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">RISK LEVEL:</label>
+                    <div style="display: flex; gap: 6px; justify-content: center;">
+                        <button class="plinko-risk-btn" onclick="selectPlinkoRisk('low', this)">LOW</button>
+                        <button class="plinko-risk-btn active" onclick="selectPlinkoRisk('medium', this)" id="plinkoRiskMedium">MEDIUM</button>
+                        <button class="plinko-risk-btn" onclick="selectPlinkoRisk('high', this)">HIGH</button>
+                    </div>
+                </div>
+                <div class="plinko-board" id="plinkoBoard">
+                    <div class="plinko-ball" id="plinkoBall" style="display: none;">⚪</div>
+                    <div class="plinko-pegs" id="plinkoPegs"></div>
+                    <div class="plinko-slots" id="plinkoSlots"></div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">STAKE (USD, MIN $2):</label>
+                    <input type="number" id="plinkoStake" value="2" min="2" step="0.50" class="arcade-input">
+                </div>
+                <button class="arcade-btn" onclick="playPlinko()" id="plinkoPlayBtn">DROP BALL</button>
+                <div id="plinkoResult" class="arcade-payout"></div>
+            </div>
+        </div>
+
+        <!-- PvP Color Guess -->
+        <div id="arcade-pvp" style="display: none;">
+            <div class="arcade-game" style="max-width: 600px;">
+                <h3>⚔️ PVP COLOR CLASH</h3>
+                <p style="color: #888; font-size: 12px; margin-bottom: 16px;">Guess your opponent's color (red or blue). First to 3 correct wins! 3% house fee.</p>
+                <div id="pvpSetupArea">
+                    <div style="margin-bottom: 16px;">
+                        <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">STAKE (USD, MIN $2):</label>
+                        <input type="number" id="pvpStake" value="2" min="2" step="0.50" class="arcade-input">
+                    </div>
+                    <button class="arcade-btn" onclick="joinPvpQueue()" id="pvpJoinBtn">FIND OPPONENT</button>
+                </div>
+                <div id="pvpQueueArea" style="display: none;">
+                    <div class="pvp-queue-status">
+                        <div class="pvp-queue-spinner"></div>
+                        <div>Searching for opponent at $<span id="pvpQueueStake">2.00</span> stake...</div>
+                        <button class="arcade-btn" onclick="cancelPvpQueue()" style="margin-top: 16px;">CANCEL</button>
+                    </div>
+                </div>
+                <div id="pvpGameArea" style="display: none;">
+                    <div class="pvp-arena">
+                        <div class="pvp-scoreboard">
+                            <div class="pvp-player you" id="pvpYouCard">
+                                <div class="pvp-name">YOU</div>
+                                <div class="pvp-score" id="pvpYourScore">0</div>
+                            </div>
+                            <div class="pvp-player opponent" id="pvpOppCard">
+                                <div class="pvp-name" id="pvpOppName">OPPONENT</div>
+                                <div class="pvp-score" id="pvpOppScore">0</div>
+                            </div>
+                        </div>
+                        <div id="pvpRoundInfo" style="font-size: 12px; color: #888; margin-bottom: 12px;">Round 1 — First to 3 wins!</div>
+                        <div class="pvp-round-history" id="pvpRoundHistory"></div>
+                        <div id="pvpColorChoice" style="display: none; margin: 16px 0;">
+                            <label style="color: #888; font-size: 12px; display: block; margin-bottom: 10px;">CHOOSE YOUR COLOR:</label>
+                            <button class="pvp-color-btn red" onclick="pvpSetColor('red')">🔴 RED</button>
+                            <button class="pvp-color-btn blue" onclick="pvpSetColor('blue')">🔵 BLUE</button>
+                        </div>
+                        <div id="pvpGuessChoice" style="display: none; margin: 16px 0;">
+                            <label style="color: #888; font-size: 12px; display: block; margin-bottom: 10px;">GUESS OPPONENT'S COLOR:</label>
+                            <button class="pvp-color-btn red" onclick="pvpGuess('red')">🔴 RED</button>
+                            <button class="pvp-color-btn blue" onclick="pvpGuess('blue')">🔵 BLUE</button>
+                        </div>
+                        <div id="pvpWaiting" style="display: none; color: #888; font-size: 13px; padding: 20px;">Waiting for opponent...</div>
+                        <div id="pvpResult" class="arcade-payout"></div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -5395,7 +5813,7 @@
         }
 
         function switchArcadeTab(tab) {
-            const tabs = ['coinflip', 'slots', 'crash', 'predictions', 'winners'];
+            const tabs = ['coinflip', 'slots', 'crash', 'mines', 'dice', 'plinko', 'pvp', 'predictions', 'winners'];
             tabs.forEach(t => {
                 const panel = document.getElementById('arcade-' + t);
                 const btn = document.getElementById('arcadeTab-' + t);
@@ -5407,6 +5825,8 @@
             });
             if (tab === 'winners') loadArcadeWinners();
             if (tab === 'predictions') loadPredictions();
+            if (tab === 'dice') initDiceGrid();
+            if (tab === 'plinko') initPlinkoBoard();
         }
 
         async function loadArcadeBalance() {
@@ -5652,6 +6072,456 @@
             } catch(e) { console.error('Crash cashout error:', e); alert('Error cashing out: ' + (e.message || 'unknown')); }
         }
 
+        // ===== MINES =====
+        let minesState = { sessionId: null, mineCount: 3, revealed: [], active: false };
+        function selectMineCount(count, btn) {
+            minesState.mineCount = count;
+            document.querySelectorAll('[id^="mineCount"]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+
+        async function startMines() {
+            if (!sessionToken) { showAuthModal(); return; }
+            const stake = parseFloat(document.getElementById('minesStake').value);
+            const startBtn = document.getElementById('minesStartBtn');
+            const resultEl = document.getElementById('minesResult');
+            startBtn.disabled = true;
+            resultEl.textContent = '';
+
+            try {
+                const res = await fetch('/api/arcade/mines/start', {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stake, mineCount: minesState.mineCount })
+                });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); startBtn.disabled = false; return; }
+
+                minesState = { sessionId: data.sessionId, mineCount: data.mineCount, revealed: [], active: true };
+                document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+                document.getElementById('minesSetupArea').style.display = 'none';
+                document.getElementById('minesGameArea').style.display = 'block';
+                document.getElementById('minesMult').textContent = '1.00x';
+                document.getElementById('minesPotential').textContent = `$${stake.toFixed(2)}`;
+
+                // Build 5x5 grid
+                const grid = document.getElementById('minesGrid');
+                grid.innerHTML = '';
+                for (let i = 0; i < 25; i++) {
+                    const card = document.createElement('div');
+                    card.className = 'mine-card';
+                    card.dataset.index = i;
+                    card.onclick = () => pickMineCard(i);
+                    grid.appendChild(card);
+                }
+            } catch(e) { console.error('Mines start error:', e); alert('Error: ' + (e.message || 'unknown')); startBtn.disabled = false; }
+        }
+
+        async function pickMineCard(index) {
+            if (!minesState.active || minesState.revealed.includes(index)) return;
+            const card = document.querySelector(`.mine-card[data-index="${index}"]`);
+            if (card.classList.contains('revealed')) return;
+
+            try {
+                const res = await fetch('/api/arcade/mines/pick', {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sessionId: minesState.sessionId, cardIndex: index })
+                });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); return; }
+
+                if (data.busted) {
+                    card.classList.add('revealed', 'bomb');
+                    card.textContent = '💣';
+                    // Show all mines
+                    data.minePositions.forEach(pos => {
+                        const mc = document.querySelector(`.mine-card[data-index="${pos}"]`);
+                        if (mc && !mc.classList.contains('safe')) { mc.classList.add('revealed', 'bomb'); mc.textContent = '💣'; }
+                    });
+                    document.getElementById('minesResult').innerHTML = `💥 HIT A MINE! Lost $${(minesState.stake || parseFloat(document.getElementById('minesStake').value)).toFixed(2)}`;
+                    showArcadeToast('loss', '💣', 'BUSTED!', `-$${(minesState.stake || parseFloat(document.getElementById('minesStake').value)).toFixed(2)}`);
+                    document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+                    document.getElementById('minesCashoutBtn').style.display = 'none';
+                    minesState.active = false;
+                    setTimeout(() => {
+                        document.getElementById('minesGameArea').style.display = 'none';
+                        document.getElementById('minesSetupArea').style.display = 'block';
+                        document.getElementById('minesStartBtn').disabled = false;
+                        document.getElementById('minesCashoutBtn').style.display = 'block';
+                        document.getElementById('minesResult').textContent = '';
+                    }, 3500);
+                } else {
+                    card.classList.add('revealed', 'safe');
+                    card.textContent = '✅';
+                    minesState.revealed = data.revealed;
+                    document.getElementById('minesMult').textContent = `${data.currentMult.toFixed(2)}x`;
+                    document.getElementById('minesPotential').textContent = `$${data.potentialPayout.toFixed(2)}`;
+                }
+            } catch(e) { console.error('Mines pick error:', e); }
+        }
+
+        async function cashoutMines() {
+            if (!minesState.active || minesState.revealed.length === 0) return;
+            try {
+                const res = await fetch('/api/arcade/mines/cashout', {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sessionId: minesState.sessionId })
+                });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); return; }
+
+                minesState.active = false;
+                document.getElementById('minesCashoutBtn').style.display = 'none';
+                document.getElementById('minesResult').innerHTML = `🎉 WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
+                document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+                showArcadeToast('win', '💰', 'CASHED OUT!', `+$${data.payout.toFixed(2)}`);
+                // Show all mines
+                data.minePositions.forEach(pos => {
+                    const mc = document.querySelector(`.mine-card[data-index="${pos}"]`);
+                    if (mc && !mc.classList.contains('safe')) { mc.classList.add('revealed', 'bomb'); mc.textContent = '💣'; }
+                });
+
+                setTimeout(() => {
+                    document.getElementById('minesGameArea').style.display = 'none';
+                    document.getElementById('minesSetupArea').style.display = 'block';
+                    document.getElementById('minesStartBtn').disabled = false;
+                    document.getElementById('minesCashoutBtn').style.display = 'block';
+                    document.getElementById('minesResult').textContent = '';
+                }, 3500);
+            } catch(e) { console.error('Mines cashout error:', e); }
+        }
+
+        // ===== DICE =====
+        let dicePrediction = null;
+        const DICE_PAYOUTS = { 2: 30, 3: 17, 4: 11, 5: 8, 6: 6, 7: 5, 8: 6, 9: 8, 10: 11, 11: 17, 12: 30 };
+
+        function initDiceGrid() {
+            const grid = document.getElementById('dicePredGrid');
+            if (grid.children.length > 0) return;
+            for (let i = 2; i <= 12; i++) {
+                const btn = document.createElement('button');
+                btn.className = 'dice-pred-btn';
+                btn.textContent = i;
+                btn.innerHTML = `${i}<div class="payout-info">${DICE_PAYOUTS[i]}x</div>`;
+                btn.onclick = () => selectDicePrediction(i, btn);
+                grid.appendChild(btn);
+            }
+        }
+
+        function selectDicePrediction(num, btn) {
+            dicePrediction = num;
+            document.querySelectorAll('.dice-pred-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+        }
+
+        async function playDice() {
+            if (!sessionToken) { showAuthModal(); return; }
+            if (!dicePrediction) { alert('Select a number 2-12 first!'); return; }
+            const stake = parseFloat(document.getElementById('diceStake').value);
+            const btn = document.getElementById('dicePlayBtn');
+            const resultEl = document.getElementById('diceResult');
+            const die1El = document.getElementById('die1');
+            const die2El = document.getElementById('die2');
+            btn.disabled = true; btn.textContent = 'ROLLING...';
+            resultEl.textContent = '';
+            die1El.classList.add('rolling');
+            die2El.classList.add('rolling');
+
+            let spins = 0;
+            const rollAnim = setInterval(() => {
+                die1El.textContent = Math.floor(Math.random() * 6) + 1;
+                die2El.textContent = Math.floor(Math.random() * 6) + 1;
+                spins++;
+                if (spins > 15) {
+                    clearInterval(rollAnim);
+                    die1El.classList.remove('rolling');
+                    die2El.classList.remove('rolling');
+                    fetch('/api/arcade/dice', {
+                        method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prediction: dicePrediction, stake })
+                    }).then(res => res.json()).then(data => {
+                        if (data.error) { alert(data.error); btn.disabled=false; btn.textContent='ROLL DICE'; return; }
+                        die1El.textContent = data.die1;
+                        die2El.textContent = data.die2;
+                        if (data.won) {
+                            resultEl.innerHTML = `🎉 SUM: ${data.sum} — WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
+                            showArcadeToast('win', '🎲', 'YOU WON!', `+$${data.payout.toFixed(2)}`);
+                        } else {
+                            resultEl.innerHTML = `❌ SUM: ${data.sum} — You predicted ${data.prediction}. Lost $${data.stake.toFixed(2)}`;
+                            showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
+                        }
+                        document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+                        setTimeout(() => { btn.disabled = false; btn.textContent = 'ROLL DICE'; }, 2500);
+                    }).catch(e => { console.error('Dice error:', e); btn.disabled=false; btn.textContent='ROLL DICE'; });
+                }
+            }, 80);
+        }
+
+        // ===== PLINKO =====
+        let plinkoRisk = 'medium';
+        const PLINKO_MULTS = {
+            low: [10, 3, 1.5, 1.1, 1, 0.5, 1, 1.1, 1.5, 3, 10],
+            medium: [16, 9, 2, 1.4, 1.1, 1, 0.5, 1, 1.1, 1.4, 2, 9, 16],
+            high: [29, 4, 1.5, 0.3, 0.2, 0.2, 0.3, 1.5, 4, 29]
+        };
+
+        function selectPlinkoRisk(level, btn) {
+            plinkoRisk = level;
+            document.querySelectorAll('.plinko-risk-btn').forEach(b => { if (b.textContent === 'LOW' || b.textContent === 'MEDIUM' || b.textContent === 'HIGH') b.classList.remove('active'); });
+            btn.classList.add('active');
+            initPlinkoBoard();
+        }
+
+        function initPlinkoBoard() {
+            const pegsEl = document.getElementById('plinkoPegs');
+            const slotsEl = document.getElementById('plinkoSlots');
+            const mults = PLINKO_MULTS[plinkoRisk];
+            const rows = mults.length - 1;
+            pegsEl.innerHTML = '';
+            for (let r = 1; r <= rows; r++) {
+                const row = document.createElement('div');
+                row.className = 'plinko-row';
+                for (let p = 0; p < r; p++) {
+                    const peg = document.createElement('div');
+                    peg.className = 'plinko-peg';
+                    row.appendChild(peg);
+                }
+                pegsEl.appendChild(row);
+            }
+            slotsEl.innerHTML = '';
+            mults.forEach(m => {
+                const slot = document.createElement('div');
+                slot.className = 'plinko-slot';
+                slot.textContent = m + 'x';
+                if (m >= 5) slot.style.background = 'rgba(244,67,54,0.3)';
+                else if (m >= 2) slot.style.background = 'rgba(255,152,0,0.3)';
+                else if (m >= 1) slot.style.background = 'rgba(76,175,80,0.2)';
+                else slot.style.background = 'rgba(244,67,54,0.15)';
+                slotsEl.appendChild(slot);
+            });
+        }
+
+        async function playPlinko() {
+            if (!sessionToken) { showAuthModal(); return; }
+            const stake = parseFloat(document.getElementById('plinkoStake').value);
+            const btn = document.getElementById('plinkoPlayBtn');
+            const resultEl = document.getElementById('plinkoResult');
+            const ball = document.getElementById('plinkoBall');
+            btn.disabled = true; btn.textContent = 'DROPPING...';
+            resultEl.textContent = '';
+            ball.style.display = 'block';
+            ball.style.top = '10px';
+            ball.style.left = '50%';
+
+            try {
+                const res = await fetch('/api/arcade/plinko', {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stake, riskLevel: plinkoRisk })
+                });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); btn.disabled=false; btn.textContent='DROP BALL'; ball.style.display='none'; return; }
+
+                // Animate ball path
+                const path = data.path;
+                let pos = 0;
+                const pegsEl = document.getElementById('plinkoPegs');
+                const rows = pegsEl.children;
+                let step = 0;
+                const ballAnim = setInterval(() => {
+                    if (step >= path.length) {
+                        clearInterval(ballAnim);
+                        // Highlight the slot
+                        const slots = document.getElementById('plinkoSlots').children;
+                        if (slots[data.slotIndex]) {
+                            slots[data.slotIndex].style.transform = 'scale(1.3)';
+                            slots[data.slotIndex].style.boxShadow = '0 0 20px rgba(0,212,255,0.6)';
+                        }
+                        ball.style.display = 'none';
+                        if (data.won) {
+                            resultEl.innerHTML = `🎉 Landed on <span style="color:#00d4ff;font-weight:700">${data.multiplier.toFixed(2)}x</span> — WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span>`;
+                            showArcadeToast('win', '🔵', 'YOU WON!', `+$${data.payout.toFixed(2)}`);
+                        } else {
+                            resultEl.innerHTML = `Landed on ${data.multiplier.toFixed(2)}x — Lost $${data.stake.toFixed(2)}`;
+                            showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
+                        }
+                        document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+                        setTimeout(() => {
+                            btn.disabled = false; btn.textContent = 'DROP BALL';
+                            if (slots[data.slotIndex]) { slots[data.slotIndex].style.transform = ''; slots[data.slotIndex].style.boxShadow = ''; }
+                        }, 2500);
+                        return;
+                    }
+                    // Move ball
+                    if (path[step] === 'R') pos++;
+                    const rowEl = rows[step];
+                    if (rowEl) {
+                        const pegs = rowEl.children;
+                        const pegIdx = Math.min(pos, pegs.length - 1);
+                        if (pegs[pegIdx]) {
+                            const rect = pegs[pegIdx].getBoundingClientRect();
+                            const boardRect = document.getElementById('plinkoBoard').getBoundingClientRect();
+                            ball.style.left = `${rect.left - boardRect.left + 3}px`;
+                            ball.style.top = `${rect.top - boardRect.top + 10}px`;
+                        }
+                    }
+                    step++;
+                }, 100);
+            } catch(e) { console.error('Plinko error:', e); btn.disabled=false; btn.textContent='DROP BALL'; ball.style.display='none'; }
+        }
+
+        // ===== PVP COLOR CLASH =====
+        let pvpState = { gameId: null, polling: null };
+
+        async function joinPvpQueue() {
+            if (!sessionToken) { showAuthModal(); return; }
+            const stake = parseFloat(document.getElementById('pvpStake').value);
+            const btn = document.getElementById('pvpJoinBtn');
+            btn.disabled = true;
+            document.getElementById('pvpQueueStake').textContent = stake.toFixed(2);
+
+            try {
+                const res = await fetch('/api/arcade/pvp/queue', {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stake })
+                });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); btn.disabled = false; return; }
+
+                if (data.matched) {
+                    pvpState.gameId = data.gameId;
+                    document.getElementById('pvpSetupArea').style.display = 'none';
+                    document.getElementById('pvpGameArea').style.display = 'block';
+                    document.getElementById('pvpOppName').textContent = data.opponent;
+                    startPvpPolling();
+                } else {
+                    document.getElementById('pvpSetupArea').style.display = 'none';
+                    document.getElementById('pvpQueueArea').style.display = 'block';
+                    // Poll for match
+                    pvpState.polling = setInterval(async () => {
+                        const checkRes = await fetch('/api/arcade/pvp/queue', {
+                            method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ stake })
+                        });
+                        const checkData = await checkRes.json();
+                        if (checkData.matched) {
+                            clearInterval(pvpState.polling);
+                            pvpState.gameId = checkData.gameId;
+                            document.getElementById('pvpQueueArea').style.display = 'none';
+                            document.getElementById('pvpGameArea').style.display = 'block';
+                            document.getElementById('pvpOppName').textContent = checkData.opponent;
+                            startPvpPolling();
+                        }
+                    }, 3000);
+                }
+            } catch(e) { console.error('PVP queue error:', e); btn.disabled = false; }
+        }
+
+        function cancelPvpQueue() {
+            if (pvpState.polling) { clearInterval(pvpState.polling); pvpState.polling = null; }
+            fetch('/api/arcade/pvp/cancel', { method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}` } });
+            document.getElementById('pvpQueueArea').style.display = 'none';
+            document.getElementById('pvpSetupArea').style.display = 'block';
+            document.getElementById('pvpJoinBtn').disabled = false;
+        }
+
+        function startPvpPolling() {
+            pvpState.polling = setInterval(async () => {
+                if (!pvpState.gameId) return;
+                try {
+                    const res = await fetch('/api/arcade/pvp/action', {
+                        method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ gameId: pvpState.gameId, action: 'status' })
+                    });
+                    const data = await res.json();
+                    if (data.error) { clearInterval(pvpState.polling); return; }
+
+                    document.getElementById('pvpYourScore').textContent = data.yourScore;
+                    document.getElementById('pvpOppScore').textContent = data.opponentScore;
+                    document.getElementById('pvpRoundInfo').textContent = `Round ${data.turn} — First to 3 wins!`;
+
+                    // Update round history
+                    const histEl = document.getElementById('pvpRoundHistory');
+                    histEl.innerHTML = (data.roundHistory || []).map(r => 
+                        `<div class="pvp-round-badge ${r.p1Correct ? 'win' : 'loss'}">R${r.turn}</div>`
+                    ).join('');
+
+                    if (data.status === 'choosing_colors' && data.youNeedColor) {
+                        document.getElementById('pvpColorChoice').style.display = 'block';
+                        document.getElementById('pvpGuessChoice').style.display = 'none';
+                        document.getElementById('pvpWaiting').style.display = 'none';
+                    } else if (data.status === 'playing' && data.youNeedGuess) {
+                        document.getElementById('pvpColorChoice').style.display = 'none';
+                        document.getElementById('pvpGuessChoice').style.display = 'block';
+                        document.getElementById('pvpWaiting').style.display = 'none';
+                    } else if (data.status === 'finished') {
+                        clearInterval(pvpState.polling);
+                    } else {
+                        document.getElementById('pvpColorChoice').style.display = 'none';
+                        document.getElementById('pvpGuessChoice').style.display = 'none';
+                        document.getElementById('pvpWaiting').style.display = 'block';
+                    }
+
+                    // Active turn highlight
+                    document.getElementById('pvpYouCard').classList.toggle('active-turn', data.yourTurn);
+                } catch(e) {}
+            }, 2000);
+        }
+
+        async function pvpSetColor(color) {
+            if (!pvpState.gameId) return;
+            try {
+                const res = await fetch('/api/arcade/pvp/action', {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ gameId: pvpState.gameId, action: 'set_color', value: color })
+                });
+                const data = await res.json();
+                if (data.error) { alert(data.error); return; }
+                document.getElementById('pvpColorChoice').style.display = 'none';
+                document.getElementById('pvpWaiting').style.display = 'block';
+            } catch(e) {}
+        }
+
+        async function pvpGuess(color) {
+            if (!pvpState.gameId) return;
+            try {
+                const res = await fetch('/api/arcade/pvp/action', {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ gameId: pvpState.gameId, action: 'guess', value: color })
+                });
+                const data = await res.json();
+                if (data.error) { alert(data.error); return; }
+
+                if (data.gameOver) {
+                    clearInterval(pvpState.polling);
+                    document.getElementById('pvpGuessChoice').style.display = 'none';
+                    document.getElementById('pvpWaiting').style.display = 'none';
+                    document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+                    if (data.winner === 0 || data.winner === 1) {
+                        const won = (data.winner === 0 && pvpState.gameId); // simplified
+                        document.getElementById('pvpResult').innerHTML = `Game Over! Prize: $${data.prize.toFixed(2)} (House fee: $${data.houseFee.toFixed(2)})`;
+                        showArcadeToast('win', '⚔️', 'GAME OVER!', `Prize: $${data.prize.toFixed(2)}`);
+                    } else {
+                        document.getElementById('pvpResult').innerHTML = `Tie! Refunded minus house fee.`;
+                        showArcadeToast('loss', '🤝', 'TIE!', 'Refunded');
+                    }
+                    setTimeout(() => {
+                        pvpState.gameId = null;
+                        document.getElementById('pvpGameArea').style.display = 'none';
+                        document.getElementById('pvpSetupArea').style.display = 'block';
+                        document.getElementById('pvpJoinBtn').disabled = false;
+                        document.getElementById('pvpResult').textContent = '';
+                    }, 5000);
+                } else if (data.roundOver) {
+                    document.getElementById('pvpGuessChoice').style.display = 'none';
+                    document.getElementById('pvpWaiting').style.display = 'block';
+                    document.getElementById('pvpYourScore').textContent = data.p1Score;
+                    document.getElementById('pvpOppScore').textContent = data.p2Score;
+                } else {
+                    document.getElementById('pvpGuessChoice').style.display = 'none';
+                    document.getElementById('pvpWaiting').style.display = 'block';
+                }
+            } catch(e) {}
+        }
+
         async function loadArcadeWinners() {
             try {
                 const res = await fetch('/api/arcade/winners');
@@ -5659,7 +6529,7 @@
                 const feed = document.getElementById('winnersFeed');
                 if (data.length === 0) { feed.innerHTML = '<div style="color:#888;text-align:center;padding:40px;">No winners yet. Be the first!</div>'; return; }
                 feed.innerHTML = data.map(w => {
-                    const gameIcon = w.game === 'coinflip' ? '🪙' : w.game === 'slots' ? '🎰' : '🏰';
+                    const gameIcon = w.game === 'coinflip' ? '🪙' : w.game === 'slots' ? '🎰' : w.game === 'castle_crash' ? '🚔' : w.game === 'mines' ? '💣' : w.game === 'dice' ? '🎲' : w.game === 'plinko' ? '🔵' : w.game === 'pvp_color' ? '⚔️' : '🎮';
                     return `<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;">
                         <div><span style="font-size:20px">${gameIcon}</span> <strong>${w.username}</strong> <span style="color:#888;font-size:13px">staked $${w.stake}</span></div>
                         <div style="color:#4caf50;font-weight:700">+$${w.payout.toFixed(2)} <span style="color:#888;font-weight:400">(${w.multiplier.toFixed(2)}x)</span></div>

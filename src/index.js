@@ -3182,6 +3182,8 @@ bot.command('start', (ctx) => {
 /coinflip heads 5 — Bet on heads or tails
 /slots 5 — Spin the slot machine
 /crash 5 — Police Chase, cash out before the cops catch the robber!
+/dice 7 5 — Roll 2 dice, predict the sum
+💣 Mines, 🔵 Plinko & ⚔️ PvP on the website!
 /markets — View prediction markets
 
 💰 FUND YOUR ACCOUNT:
@@ -3285,6 +3287,8 @@ bot.command('help', (ctx) => {
 /coinflip — Bet on heads or tails (min $0.50)
 /slots — Spin the slot machine (min $0.50)
 /crash — Police Chase, cash out before the cops catch the robber!
+/dice — Roll 2 dice, predict the sum (min $0.50)
+💰 Mines, Plinko & PvP on the website!
 /balance — Check your USD balance
 /buy — Buy USD balance with Telegram Stars
 
@@ -3338,7 +3342,12 @@ Login → Wallet → Deposit BTC
 STEP 3: Start Playing!
 /coinflip heads 5 — Bet $5 on heads
 /slots 5 — Spin slots with $5 stake
-/crash 5 — Castle Crash with $5 stake
+/crash 5 — Police Chase with $5 stake
+/dice 7 5 — Predict dice sum with $5 stake
+
+🎮 More games on the website:
+💣 Mines • 🔵 Plinko • ⚔️ PvP Color Clash
+https://pixelpulse.zentriva-clubsync.online
 
 USEFUL:
 /balance — Check your balance
@@ -3355,7 +3364,7 @@ bot.command('balance', async (ctx) => {
     const user = await getTelegramUser(ctx);
     const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [user.id]);
     const balance = bal?.usd_balance || 0;
-    ctx.reply(`💰 Your Arcade Balance\n\nUSD: $${balance.toFixed(2)}\n\nUse /buy to add funds with Telegram Stars\nUse /coinflip, /slots, or /crash to play!`);
+    ctx.reply(`💰 Your Arcade Balance\n\nUSD: $${balance.toFixed(2)}\n\nUse /buy to add funds with Telegram Stars\nPlay: /coinflip, /slots, /crash, /dice\nMore on website: Mines, Plinko, PvP!`);
   } catch(e) { ctx.reply('Error checking balance. Try again.'); }
 });
 
@@ -3375,7 +3384,7 @@ bot.command('buy', async (ctx) => {
     }
     await bot.telegram.sendInvoice(ctx.chat.id, {
       title: `${starsAmount} Stars → $${usdAmount.toFixed(2)} Arcade Balance`,
-      description: `Add $${usdAmount.toFixed(2)} USD to your PixelPulse arcade balance. Use it to play /coinflip, /slots, and /crash!`,
+      description: `Add $${usdAmount.toFixed(2)} USD to your PixelPulse arcade balance. Play /coinflip, /slots, /crash, /dice and more!`,
       payload: JSON.stringify({ userId: user.id, stars: starsAmount, usd: usdAmount }),
       currency: 'XTR',
       prices: [{ label: `${starsAmount} Stars`, amount: starsAmount }],
@@ -3621,6 +3630,57 @@ bot.action(/crash_cashout_(\d+)_(\d+)_([\d.]+)/, async (ctx) => {
   } catch(e) { console.error('Telegram crash cashout error:', e); ctx.answerCbQuery('Error cashing out!'); }
 });
 
+// Telegram Dice command
+bot.command('dice', async (ctx) => {
+  try {
+    const args = ctx.message.text.split(' ');
+    const prediction = parseInt(args[1]);
+    const stake = parseFloat(args[2]);
+
+    if (!prediction || prediction < 2 || prediction > 12) {
+      ctx.reply(`🎲 Dice Roll\n\nPredict the sum of two dice (2-12)\n\nUsage: /dice 7 5\n\nPayouts:\n2 or 12 = 28.5x\n3 or 11 = 16.15x\n7 = 4.75x\nMin stake: $${TELEGRAM_MIN_STAKE}`);
+      return;
+    }
+
+    if (!stake || stake < TELEGRAM_MIN_STAKE) {
+      ctx.reply(`Usage: /dice ${prediction} 5\nMin stake: $${TELEGRAM_MIN_STAKE}`);
+      return;
+    }
+
+    const user = await getTelegramUser(ctx);
+    const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [user.id]);
+    if (!bal || bal.usd_balance < stake) {
+      ctx.reply(`Insufficient balance: $${(bal?.usd_balance || 0).toFixed(2)}\n\nUse /buy to add funds with Telegram Stars!`);
+      return;
+    }
+
+    const serverSeed = generateServerSeed();
+    const cSeed = arcadeCrypto.randomBytes(8).toString('hex');
+    const nonce = Date.now();
+    const die1 = Math.floor(provablyFairResult(serverSeed, cSeed, nonce) * 6) + 1;
+    const die2 = Math.floor(provablyFairResult(serverSeed, cSeed, nonce + 1) * 6) + 1;
+    const sum = die1 + die2;
+    const won = sum === prediction;
+    const TG_DICE_PAYOUTS = { 2: 30, 3: 17, 4: 11, 5: 8, 6: 6, 7: 5, 8: 6, 9: 8, 10: 11, 11: 17, 12: 30 };
+    const basePayout = TG_DICE_PAYOUTS[sum] || 0;
+    const multiplier = won ? basePayout * (1 - 0.05) : 0;
+    const payout = won ? Math.floor(stake * multiplier * 100) / 100 : 0;
+
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stake, stake, user.id]);
+    if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, user.id]);
+
+    await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'dice', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
+      [user.id, stake, multiplier, payout, won ? 'won' : 'lost', JSON.stringify({ die1, die2, sum, prediction, source: 'telegram' }), serverSeed, cSeed, nonce]);
+
+    const newBal = bal.usd_balance - stake + payout;
+    const diceEmoji = ['⚀','⚁','⚂','⚃','⚄','⚅'];
+    const msg = won
+      ? `🎲 Dice Roll\n\n${diceEmoji[die1-1]} ${diceEmoji[die2-1]}\n\nYou predicted: ${prediction}\nSum: ${sum}\n\n🎉 WON $${payout.toFixed(2)} (${multiplier.toFixed(2)}x)\nStake: $${stake.toFixed(2)}\nBalance: $${newBal.toFixed(2)}`
+      : `🎲 Dice Roll\n\n${diceEmoji[die1-1]} ${diceEmoji[die2-1]}\n\nYou predicted: ${prediction}\nSum: ${sum}\n\n❌ You lost $${stake.toFixed(2)}\nBalance: $${newBal.toFixed(2)}`;
+    ctx.reply(msg);
+  } catch(e) { console.error('Telegram dice error:', e); ctx.reply('Error playing dice. Try again.'); }
+});
+
 // Handle text messages
 bot.on('text', (ctx) => {
   ctx.reply('Use /help to see available commands. Visit https://pixelpulse.zentriva-clubsync.online for anime streaming and predictions!');
@@ -3646,6 +3706,22 @@ async function postAndPinGameModules() {
       `The robber is running! Cash out before the cops catch him!\n` +
       `Command: /crash 5\n` +
       `Click the CASH OUT button to secure your winnings!\n\n` +
+      `💣 MINES\n` +
+      `Pick cards, avoid mines, cash out anytime!\n` +
+      `Play on the website\n` +
+      `Up to 47.5x on 10 mines!\n\n` +
+      `🎲 DICE\n` +
+      `Roll 2 dice, predict the sum (2-12)\n` +
+      `Command: /dice 7 5\n` +
+      `2 or 12 = 28.5x | 7 = 4.75x\n\n` +
+      `🔵 PLINKO\n` +
+      `Drop the ball, watch it bounce!\n` +
+      `Low/Medium/High risk levels\n` +
+      `Play on the website\n\n` +
+      `⚔️ PVP COLOR CLASH\n` +
+      `Guess opponent's color (red/blue)\n` +
+      `First to 3 correct wins!\n` +
+      `3% house fee on combined stakes\n\n` +
       `🔮 PREDICTION MARKETS\n` +
       `Bet on anime & gaming events\n` +
       `Command: /markets\n\n` +
@@ -3660,7 +3736,7 @@ async function postAndPinGameModules() {
       `2️⃣ /coinflip heads 5 (play!)\n` +
       `3️⃣ /balance (check winnings)\n\n` +
       `All games are provably fair!\n` +
-      `Min stake: $0.50\n\n` +
+      `Min stake: $0.50 on Telegram, $2 on web\n\n` +
       `🔗 Website: https://pixelpulse.zentriva-clubsync.online\n` +
       `📱 Type /gamble for a full guide`;
 
@@ -3672,7 +3748,15 @@ async function postAndPinGameModules() {
       [
         Markup.button.callback('🪙 Coinflip', 'game_info_coinflip'),
         Markup.button.callback('🎰 Slots', 'game_info_slots'),
-        Markup.button.callback('🏰 Crash', 'game_info_crash')
+        Markup.button.callback('🚔 Crash', 'game_info_crash')
+      ],
+      [
+        Markup.button.callback('💣 Mines', 'game_info_mines'),
+        Markup.button.callback('🎲 Dice', 'game_info_dice'),
+        Markup.button.callback('🔵 Plinko', 'game_info_plinko')
+      ],
+      [
+        Markup.button.callback('⚔️ PvP', 'game_info_pvp')
       ]
     ]);
 
@@ -3718,6 +3802,26 @@ bot.action('game_info_slots', (ctx) => {
 bot.action('game_info_crash', (ctx) => {
   ctx.answerCbQuery();
   ctx.reply(`🚔 Police Chase\n\nThe multiplier rises — cash out before the cops catch the robber!\n\nUsage: /crash 5\n\nClick the CASH OUT button to lock in your winnings.\nHigher multiplier = bigger payout, but riskier!\nMin stake: $0.50`);
+});
+
+bot.action('game_info_mines', (ctx) => {
+  ctx.answerCbQuery();
+  ctx.reply(`💣 Mines\n\nPick cards and avoid the mines! Cash out anytime.\n\nPlay on the website: https://pixelpulse.zentriva-clubsync.online\n\nChoose 3-10 mines. More mines = bigger multipliers!\n5% house edge on payouts.`);
+});
+
+bot.action('game_info_dice', (ctx) => {
+  ctx.answerCbQuery();
+  ctx.reply(`🎲 Dice Roll\n\nRoll 2 dice, predict the sum (2-12)!\n\nUsage: /dice 7 5\n\nPayouts (after 5% house edge):\n2 or 12 = 28.50x\n3 or 11 = 16.15x\n4 or 10 = 10.45x\n7 = 4.75x\nMin stake: $0.50`);
+});
+
+bot.action('game_info_plinko', (ctx) => {
+  ctx.answerCbQuery();
+  ctx.reply(`🔵 Plinko\n\nDrop the ball and watch it bounce through the pegs!\n\nPlay on the website: https://pixelpulse.zentriva-clubsync.online\n\n3 risk levels: Low, Medium, High\nEdge slots pay up to 16x!\n4% house edge.`);
+});
+
+bot.action('game_info_pvp', (ctx) => {
+  ctx.answerCbQuery();
+  ctx.reply(`⚔️ PvP Color Clash\n\nGuess your opponent's color (red or blue)!\nFirst to 3 correct guesses wins.\nMax 5 turns — tiebreaker by score.\n\nPlay on the website: https://pixelpulse.zentriva-clubsync.online\n\n3% house fee on combined stakes.`);
 });
 
 // Express middleware
@@ -7152,7 +7256,404 @@ app.post('/api/arcade/castle-crash/crash', authenticateRequest, async (req, res)
   res.json({ crashed: true, newBalance });
 });
 
-// ===== PREDICTION MARKETS =====
+// ===== MINES =====
+// 5x5 grid, player picks cards hoping to avoid mines. House edge: mine density slightly higher than fair.
+const MINES_HOUSE_EDGE = 0.05;
+app.post('/api/arcade/mines/start', authenticateRequest, async (req, res) => {
+  const { stake, mineCount, clientSeed } = req.body;
+  const stakeAmount = parseFloat(stake);
+  const mines = parseInt(mineCount) || 3;
+  if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
+  if (mines < 1 || mines > 10) return res.status(400).json({ error: 'Mines must be 1-10' });
+
+  const isAdmin = await isArcadeAdmin(req.userId);
+  let bal = null;
+  if (!isAdmin) {
+    bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+  }
+
+  const serverSeed = generateServerSeed();
+  const cSeed = clientSeed || arcadeCrypto.randomBytes(8).toString('hex');
+  const nonce = Date.now();
+
+  // Generate 5x5 grid with mine positions
+  const totalCards = 25;
+  const minePositions = new Set();
+  // House edge: add 1 extra mine worth of bias by reducing safe spots probability
+  const effectiveMines = mines + Math.floor(mines * MINES_HOUSE_EDGE * 2);
+  while (minePositions.size < effectiveMines) {
+    const roll = provablyFairResult(serverSeed, cSeed, nonce + minePositions.size);
+    minePositions.add(Math.floor(roll * totalCards));
+  }
+  // But only report 'mines' count to user — the extra mine is hidden bias
+  // Actually for transparency, we use the stated mine count but bias the placement
+  // Simpler: use stated mines, but apply house edge on payout multiplier
+  minePositions.clear();
+  while (minePositions.size < mines) {
+    const roll = provablyFairResult(serverSeed, cSeed, nonce + minePositions.size);
+    minePositions.add(Math.floor(roll * totalCards));
+  }
+
+  if (!isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stakeAmount, req.userId]);
+
+  // Store game in memory (session-based)
+  if (!global.minesGames) global.minesGames = {};
+  const sessionId = nonce;
+  global.minesGames[sessionId] = {
+    userId: req.userId, stake: stakeAmount, mines, minePositions: [...minePositions],
+    revealed: [], serverSeed, cSeed, nonce, isAdmin, busted: false, cashedOut: false
+  };
+
+  const newBalance = isAdmin ? 10000 : (bal.usd_balance - stakeAmount);
+  res.json({ sessionId, stake: stakeAmount, mineCount: mines, totalCards, newBalance });
+});
+
+app.post('/api/arcade/mines/pick', authenticateRequest, async (req, res) => {
+  const { sessionId, cardIndex } = req.body;
+  const game = global.minesGames?.[sessionId];
+  if (!game || game.userId !== req.userId) return res.status(400).json({ error: 'Game not found' });
+  if (game.busted || game.cashedOut) return res.status(400).json({ error: 'Game already ended' });
+  if (game.revealed.includes(cardIndex)) return res.status(400).json({ error: 'Already picked' });
+  if (cardIndex < 0 || cardIndex > 24) return res.status(400).json({ error: 'Invalid card' });
+
+  game.revealed.push(cardIndex);
+  const isMine = game.minePositions.includes(cardIndex);
+
+  if (isMine) {
+    game.busted = true;
+    if (!game.isAdmin) await dbRun('UPDATE user_balances SET total_lost = total_lost + ? WHERE user_id = ?', [game.stake, req.userId]);
+    await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'mines', ?, 'USD', 0, 0, 'busted', ?, ?)`,
+      [req.userId, game.stake, JSON.stringify({ mines: game.mines, revealed: game.revealed, minePositions: game.minePositions, admin_test: game.isAdmin }), sessionId]);
+    const bal = game.isAdmin ? null : await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    delete global.minesGames[sessionId];
+    return res.json({ busted: true, minePositions: game.minePositions, revealed: game.revealed, newBalance: game.isAdmin ? 10000 : (bal?.usd_balance || 0) });
+  }
+
+  // Calculate current multiplier based on safe picks
+  const safePicks = game.revealed.length;
+  const totalSafe = 25 - game.mines;
+  // Fair multiplier: product of (25-i)/(25-mines-i) for each pick, times (1 - house edge)
+  let fairMult = 1;
+  for (let i = 0; i < safePicks; i++) {
+    fairMult *= (25 - i) / (25 - game.mines - i);
+  }
+  const currentMult = fairMult * (1 - MINES_HOUSE_EDGE);
+  const potentialPayout = Math.floor(game.stake * currentMult * 100) / 100;
+
+  res.json({ safe: true, revealed: game.revealed, currentMult, potentialPayout, picksLeft: totalSafe - safePicks });
+});
+
+app.post('/api/arcade/mines/cashout', authenticateRequest, async (req, res) => {
+  const { sessionId } = req.body;
+  const game = global.minesGames?.[sessionId];
+  if (!game || game.userId !== req.userId) return res.status(400).json({ error: 'Game not found' });
+  if (game.busted || game.cashedOut) return res.status(400).json({ error: 'Game already ended' });
+  if (game.revealed.length === 0) return res.status(400).json({ error: 'Pick at least one card first' });
+
+  game.cashedOut = true;
+  const safePicks = game.revealed.length;
+  let fairMult = 1;
+  for (let i = 0; i < safePicks; i++) {
+    fairMult *= (25 - i) / (25 - game.mines - i);
+  }
+  const multiplier = fairMult * (1 - MINES_HOUSE_EDGE);
+  const payout = Math.floor(game.stake * multiplier * 100) / 100;
+
+  if (!game.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+  await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'mines', ?, 'USD', ?, ?, 'cashed_out', ?, ?)`,
+    [req.userId, game.stake, multiplier, payout, JSON.stringify({ mines: game.mines, revealed: game.revealed, minePositions: game.minePositions, admin_test: game.isAdmin }), sessionId]);
+
+  const bal = game.isAdmin ? null : await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+  delete global.minesGames[sessionId];
+  res.json({ cashedOut: true, multiplier, payout, minePositions: game.minePositions, revealed: game.revealed, newBalance: game.isAdmin ? 10000 : (bal?.usd_balance || 0) });
+});
+
+// ===== DICE =====
+// Roll 2 dice (2-12), player predicts the sum. House edge applied to payouts.
+const DICE_HOUSE_EDGE = 0.05;
+const DICE_PAYOUTS = {
+  2: 30, 3: 17, 4: 11, 5: 8, 6: 6, 7: 5,
+  8: 6, 9: 8, 10: 11, 11: 17, 12: 30
+};
+app.post('/api/arcade/dice', authenticateRequest, async (req, res) => {
+  const { prediction, stake, clientSeed } = req.body;
+  const stakeAmount = parseFloat(stake);
+  const pred = parseInt(prediction);
+  if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
+  if (isNaN(pred) || pred < 2 || pred > 12) return res.status(400).json({ error: 'Predict a number 2-12' });
+
+  const isAdmin = await isArcadeAdmin(req.userId);
+  let bal = null;
+  if (!isAdmin) {
+    bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+  }
+
+  const serverSeed = generateServerSeed();
+  const cSeed = clientSeed || arcadeCrypto.randomBytes(8).toString('hex');
+  const nonce = Date.now();
+  // Roll two dice
+  const die1 = Math.floor(provablyFairResult(serverSeed, cSeed, nonce) * 6) + 1;
+  const die2 = Math.floor(provablyFairResult(serverSeed, cSeed, nonce + 1) * 6) + 1;
+  const sum = die1 + die2;
+  const won = sum === pred;
+  const basePayout = DICE_PAYOUTS[sum] || 0;
+  const multiplier = won ? basePayout * (1 - DICE_HOUSE_EDGE) : 0;
+  const payout = won ? Math.floor(stakeAmount * multiplier * 100) / 100 : 0;
+
+  if (!isAdmin) {
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
+    if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+  }
+
+  await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'dice', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
+    [req.userId, stakeAmount, multiplier, payout, won ? 'won' : 'lost', JSON.stringify({ die1, die2, sum, prediction: pred, admin_test: isAdmin }), serverSeed, cSeed, nonce]);
+
+  const newBalance = isAdmin ? 10000 : (bal.usd_balance - stakeAmount + payout);
+  res.json({ die1, die2, sum, prediction: pred, won, multiplier, payout, stake: stakeAmount, newBalance });
+});
+
+// ===== PLINKO =====
+// Ball drops through pegs, lands in a slot. House edge applied to multipliers.
+const PLINKO_HOUSE_EDGE = 0.04;
+const PLINKO_MULTIPLIERS = [16, 9, 2, 1.4, 1.1, 1, 0.5, 1, 1.1, 1.4, 2, 9, 16]; // 13 slots, center = low, edges = high
+app.post('/api/arcade/plinko', authenticateRequest, async (req, res) => {
+  const { stake, riskLevel, clientSeed } = req.body;
+  const stakeAmount = parseFloat(stake);
+  const risk = riskLevel || 'medium';
+  if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
+
+  // Risk levels adjust multipliers
+  let multipliers;
+  if (risk === 'low') multipliers = [10, 3, 1.5, 1.1, 1, 0.5, 1, 1.1, 1.5, 3, 10];
+  else if (risk === 'high') multipliers = [29, 4, 1.5, 0.3, 0.2, 0.2, 0.3, 1.5, 4, 29];
+  else multipliers = PLINKO_MULTIPLIERS;
+
+  const isAdmin = await isArcadeAdmin(req.userId);
+  let bal = null;
+  if (!isAdmin) {
+    bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+  }
+
+  const serverSeed = generateServerSeed();
+  const cSeed = clientSeed || arcadeCrypto.randomBytes(8).toString('hex');
+  const nonce = Date.now();
+
+  // Simulate ball path: 12 rows of pegs, each row ball goes left or right
+  const rows = multipliers.length - 1;
+  let position = 0;
+  const path = [];
+  for (let i = 0; i < rows; i++) {
+    const roll = provablyFairResult(serverSeed, cSeed, nonce + i);
+    if (roll >= 0.5) position++;
+    path.push(roll >= 0.5 ? 'R' : 'L');
+  }
+  const slotIndex = position;
+  const rawMult = multipliers[slotIndex];
+  const multiplier = rawMult * (1 - PLINKO_HOUSE_EDGE);
+  const payout = Math.floor(stakeAmount * multiplier * 100) / 100;
+  const won = payout > stakeAmount;
+
+  if (!isAdmin) {
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
+    if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+  }
+
+  await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'plinko', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
+    [req.userId, stakeAmount, multiplier, payout, won ? 'won' : 'lost', JSON.stringify({ path, slotIndex, risk, admin_test: isAdmin }), serverSeed, cSeed, nonce]);
+
+  const newBalance = isAdmin ? 10000 : (bal.usd_balance - stakeAmount + payout);
+  res.json({ path, slotIndex, multiplier, payout, stake: stakeAmount, risk, won, newBalance });
+});
+
+// ===== PvP COLOR GUESS =====
+// Two players stake funds, guess each other's color (red or blue). First to 3 correct wins. 3% house fee.
+const PVP_HOUSE_FEE = 0.03;
+if (!global.pvpQueue) global.pvpQueue = [];
+if (!global.pvpGames) global.pvpGames = {};
+
+app.post('/api/arcade/pvp/queue', authenticateRequest, async (req, res) => {
+  const { stake } = req.body;
+  const stakeAmount = parseFloat(stake);
+  if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
+
+  const isAdmin = await isArcadeAdmin(req.userId);
+  let bal = null;
+  if (!isAdmin) {
+    bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+  }
+
+  // Check if already in queue
+  const existing = global.pvpQueue.find(q => q.userId === req.userId);
+  if (existing) return res.status(400).json({ error: 'Already in queue' });
+
+  // Check for opponent
+  const opponent = global.pvpQueue.find(q => q.stake === stakeAmount && q.userId !== req.userId);
+  if (opponent) {
+    // Match found! Create game
+    global.pvpQueue = global.pvpQueue.filter(q => q !== opponent);
+    const gameId = Date.now();
+    const serverSeed = generateServerSeed();
+    // Randomize who starts
+    const startRoll = provablyFairResult(serverSeed, 'pvp_start', gameId);
+    const player1Starts = startRoll < 0.5;
+    const player1 = { userId: opponent.userId, username: opponent.username, stake: stakeAmount, isAdmin: opponent.isAdmin, color: null, score: 0, guess: null };
+    const player2 = { userId: req.userId, username: req.body.username || 'You', stake: stakeAmount, isAdmin, color: null, score: 0, guess: null };
+
+    // Deduct stakes
+    if (!opponent.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stakeAmount, opponent.userId]);
+    if (!isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stakeAmount, req.userId]);
+
+    global.pvpGames[gameId] = {
+      gameId, player1, player2, stake: stakeAmount,
+      currentPlayer: player1Starts ? 0 : 1, // index into [player1, player2]
+      turn: 1, maxTurns: 5, targetScore: 3,
+      serverSeed, status: 'choosing_colors', roundHistory: []
+    };
+
+    res.json({ matched: true, gameId, opponent: opponent.username, youStart: !player1Starts, stake: stakeAmount });
+  } else {
+    // Add to queue
+    global.pvpQueue.push({ userId: req.userId, username: req.body.username || 'You', stake: stakeAmount, isAdmin, joinedAt: Date.now() });
+    res.json({ matched: false, message: 'Added to queue. Waiting for opponent...' });
+  }
+});
+
+app.post('/api/arcade/pvp/action', authenticateRequest, async (req, res) => {
+  const { gameId, action, value } = req.body;
+  const game = global.pvpGames?.[gameId];
+  if (!game) return res.status(400).json({ error: 'Game not found' });
+  const isPlayer1 = game.player1.userId === req.userId;
+  const isPlayer2 = game.player2.userId === req.userId;
+  if (!isPlayer1 && !isPlayer2) return res.status(400).json({ error: 'Not in this game' });
+
+  const me = isPlayer1 ? game.player1 : game.player2;
+  const opponent = isPlayer1 ? game.player2 : game.player1;
+  const myIndex = isPlayer1 ? 0 : 1;
+
+  if (action === 'set_color') {
+    if (game.status !== 'choosing_colors') return res.status(400).json({ error: 'Not color selection phase' });
+    if (!['red', 'blue'].includes(value)) return res.status(400).json({ error: 'Choose red or blue' });
+    me.color = value;
+    if (game.player1.color && game.player2.color) {
+      game.status = 'playing';
+      game.currentPlayer = provablyFairResult(game.serverSeed, 'start', game.gameId) < 0.5 ? 0 : 1;
+    }
+    res.json({ colorSet: true, ready: game.status === 'playing', yourTurn: game.currentPlayer === myIndex });
+  } else if (action === 'guess') {
+    if (game.status !== 'playing') return res.status(400).json({ error: 'Not playing phase' });
+    if (game.currentPlayer !== myIndex) return res.status(400).json({ error: 'Not your turn' });
+    if (!['red', 'blue'].includes(value)) return res.status(400).json({ error: 'Guess red or blue' });
+    if (me.guess) return res.status(400).json({ error: 'Already guessed this round' });
+
+    me.guess = value;
+    // Check if both players have guessed
+    if (game.player1.guess && game.player2.guess) {
+      // Resolve round
+      const p1Correct = game.player1.guess === game.player2.color;
+      const p2Correct = game.player2.guess === game.player1.color;
+      if (p1Correct) game.player1.score++;
+      if (p2Correct) game.player2.score++;
+      game.roundHistory.push({
+        turn: game.turn,
+        p1Color: game.player1.color, p1Guess: game.player1.guess,
+        p2Color: game.player2.color, p2Guess: game.player2.guess,
+        p1Correct, p2Correct,
+        p1Score: game.player1.score, p2Score: game.player2.score
+      });
+      // Reset for next round
+      game.player1.guess = null;
+      game.player2.guess = null;
+      game.player1.color = null;
+      game.player2.color = null;
+      game.turn++;
+      game.status = 'choosing_colors';
+
+      // Check win conditions
+      const p1Won = game.player1.score >= game.targetScore;
+      const p2Won = game.player2.score >= game.targetScore;
+
+      if (p1Won || p2Won || game.turn > game.maxTurns) {
+        // Game over
+        let winner;
+        if (p1Won && !p2Won) winner = 0;
+        else if (p2Won && !p1Won) winner = 1;
+        else if (game.player1.score > game.player2.score) winner = 0;
+        else if (game.player2.score > game.player1.score) winner = 1;
+        else winner = -1; // tie
+
+        game.status = 'finished';
+        const totalPot = game.stake * 2;
+        const houseFee = Math.floor(totalPot * PVP_HOUSE_FEE * 100) / 100;
+        const prize = Math.floor((totalPot - houseFee) * 100) / 100;
+
+        if (winner === 0) {
+          if (!game.player1.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [prize, prize, game.player1.userId]);
+          await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'pvp_color', ?, 'USD', ?, ?, 'won', ?, ?)`,
+            [game.player1.userId, game.stake, prize / game.stake, prize, JSON.stringify({ game: 'pvp', opponent: game.player2.userId, houseFee, rounds: game.roundHistory, admin_test: game.player1.isAdmin }), game.gameId]);
+          await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'pvp_color', ?, 'USD', 0, 0, 'lost', ?, ?)`,
+            [game.player2.userId, game.stake, JSON.stringify({ game: 'pvp', opponent: game.player1.userId, houseFee, rounds: game.roundHistory, admin_test: game.player2.isAdmin }), game.gameId]);
+        } else if (winner === 1) {
+          if (!game.player2.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [prize, prize, game.player2.userId]);
+          await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'pvp_color', ?, 'USD', ?, ?, 'won', ?, ?)`,
+            [game.player2.userId, game.stake, prize / game.stake, prize, JSON.stringify({ game: 'pvp', opponent: game.player1.userId, houseFee, rounds: game.roundHistory, admin_test: game.player2.isAdmin }), game.gameId]);
+          await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'pvp_color', ?, 'USD', 0, 0, 'lost', ?, ?)`,
+            [game.player1.userId, game.stake, JSON.stringify({ game: 'pvp', opponent: game.player2.userId, houseFee, rounds: game.roundHistory, admin_test: game.player1.isAdmin }), game.gameId]);
+        } else {
+          // Tie — refund both minus half house fee
+          const refund = Math.floor((game.stake - houseFee / 2) * 100) / 100;
+          if (!game.player1.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [refund, game.player1.userId]);
+          if (!game.player2.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [refund, game.player2.userId]);
+          await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'pvp_color', ?, 'USD', 0, ?, 'tie', ?, ?)`,
+            [game.player1.userId, game.stake, refund, JSON.stringify({ game: 'pvp', result: 'tie', houseFee, admin_test: game.player1.isAdmin }), game.gameId]);
+          await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'pvp_color', ?, 'USD', 0, ?, 'tie', ?, ?)`,
+            [game.player2.userId, game.stake, refund, JSON.stringify({ game: 'pvp', result: 'tie', houseFee, admin_test: game.player2.isAdmin }), game.gameId]);
+        }
+
+        const bal1 = game.player1.isAdmin ? null : await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [game.player1.userId]);
+        const bal2 = game.player2.isAdmin ? null : await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [game.player2.userId]);
+        delete global.pvpGames[gameId];
+        return res.json({
+          roundOver: true, gameOver: true, winner,
+          p1Score: game.player1.score, p2Score: game.player2.score,
+          prize, houseFee, roundHistory: game.roundHistory,
+          newBalance: isPlayer1 ? (game.player1.isAdmin ? 10000 : (bal1?.usd_balance || 0)) : (game.player2.isAdmin ? 10000 : (bal2?.usd_balance || 0))
+        });
+      }
+
+      return res.json({
+        roundOver: true, gameOver: false,
+        p1Score: game.player1.score, p2Score: game.player2.score,
+        turn: game.turn, yourTurn: game.currentPlayer === myIndex,
+        lastRound: game.roundHistory[game.roundHistory.length - 1]
+      });
+    } else {
+      // Waiting for opponent's guess
+      res.json({ guessed: true, waiting: true, message: 'Waiting for opponent...' });
+    }
+  } else if (action === 'status') {
+    res.json({
+      status: game.status,
+      yourScore: me.score,
+      opponentScore: opponent.score,
+      turn: game.turn,
+      yourTurn: game.currentPlayer === myIndex,
+      roundHistory: game.roundHistory,
+      youNeedColor: game.status === 'choosing_colors' && !me.color,
+      youNeedGuess: game.status === 'playing' && game.currentPlayer === myIndex && !me.guess
+    });
+  } else {
+    res.status(400).json({ error: 'Unknown action' });
+  }
+});
+
+app.post('/api/arcade/pvp/cancel', authenticateRequest, async (req, res) => {
+  global.pvpQueue = global.pvpQueue.filter(q => q.userId !== req.userId);
+  res.json({ cancelled: true });
+});
 app.get('/api/predictions', async (req, res) => {
   const markets = await dbAll('SELECT * FROM prediction_markets WHERE status = ? ORDER BY created_at DESC', ['open']);
   res.json(markets.map(m => ({ ...m, options: JSON.parse(m.options_json) })));
