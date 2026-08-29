@@ -1152,6 +1152,48 @@
             color: #fff;
             box-shadow: 0 0 10px rgba(229,9,20,0.4);
         }
+        /* ===== TRADE HUB BANNER TABS ===== */
+        .tradehub-banner {
+            position: relative;
+            height: 140px;
+            border-radius: 12px;
+            border: 2px solid #333;
+            cursor: pointer;
+            overflow: hidden;
+            background-size: cover;
+            background-position: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 16px;
+            transition: all 0.25s ease;
+        }
+        .tradehub-banner:hover {
+            transform: translateY(-4px);
+            border-color: #666;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        }
+        .tradehub-banner.active {
+            border-color: #e50914;
+            box-shadow: 0 0 16px rgba(229,9,20,0.5);
+        }
+        .tradehub-banner-icon {
+            font-size: 30px;
+            margin-bottom: 4px;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+        }
+        .tradehub-banner-title {
+            font-size: 17px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.9);
+        }
+        .tradehub-banner-sub {
+            font-size: 11px;
+            color: #ccc;
+            margin-top: 3px;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+        }
         /* ===== STAKE-LIKE GAME CARD SECTIONS ===== */
         .game-section-grid {
             display: grid;
@@ -2363,12 +2405,28 @@
         <div class="info-banner"><strong>Trade Hub</strong> — Create your listings here: send Standoff2 gold, swap game tokens, list skins for sale, sell gift cards, or list game accounts for crypto. Everything you list here appears in the <strong>Trades</strong> section where other users can browse and buy.</div>
         <h2 class="section-title">Trade Hub — Create Listings</h2>
 
-        <!-- Sub-tab buttons -->
-        <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 24px; flex-wrap: wrap;">
-            <button class="btn btn-primary" id="tabBtn-sendgold" onclick="switchTradeHubTab('sendgold')" style="min-width: 140px;">⚔️ Send Gold</button>
-            <button class="btn btn-secondary" id="tabBtn-tradetokens" onclick="switchTradeHubTab('tradetokens')" style="min-width: 140px;">🔄 Swap Tokens</button>
-            <button class="btn btn-secondary" id="tabBtn-listskin" onclick="switchTradeHubTab('listskin')" style="min-width: 140px;">🔫 List Skin</button>
-            <button class="btn btn-secondary" id="tabBtn-listp2p" onclick="switchTradeHubTab('listp2p')" style="min-width: 140px;">🎁 Gift Card / Account</button>
+        <!-- Sub-tab banner headers -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 28px;">
+            <div class="tradehub-banner active" id="tabBtn-sendgold" onclick="switchTradeHubTab('sendgold')" style="background-image: linear-gradient(to bottom, rgba(10,10,20,0.25), rgba(10,10,20,0.85)), url('/images/tradehub-sendgold.jpg'), linear-gradient(135deg, #b45309, #78350f, #1c1917);">
+                <div class="tradehub-banner-icon">⚔️</div>
+                <div class="tradehub-banner-title">Send Gold</div>
+                <div class="tradehub-banner-sub">Standoff2 verified gold transfers</div>
+            </div>
+            <div class="tradehub-banner" id="tabBtn-tradetokens" onclick="switchTradeHubTab('tradetokens')" style="background-image: linear-gradient(to bottom, rgba(10,10,20,0.25), rgba(10,10,20,0.85)), url('/images/tradehub-swaps.jpg'), linear-gradient(135deg, #1d4ed8, #5b21b6, #0f172a);">
+                <div class="tradehub-banner-icon">🔄</div>
+                <div class="tradehub-banner-title">Swap Tokens</div>
+                <div class="tradehub-banner-sub">Steam • Standoff2 • Robux • V-Bucks • UC • VP & more</div>
+            </div>
+            <div class="tradehub-banner" id="tabBtn-listskin" onclick="switchTradeHubTab('listskin')" style="background-image: linear-gradient(to bottom, rgba(10,10,20,0.25), rgba(10,10,20,0.85)), url('/images/tradehub-skins.jpg'), linear-gradient(135deg, #b91c1c, #7f1d1d, #1c1917);">
+                <div class="tradehub-banner-icon">🔫</div>
+                <div class="tradehub-banner-title">List Skins</div>
+                <div class="tradehub-banner-sub">CS2 & game skins marketplace</div>
+            </div>
+            <div class="tradehub-banner" id="tabBtn-listp2p" onclick="switchTradeHubTab('listp2p')" style="background-image: linear-gradient(to bottom, rgba(10,10,20,0.25), rgba(10,10,20,0.85)), url('/images/tradehub-giftcards.jpg'), linear-gradient(135deg, #047857, #065f46, #0f172a);">
+                <div class="tradehub-banner-icon">🎁</div>
+                <div class="tradehub-banner-title">Gift Cards / Accounts</div>
+                <div class="tradehub-banner-sub">Steam, PSN, Google Play cards & game accounts</div>
+            </div>
         </div>
 
         <!-- Sub-tab: Send Gold -->
@@ -3465,11 +3523,7 @@
                 const panel = document.getElementById('tradehub-' + t);
                 const btn = document.getElementById('tabBtn-' + t);
                 if (panel) panel.style.display = t === tab ? 'block' : 'none';
-                if (btn) {
-                    btn.classList.remove('btn-primary');
-                    btn.classList.add('btn-secondary');
-                    if (t === tab) { btn.classList.remove('btn-secondary'); btn.classList.add('btn-primary'); }
-                }
+                if (btn) btn.classList.toggle('active', t === tab);
             });
             if (tab === 'tradetokens') {
                 loadOpenTradeListings();
