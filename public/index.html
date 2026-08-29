@@ -17,7 +17,8 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #141414;
+            background: linear-gradient(180deg, #0d0d14 0%, #12121c 40%, #141420 100%);
+            background-attachment: fixed;
             color: #fff;
             min-height: 100vh;
         }
@@ -26,8 +27,11 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px 4%;
-            background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%);
+            padding: 16px 4%;
+            background: rgba(10, 10, 18, 0.92);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(229, 9, 20, 0.15);
             position: fixed;
             top: 0;
             width: 100%;
@@ -286,7 +290,7 @@
         .btn {
             padding: 12px 24px;
             border: none;
-            border-radius: 4px;
+            border-radius: 6px;
             font-size: 16px;
             font-weight: bold;
             cursor: pointer;
@@ -294,21 +298,26 @@
         }
 
         .btn-primary {
-            background: #e50914;
+            background: linear-gradient(135deg, #e50914, #b8070f);
             color: #fff;
+            box-shadow: 0 2px 12px rgba(229, 9, 20, 0.35);
         }
 
         .btn-primary:hover {
-            background: #f40612;
+            background: linear-gradient(135deg, #ff1e2a, #d40812);
+            box-shadow: 0 4px 18px rgba(229, 9, 20, 0.5);
+            transform: translateY(-1px);
         }
 
         .btn-secondary {
-            background: rgba(109, 109, 110, 0.7);
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
             color: #fff;
         }
 
         .btn-secondary:hover {
-            background: rgba(109, 109, 110, 0.4);
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.3);
         }
 
         .section {
@@ -319,6 +328,93 @@
             font-size: 24px;
             font-weight: bold;
             margin-bottom: 20px;
+            padding-left: 12px;
+            border-left: 4px solid #e50914;
+        }
+
+        /* ===== TRUST BAR & FOOTER ===== */
+        .trust-bar {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+            padding: 18px 4%;
+            background: rgba(255, 255, 255, 0.03);
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .trust-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: #9ca3af;
+        }
+        .trust-item .trust-icon {
+            font-size: 18px;
+        }
+        .trust-item strong {
+            color: #e5e7eb;
+        }
+        .site-footer {
+            background: #0a0a12;
+            border-top: 1px solid rgba(229, 9, 20, 0.15);
+            padding: 40px 4% 24px;
+            margin-top: 40px;
+        }
+        .footer-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 30px;
+            max-width: 1100px;
+            margin: 0 auto 30px;
+        }
+        .footer-col h4 {
+            color: #fff;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 14px;
+        }
+        .footer-col a, .footer-col span {
+            display: block;
+            color: #9ca3af;
+            font-size: 13px;
+            text-decoration: none;
+            margin-bottom: 9px;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .footer-col a:hover {
+            color: #e50914;
+        }
+        .footer-bottom {
+            text-align: center;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            color: #6b7280;
+            font-size: 12px;
+            line-height: 1.8;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .footer-badges {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .footer-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 12px;
+            color: #d1d5db;
         }
 
         .anime-grid {
@@ -2622,6 +2718,54 @@
             </div>
         </div>
     </div>
+
+    <!-- Trust Bar -->
+    <div class="trust-bar">
+        <div class="trust-item"><span class="trust-icon">🔐</span><span><strong>Escrow Protected</strong> — funds held until both parties confirm</span></div>
+        <div class="trust-item"><span class="trust-icon">🎲</span><span><strong>Provably Fair</strong> — verifiable game outcomes</span></div>
+        <div class="trust-item"><span class="trust-icon">⚡</span><span><strong>Instant Payouts</strong> — crypto & token withdrawals</span></div>
+        <div class="trust-item"><span class="trust-icon">🛡️</span><span><strong>Secure Sessions</strong> — encrypted authentication</span></div>
+    </div>
+
+    <!-- Site Footer -->
+    <footer class="site-footer">
+        <div class="footer-grid">
+            <div class="footer-col">
+                <h4 style="color: #e50914; font-size: 18px; text-transform: none; letter-spacing: 0;">PixelPulse</h4>
+                <span style="line-height: 1.6;">The gaming marketplace & arcade. Trade skins, swap tokens, play provably fair games, and predict esports outcomes — all in one place.</span>
+            </div>
+            <div class="footer-col">
+                <h4>Marketplace</h4>
+                <a onclick="showSection('marketplace')">Browse Trades</a>
+                <a onclick="showSection('gold-transfer')">Trade Hub</a>
+                <a onclick="showSection('gold-transfer'); switchTradeHubTab('tradetokens')">Swap Tokens</a>
+                <a onclick="showSection('gold-transfer'); switchTradeHubTab('listskin')">List Skins</a>
+            </div>
+            <div class="footer-col">
+                <h4>Play</h4>
+                <a onclick="showSection('arcade')">Arcade Games</a>
+                <a onclick="showSection('betting')">Prediction Markets</a>
+                <a onclick="showSection('leaderboard')">Leaderboard</a>
+                <a onclick="showSection('chat')">Community Chat</a>
+            </div>
+            <div class="footer-col">
+                <h4>Account</h4>
+                <a onclick="showSection('wallet')">Wallet</a>
+                <a onclick="showSection('profile')">Profile</a>
+                <a href="https://t.me/PixelPulse" target="_blank" rel="noopener">Telegram Bot</a>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <div class="footer-badges">
+                <span class="footer-badge">🔐 P2P Escrow</span>
+                <span class="footer-badge">🎲 Provably Fair Gaming</span>
+                <span class="footer-badge">₿ Crypto Payments</span>
+                <span class="footer-badge">🔞 18+ Only</span>
+            </div>
+            <p>PixelPulse is a peer-to-peer gaming marketplace and entertainment platform. All trades are protected by escrow — funds and items are only released when both parties confirm. Game outcomes are generated with provably fair algorithms that can be independently verified.</p>
+            <p style="margin-top: 8px;">Play responsibly. You must be 18 or older to use this platform. &copy; 2026 PixelPulse. All rights reserved.</p>
+        </div>
+    </footer>
 
     <script>
         let selectedPlan = null;
