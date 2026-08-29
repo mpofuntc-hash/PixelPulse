@@ -87,6 +87,7 @@ async function ensureLegacySchema() {
     ['users', 'discord_id', 'TEXT'],
     ['users', 'referred_by', 'TEXT'],
     ['chat_messages', 'source', "TEXT DEFAULT 'webapp'"],
+    ['chat_messages', 'reply_to_id', 'INTEGER'],
     ['skins', 'price_fiat', 'REAL DEFAULT 0'],
     ['skins', 'fiat_currency', "TEXT DEFAULT ''"],
     ['admin_users', 'email', 'TEXT'],
@@ -4325,9 +4326,11 @@ app.post('/api/skins', authenticateRequest, async (req, res) => {
 // API: Get community chat messages
 app.get('/api/chat/community', async (req, res) => {
   const messages = await dbAll(`
-    SELECT cm.*, u.username 
+    SELECT cm.*, u.username, ru.username as reply_to_username, rm.message as reply_to_message
     FROM chat_messages cm 
     JOIN users u ON cm.user_id = u.id 
+    LEFT JOIN chat_messages rm ON cm.reply_to_id = rm.id
+    LEFT JOIN users ru ON rm.user_id = ru.id
     WHERE cm.message_type = 'community'
     ORDER BY cm.created_at DESC 
     LIMIT 50
@@ -4354,13 +4357,14 @@ app.get('/api/chat/dm/:userId', authenticateRequest, async (req, res) => {
 
 // API: Send community message
 app.post('/api/chat/community', authenticateRequest, rateLimit({ windowMs: 60 * 1000, max: 20, key: req => `community-chat:${req.userId || req.ip}` }), async (req, res) => {
-  const { message } = req.body;
+  const { message, replyToId } = req.body;
 
   if (!validateText(message, { maxLength: 500, required: true })) {
     return res.status(400).json({ error: 'Message must be 1-500 characters.' });
   }
 
-  await dbRun('INSERT INTO chat_messages (user_id, message, message_type) VALUES (?, ?, ?)', [req.userId, String(message).trim(), 'community']);
+  const replyId = replyToId ? parseInt(replyToId) : null;
+  await dbRun('INSERT INTO chat_messages (user_id, message, message_type, reply_to_id) VALUES (?, ?, ?, ?)', [req.userId, String(message).trim(), 'community', replyId]);
 
   // Bridge to Discord: send webapp community messages to Discord channel
   const user = await dbGet('SELECT username FROM users WHERE id = ?', [req.userId]);
@@ -4387,6 +4391,46 @@ app.post('/api/chat/dm/:userId', authenticateRequest, rateLimit({ windowMs: 60 *
   await dbRun('INSERT INTO chat_messages (user_id, recipient_id, message, message_type) VALUES (?, ?, ?, ?)', [req.userId, otherUserId, String(message).trim(), 'dm']);
 
   res.json({ message: 'DM sent' });
+});
+
+// API: Get online users (active sessions in last 5 minutes)
+app.get('/api/chat/online', authenticateRequest, async (req, res) => {
+  const users = await dbAll(`
+    SELECT DISTINCT u.id, u.username, up.avatar_id, up.pixelation_level, up.weekly_streak
+    FROM users u
+    JOIN sessions s ON u.id = s.user_id
+    LEFT JOIN user_profiles up ON u.id = up.user_id
+    WHERE s.expires_at > datetime('now')
+    AND u.id != ?
+    ORDER BY u.username
+    LIMIT 30
+  `, [req.userId]);
+  res.json(users);
+});
+
+// API: Get DM conversations list
+app.get('/api/chat/conversations', authenticateRequest, async (req, res) => {
+  const conversations = await dbAll(`
+    SELECT 
+      CASE WHEN cm.user_id = ? THEN cm.recipient_id ELSE cm.user_id END as other_user_id,
+      CASE WHEN cm.user_id = ? THEN ru.username ELSE su.username END as other_username,
+      cm.message as last_message,
+      cm.created_at as last_message_at
+    FROM chat_messages cm
+    JOIN users su ON cm.user_id = su.id
+    LEFT JOIN users ru ON cm.recipient_id = ru.id
+    WHERE cm.message_type = 'dm' 
+      AND (cm.user_id = ? OR cm.recipient_id = ?)
+      AND cm.id = (
+        SELECT MAX(cm2.id) FROM chat_messages cm2 
+        WHERE cm2.message_type = 'dm' 
+          AND ((cm2.user_id = ? AND cm2.recipient_id = CASE WHEN cm.user_id = ? THEN cm.recipient_id ELSE cm.user_id END)
+            OR (cm2.recipient_id = ? AND cm2.user_id = CASE WHEN cm.user_id = ? THEN cm.recipient_id ELSE cm.user_id END))
+      )
+    ORDER BY cm.id DESC
+    LIMIT 20
+  `, [req.userId, req.userId, req.userId, req.userId, req.userId, req.userId, req.userId, req.userId]);
+  res.json(conversations);
 });
 
 
