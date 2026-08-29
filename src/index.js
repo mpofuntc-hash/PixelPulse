@@ -1758,7 +1758,10 @@ if (TELEGRAM_BOT_TOKEN) {
     stop: async () => {},
     command: () => {},
     on: () => {},
-    telegram: { sendMessage: async () => {}, sendPhoto: async () => {} }
+    action: () => {},
+    hears: () => {},
+    use: () => {},
+    telegram: { sendMessage: async () => {}, sendPhoto: async () => {}, pinChatMessage: async () => {}, editMessageText: async () => {} }
   };
 }
 
