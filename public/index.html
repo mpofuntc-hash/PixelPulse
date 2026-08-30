@@ -6831,8 +6831,10 @@
                     method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ stake, mineCount: minesState.mineCount })
                 });
-                const data = await res.json();
-                if (!res.ok) { alert(data.error); startBtn.disabled = false; return; }
+                const text = await res.text();
+                let data;
+                try { data = JSON.parse(text); } catch(e) { alert('Server error. Please try again.'); startBtn.disabled = false; return; }
+                if (!res.ok) { alert(data.error || 'Error starting game'); startBtn.disabled = false; return; }
 
                 minesState = { sessionId: data.sessionId, mineCount: data.mineCount, stake: stake, revealed: [], active: true };
                 document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
@@ -6851,7 +6853,7 @@
                     card.onclick = () => pickMineCard(i);
                     grid.appendChild(card);
                 }
-            } catch(e) { console.error('Mines start error:', e); alert('Error: ' + (e.message || 'unknown')); startBtn.disabled = false; }
+            } catch(e) { console.error('Mines start error:', e); alert('Network error. Please try again.'); startBtn.disabled = false; }
         }
 
         async function pickMineCard(index) {
@@ -6862,10 +6864,12 @@
             try {
                 const res = await fetch('/api/arcade/mines/pick', {
                     method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ sessionId: minesState.sessionId, cardIndex: index })
+                    body: JSON.stringify({ sessionId: String(minesState.sessionId), cardIndex: index })
                 });
-                const data = await res.json();
-                if (!res.ok) { alert(data.error); return; }
+                const text = await res.text();
+                let data;
+                try { data = JSON.parse(text); } catch(e) { alert('Server error. Please restart the game.'); return; }
+                if (!res.ok) { alert(data.error || 'Error picking card'); return; }
 
                 if (data.busted) {
                     card.classList.add('revealed', 'bomb');
@@ -6894,7 +6898,7 @@
                     document.getElementById('minesMult').textContent = `${data.currentMult.toFixed(2)}x`;
                     document.getElementById('minesPotential').textContent = `$${data.potentialPayout.toFixed(2)}`;
                 }
-            } catch(e) { console.error('Mines pick error:', e); }
+            } catch(e) { console.error('Mines pick error:', e); alert('Network error. Please try again.'); }
         }
 
         async function cashoutMines() {
@@ -6902,10 +6906,12 @@
             try {
                 const res = await fetch('/api/arcade/mines/cashout', {
                     method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ sessionId: minesState.sessionId })
+                    body: JSON.stringify({ sessionId: String(minesState.sessionId) })
                 });
-                const data = await res.json();
-                if (!res.ok) { alert(data.error); return; }
+                const text = await res.text();
+                let data;
+                try { data = JSON.parse(text); } catch(e) { alert('Server error. Please try again.'); return; }
+                if (!res.ok) { alert(data.error || 'Error cashing out'); return; }
 
                 minesState.active = false;
                 document.getElementById('minesCashoutBtn').style.display = 'none';
@@ -6925,7 +6931,7 @@
                     document.getElementById('minesCashoutBtn').style.display = 'block';
                     document.getElementById('minesResult').textContent = '';
                 }, 3500);
-            } catch(e) { console.error('Mines cashout error:', e); }
+            } catch(e) { console.error('Mines cashout error:', e); alert('Network error. Please try again.'); }
         }
 
         // ===== DICE =====

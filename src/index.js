@@ -7496,126 +7496,131 @@ app.post('/api/arcade/castle-crash/crash', authenticateRequest, async (req, res)
 // 5x5 grid, player picks cards hoping to avoid mines. House edge: mine density slightly higher than fair.
 const MINES_HOUSE_EDGE = 0.05;
 app.post('/api/arcade/mines/start', authenticateRequest, async (req, res) => {
-  const { stake, mineCount, clientSeed } = req.body;
-  const stakeAmount = parseFloat(stake);
-  const mines = parseInt(mineCount) || 3;
-  if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
-  if (mines < 1 || mines > 10) return res.status(400).json({ error: 'Mines must be 1-10' });
+  try {
+    const { stake, mineCount, clientSeed } = req.body;
+    const stakeAmount = parseFloat(stake);
+    const mines = parseInt(mineCount) || 3;
+    if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
+    if (mines < 1 || mines > 10) return res.status(400).json({ error: 'Mines must be 1-10' });
 
-  const isAdmin = await isArcadeAdmin(req.userId);
-  let bal = null;
-  if (!isAdmin) {
-    bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
-    if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
-  }
-
-  const serverSeed = generateServerSeed();
-  const cSeed = clientSeed || arcadeCrypto.randomBytes(8).toString('hex');
-  const nonce = Date.now();
-
-  // Generate 5x5 grid with mine positions
-  const totalCards = 25;
-  const minePositions = new Set();
-  // House edge: add 1 extra mine worth of bias by reducing safe spots probability
-  const effectiveMines = mines + Math.floor(mines * MINES_HOUSE_EDGE * 2);
-  while (minePositions.size < effectiveMines) {
-    const roll = provablyFairResult(serverSeed, cSeed, nonce + minePositions.size);
-    minePositions.add(Math.floor(roll * totalCards));
-  }
-  // But only report 'mines' count to user — the extra mine is hidden bias
-  // Actually for transparency, we use the stated mine count but bias the placement
-  // Simpler: use stated mines, but apply house edge on payout multiplier
-  minePositions.clear();
-  while (minePositions.size < mines) {
-    const roll = provablyFairResult(serverSeed, cSeed, nonce + minePositions.size);
-    minePositions.add(Math.floor(roll * totalCards));
-  }
-
-  if (!isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stakeAmount, req.userId]);
-
-  // Store game in memory (session-based)
-  if (!global.minesGames) global.minesGames = {};
-  const sessionId = nonce;
-  global.minesGames[sessionId] = {
-    userId: req.userId, stake: stakeAmount, mines, minePositions: [...minePositions],
-    revealed: [], serverSeed, cSeed, nonce, isAdmin, busted: false, cashedOut: false,
-    createdAt: Date.now()
-  };
-
-  // Periodic cleanup: remove abandoned games older than 5 minutes
-  const now = Date.now();
-  for (const [sid, game] of Object.entries(global.minesGames)) {
-    if (game.createdAt && (now - game.createdAt) > 5 * 60 * 1000 && !game.busted && !game.cashedOut) {
-      // Refund the stake for abandoned games
-      if (!game.isAdmin) {
-        try { await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [game.stake, game.userId]); } catch(e) {}
-      }
-      delete global.minesGames[sid];
+    const isAdmin = await isArcadeAdmin(req.userId);
+    let bal = null;
+    if (!isAdmin) {
+      bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+      if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
     }
-  }
 
-  const newBalance = isAdmin ? 10000 : (bal.usd_balance - stakeAmount);
-  res.json({ sessionId, stake: stakeAmount, mineCount: mines, totalCards, newBalance });
+    const serverSeed = generateServerSeed();
+    const cSeed = clientSeed || arcadeCrypto.randomBytes(8).toString('hex');
+    const nonce = Date.now();
+
+    // Generate 5x5 grid with mine positions
+    const totalCards = 25;
+    const minePositions = new Set();
+    while (minePositions.size < mines) {
+      const roll = provablyFairResult(serverSeed, cSeed, nonce + minePositions.size);
+      minePositions.add(Math.floor(roll * totalCards));
+    }
+
+    if (!isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stakeAmount, req.userId]);
+
+    // Store game in memory (session-based)
+    if (!global.minesGames) global.minesGames = {};
+    const sessionId = String(nonce);
+    global.minesGames[sessionId] = {
+      userId: req.userId, stake: stakeAmount, mines, minePositions: [...minePositions],
+      revealed: [], serverSeed, cSeed, nonce, isAdmin, busted: false, cashedOut: false,
+      createdAt: Date.now()
+    };
+
+    // Periodic cleanup: remove abandoned games older than 5 minutes
+    const now = Date.now();
+    for (const [sid, game] of Object.entries(global.minesGames)) {
+      if (game.createdAt && (now - game.createdAt) > 5 * 60 * 1000 && !game.busted && !game.cashedOut) {
+        if (!game.isAdmin) {
+          try { await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [game.stake, game.userId]); } catch(e) {}
+        }
+        delete global.minesGames[sid];
+      }
+    }
+
+    const newBalance = isAdmin ? 10000 : (bal.usd_balance - stakeAmount);
+    res.json({ sessionId, stake: stakeAmount, mineCount: mines, totalCards, newBalance });
+  } catch (err) {
+    console.error('Mines start error:', err);
+    res.status(500).json({ error: 'Server error starting mines game' });
+  }
 });
 
 app.post('/api/arcade/mines/pick', authenticateRequest, async (req, res) => {
-  const { sessionId, cardIndex } = req.body;
-  const game = global.minesGames?.[sessionId];
-  if (!game || game.userId !== req.userId) return res.status(400).json({ error: 'Game not found' });
-  if (game.busted || game.cashedOut) return res.status(400).json({ error: 'Game already ended' });
-  if (game.revealed.includes(cardIndex)) return res.status(400).json({ error: 'Already picked' });
-  if (cardIndex < 0 || cardIndex > 24) return res.status(400).json({ error: 'Invalid card' });
+  try {
+    const { sessionId, cardIndex } = req.body;
+    const sid = String(sessionId);
+    const game = global.minesGames?.[sid];
+    if (!game || game.userId !== req.userId) return res.status(400).json({ error: 'Game not found' });
+    if (game.busted || game.cashedOut) return res.status(400).json({ error: 'Game already ended' });
+    if (game.revealed.includes(cardIndex)) return res.status(400).json({ error: 'Already picked' });
+    if (cardIndex < 0 || cardIndex > 24) return res.status(400).json({ error: 'Invalid card' });
 
-  game.revealed.push(cardIndex);
-  const isMine = game.minePositions.includes(cardIndex);
+    game.revealed.push(cardIndex);
+    const isMine = game.minePositions.includes(cardIndex);
 
-  if (isMine) {
-    game.busted = true;
-    if (!game.isAdmin) await dbRun('UPDATE user_balances SET total_lost = total_lost + ? WHERE user_id = ?', [game.stake, req.userId]);
-    await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'mines', ?, 'USD', 0, 0, 'busted', ?, ?)`,
-      [req.userId, game.stake, JSON.stringify({ mines: game.mines, revealed: game.revealed, minePositions: game.minePositions, admin_test: game.isAdmin }), sessionId]);
-    const bal = game.isAdmin ? null : await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
-    delete global.minesGames[sessionId];
-    return res.json({ busted: true, minePositions: game.minePositions, revealed: game.revealed, newBalance: game.isAdmin ? 10000 : (bal?.usd_balance || 0) });
+    if (isMine) {
+      game.busted = true;
+      if (!game.isAdmin) await dbRun('UPDATE user_balances SET total_lost = total_lost + ? WHERE user_id = ?', [game.stake, req.userId]);
+      await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'mines', ?, 'USD', 0, 0, 'busted', ?, ?)`,
+        [req.userId, game.stake, JSON.stringify({ mines: game.mines, revealed: game.revealed, minePositions: game.minePositions, admin_test: game.isAdmin }), sid]);
+      const bal = game.isAdmin ? null : await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+      delete global.minesGames[sid];
+      return res.json({ busted: true, minePositions: game.minePositions, revealed: game.revealed, newBalance: game.isAdmin ? 10000 : (bal?.usd_balance || 0) });
+    }
+
+    // Calculate current multiplier based on safe picks
+    const safePicks = game.revealed.length;
+    const totalSafe = 25 - game.mines;
+    let fairMult = 1;
+    for (let i = 0; i < safePicks; i++) {
+      fairMult *= (25 - i) / (25 - game.mines - i);
+    }
+    const currentMult = fairMult * (1 - MINES_HOUSE_EDGE);
+    const potentialPayout = Math.floor(game.stake * currentMult * 100) / 100;
+
+    res.json({ safe: true, revealed: game.revealed, currentMult, potentialPayout, picksLeft: totalSafe - safePicks });
+  } catch (err) {
+    console.error('Mines pick error:', err);
+    res.status(500).json({ error: 'Server error picking card' });
   }
-
-  // Calculate current multiplier based on safe picks
-  const safePicks = game.revealed.length;
-  const totalSafe = 25 - game.mines;
-  // Fair multiplier: product of (25-i)/(25-mines-i) for each pick, times (1 - house edge)
-  let fairMult = 1;
-  for (let i = 0; i < safePicks; i++) {
-    fairMult *= (25 - i) / (25 - game.mines - i);
-  }
-  const currentMult = fairMult * (1 - MINES_HOUSE_EDGE);
-  const potentialPayout = Math.floor(game.stake * currentMult * 100) / 100;
-
-  res.json({ safe: true, revealed: game.revealed, currentMult, potentialPayout, picksLeft: totalSafe - safePicks });
 });
 
 app.post('/api/arcade/mines/cashout', authenticateRequest, async (req, res) => {
-  const { sessionId } = req.body;
-  const game = global.minesGames?.[sessionId];
-  if (!game || game.userId !== req.userId) return res.status(400).json({ error: 'Game not found' });
-  if (game.busted || game.cashedOut) return res.status(400).json({ error: 'Game already ended' });
-  if (game.revealed.length === 0) return res.status(400).json({ error: 'Pick at least one card first' });
+  try {
+    const { sessionId } = req.body;
+    const sid = String(sessionId);
+    const game = global.minesGames?.[sid];
+    if (!game || game.userId !== req.userId) return res.status(400).json({ error: 'Game not found' });
+    if (game.busted || game.cashedOut) return res.status(400).json({ error: 'Game already ended' });
+    if (game.revealed.length === 0) return res.status(400).json({ error: 'Pick at least one card first' });
 
-  game.cashedOut = true;
-  const safePicks = game.revealed.length;
-  let fairMult = 1;
-  for (let i = 0; i < safePicks; i++) {
-    fairMult *= (25 - i) / (25 - game.mines - i);
+    game.cashedOut = true;
+    const safePicks = game.revealed.length;
+    let fairMult = 1;
+    for (let i = 0; i < safePicks; i++) {
+      fairMult *= (25 - i) / (25 - game.mines - i);
+    }
+    const multiplier = fairMult * (1 - MINES_HOUSE_EDGE);
+    const payout = Math.floor(game.stake * multiplier * 100) / 100;
+
+    if (!game.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+    await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'mines', ?, 'USD', ?, ?, 'cashed_out', ?, ?)`,
+      [req.userId, game.stake, multiplier, payout, JSON.stringify({ mines: game.mines, revealed: game.revealed, minePositions: game.minePositions, admin_test: game.isAdmin }), sid]);
+
+    const bal = game.isAdmin ? null : await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    delete global.minesGames[sid];
+    res.json({ cashedOut: true, multiplier, payout, minePositions: game.minePositions, revealed: game.revealed, newBalance: game.isAdmin ? 10000 : (bal?.usd_balance || 0) });
+  } catch (err) {
+    console.error('Mines cashout error:', err);
+    res.status(500).json({ error: 'Server error cashing out' });
   }
-  const multiplier = fairMult * (1 - MINES_HOUSE_EDGE);
-  const payout = Math.floor(game.stake * multiplier * 100) / 100;
-
-  if (!game.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
-  await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'mines', ?, 'USD', ?, ?, 'cashed_out', ?, ?)`,
-    [req.userId, game.stake, multiplier, payout, JSON.stringify({ mines: game.mines, revealed: game.revealed, minePositions: game.minePositions, admin_test: game.isAdmin }), sessionId]);
-
-  const bal = game.isAdmin ? null : await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
-  delete global.minesGames[sessionId];
-  res.json({ cashedOut: true, multiplier, payout, minePositions: game.minePositions, revealed: game.revealed, newBalance: game.isAdmin ? 10000 : (bal?.usd_balance || 0) });
 });
 
 // ===== DICE =====
