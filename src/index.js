@@ -3911,7 +3911,7 @@ async function postAndPinGameModules() {
       `💣 MINES\n` +
       `Pick cards, avoid mines, cash out anytime!\n` +
       `Play on the website\n` +
-      `Up to 47.5x on 10 mines!\n\n` +
+      `Up to 28.5x on 7 mines!\n\n` +
       `🎲 DICE\n` +
       `Roll 2 dice, predict the sum (2-12)\n` +
       `Command: /dice 7 5\n` +
@@ -4008,7 +4008,7 @@ bot.action('game_info_crash', (ctx) => {
 
 bot.action('game_info_mines', (ctx) => {
   ctx.answerCbQuery();
-  ctx.reply(`💣 Mines\n\nPick cards and avoid the mines! Cash out anytime.\n\nPlay on the website: https://pixelpulse.zentriva-clubsync.online\n\nChoose 3-10 mines. More mines = bigger multipliers!\n5% house edge on payouts.`);
+  ctx.reply(`💣 Mines\n\nPick cards and avoid the mines! Cash out anytime.\n\nPlay on the website: https://pixelpulse.zentriva-clubsync.online\n\nChoose 3-7 mines. More mines = bigger multipliers!\n5% house edge on payouts.`);
 });
 
 bot.action('game_info_dice', (ctx) => {
@@ -7954,7 +7954,7 @@ app.post('/api/arcade/mines/start', authenticateRequest, async (req, res) => {
     const stakeAmount = parseFloat(stake);
     const mines = parseInt(mineCount) || 3;
     if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
-    if (mines < 1 || mines > 10) return res.status(400).json({ error: 'Mines must be 1-10' });
+    if (mines < 1 || mines > 7) return res.status(400).json({ error: 'Mines must be 1-7' });
 
     const isAdmin = await isArcadeAdmin(req.userId);
     let bal = null;
