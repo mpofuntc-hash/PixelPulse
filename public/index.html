@@ -2102,7 +2102,7 @@
                 <span style="color: #888; font-size: 13px;">ARCADE BALANCE:</span>
                 <span id="arcadeBalance" style="color: #4caf50; font-weight: 700; font-size: 18px;">$0.00</span>
             </div>
-            <button class="btn btn-secondary" onclick="showSection('wallet')" style="font-size: 13px;">Deposit</button>
+            <button class="btn btn-primary" onclick="showDepositModal()" style="font-size: 13px;">Deposit / Withdraw</button>
             <button class="btn btn-secondary" onclick="loadArcadeHistory()" style="font-size: 13px;">My History</button>
         </div>
 
@@ -2691,6 +2691,80 @@
                 </div>
                 <button class="btn btn-primary" style="width: 100%;" onclick="submitTokenDeposit()">Submit Deposit Request</button>
                 <div id="depositHistory" style="margin-top: 20px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Arcade Wallet Modal (Deposit/Withdraw) -->
+    <div class="modal" id="arcadeWalletModal" style="display: none;">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3 class="modal-title">Arcade Wallet</h3>
+                <button class="close-btn" onclick="closeArcadeWalletModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="display:flex;gap:0;margin-bottom:16px;border-bottom:1px solid #333;">
+                    <button class="wallet-tab-btn active" onclick="switchWalletTab('depositTab')" style="flex:1;padding:10px;background:none;border:none;color:#fff;border-bottom:2px solid #e50914;cursor:pointer;font-size:14px;">Deposit</button>
+                    <button class="wallet-tab-btn" onclick="switchWalletTab('withdrawTab')" style="flex:1;padding:10px;background:none;border:none;color:#888;border-bottom:2px solid transparent;cursor:pointer;font-size:14px;">Withdraw</button>
+                    <button class="wallet-tab-btn" onclick="switchWalletTab('historyTab')" style="flex:1;padding:10px;background:none;border:none;color:#888;border-bottom:2px solid transparent;cursor:pointer;font-size:14px;">History</button>
+                </div>
+
+                <!-- Deposit Tab -->
+                <div id="depositTab">
+                    <h4 style="color:#f7931a;margin-bottom:10px;">Deposit BTC</h4>
+                    <div style="text-align:center;margin-bottom:15px;">
+                        <img id="btcQrCode" src="" alt="BTC QR Code" style="width:180px;height:180px;border-radius:8px;background:#fff;padding:8px;">
+                    </div>
+                    <div style="background:#0d0d0d;padding:12px;border-radius:4px;margin-bottom:8px;">
+                        <div style="color:#888;font-size:11px;margin-bottom:4px;">BTC ADDRESS</div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <code id="btcWalletAddress" style="font-size:11px;word-break:break-all;color:#f7931a;flex:1;"></code>
+                            <button id="copyBtcBtn" class="btn btn-secondary" style="font-size:11px;padding:4px 10px;" onclick="copyBtcAddress()">Copy</button>
+                        </div>
+                    </div>
+                    <div id="btcMinDeposit" style="font-size:12px;color:#888;margin-bottom:8px;"></div>
+                    <div id="btcPriceDisplay" style="font-size:12px;color:#4caf50;margin-bottom:15px;"></div>
+
+                    <div style="background:#1a1a1a;padding:10px;border-radius:4px;margin-bottom:15px;font-size:12px;color:#888;">
+                        1. Send BTC to the address above<br>
+                        2. Wait for 1 confirmation (~10 min)<br>
+                        3. Claim your deposit below with the tx hash
+                    </div>
+
+                    <div style="display:flex;gap:8px;margin-bottom:15px;">
+                        <input type="text" id="claimTxHash" placeholder="Paste BTC transaction hash..." style="flex:1;padding:8px;background:#2f2f2f;border:1px solid #333;color:#fff;border-radius:4px;font-size:12px;">
+                        <button class="btn btn-primary" style="font-size:12px;" onclick="claimDeposit()">Claim</button>
+                    </div>
+
+                    <h4 style="color:#e50914;margin-bottom:10px;margin-top:20px;">Convert Game Tokens</h4>
+                    <div id="tokenConvertList"></div>
+                    <div id="convertForm" style="display:none;margin-top:10px;">
+                        <input type="number" id="convertAmount" placeholder="Token amount" oninput="previewConvert()" style="width:100%;padding:8px;background:#2f2f2f;border:1px solid #333;color:#fff;border-radius:4px;margin-bottom:5px;">
+                        <div id="convertPreview" style="font-size:12px;color:#4caf50;margin-bottom:8px;"></div>
+                        <button class="btn btn-primary" style="width:100%;" onclick="submitConvert()">Convert to USD Balance</button>
+                    </div>
+                </div>
+
+                <!-- Withdraw Tab -->
+                <div id="withdrawTab" style="display:none;">
+                    <h4 style="color:#e50914;margin-bottom:10px;">Withdraw to BTC</h4>
+                    <div style="background:#1a1a1a;padding:10px;border-radius:4px;margin-bottom:15px;font-size:12px;color:#888;">
+                        Minimum withdrawal: $5.00<br>
+                        Processed within 24-48 hours<br>
+                        Paid in BTC to your wallet address
+                    </div>
+                    <input type="number" id="withdrawAmount" placeholder="Amount in USD (e.g. 50)" step="0.01" min="5" style="width:100%;padding:10px;background:#2f2f2f;border:1px solid #333;color:#fff;border-radius:4px;margin-bottom:10px;">
+                    <input type="text" id="withdrawBtcAddress" placeholder="Your BTC wallet address" style="width:100%;padding:10px;background:#2f2f2f;border:1px solid #333;color:#fff;border-radius:4px;margin-bottom:15px;">
+                    <button class="btn btn-primary" style="width:100%;" onclick="submitWithdrawal()">Request Withdrawal</button>
+                </div>
+
+                <!-- History Tab -->
+                <div id="historyTab" style="display:none;">
+                    <h4 style="color:#888;margin-bottom:10px;">Deposit History</h4>
+                    <div id="depositHistoryList" style="margin-bottom:20px;"></div>
+                    <h4 style="color:#888;margin-bottom:10px;">Withdrawal History</h4>
+                    <div id="withdrawalHistoryList"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -5464,9 +5538,183 @@
             }
         }
 
-        function showDepositModal() {
-            const btcAddress = 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh';
-            alert(`Send BTC to: ${btcAddress}\n\nMinimum deposit: 0.001 BTC\n\nDeposits will be credited after confirmation.`);
+        // ===== ARCADE WALLET MODAL =====
+        let depositModalData = null;
+
+        async function showDepositModal() {
+            if (!sessionToken) { showAuthModal(); return; }
+            const modal = document.getElementById('arcadeWalletModal');
+            modal.style.display = 'flex';
+            loadDepositModalData();
+        }
+
+        function closeArcadeWalletModal() {
+            document.getElementById('arcadeWalletModal').style.display = 'none';
+        }
+
+        async function loadDepositModalData() {
+            try {
+                const [addrRes, tokenRes, depRes, wdRes] = await Promise.all([
+                    fetch('/api/arcade/deposit-address', { headers: { 'Authorization': `Bearer ${sessionToken}` } }),
+                    fetch('/api/arcade/token-balances', { headers: { 'Authorization': `Bearer ${sessionToken}` } }),
+                    fetch('/api/arcade/deposits', { headers: { 'Authorization': `Bearer ${sessionToken}` } }),
+                    fetch('/api/arcade/withdrawals', { headers: { 'Authorization': `Bearer ${sessionToken}` } })
+                ]);
+                const addr = await addrRes.json();
+                const tokens = await tokenRes.json();
+                const deposits = await depRes.json();
+                const withdrawals = await wdRes.json();
+                depositModalData = { addr, tokens, deposits, withdrawals };
+
+                // Render deposit tab
+                document.getElementById('btcWalletAddress').textContent = addr.address;
+                document.getElementById('btcMinDeposit').textContent = `Min: ${addr.minDeposit} BTC (~$${addr.minDepositUsd})`;
+                document.getElementById('btcQrCode').src = addr.qrUrl;
+                document.getElementById('btcPriceDisplay').textContent = `1 BTC = $${addr.btcPriceUsd.toLocaleString()}`;
+
+                // Render token balances
+                const tokenEl = document.getElementById('tokenConvertList');
+                if (Object.keys(tokens).length === 0) {
+                    tokenEl.innerHTML = '<p style="color:#666;font-size:13px;">No game tokens available. Deposit game tokens in the Wallet section to convert them.</p>';
+                } else {
+                    tokenEl.innerHTML = Object.entries(tokens).map(([type, t]) => `
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;border:1px solid #333;border-radius:4px;margin-bottom:8px;">
+                            <div><span style="font-size:18px;">${t.icon}</span> <strong>${t.label}</strong><br><span style="color:#888;font-size:12px;">${t.amount.toLocaleString()} tokens = $${t.usdValue.toFixed(2)}</span></div>
+                            <button class="btn btn-primary" style="font-size:12px;padding:6px 12px;" onclick="showConvertForm('${type}', ${t.amount}, ${t.usdValue})">Convert</button>
+                        </div>
+                    `).join('');
+                }
+
+                // Render deposit history
+                const depEl = document.getElementById('depositHistoryList');
+                if (deposits.length === 0) {
+                    depEl.innerHTML = '<p style="color:#666;font-size:13px;">No deposits yet</p>';
+                } else {
+                    depEl.innerHTML = deposits.slice(0, 10).map(d => `
+                        <div style="padding:8px;border-bottom:1px solid #333;font-size:12px;">
+                            <span style="color:${d.status === 'confirmed' ? '#4caf50' : '#ff9800'};">●</span>
+                            ${d.btc_amount} BTC → $${(d.usd_credited || 0).toFixed(2)}
+                            <span style="color:#666;float:right;">${d.status} (${d.confirmations || 0} conf)</span>
+                        </div>
+                    `).join('');
+                }
+
+                // Render withdrawal history
+                const wdEl = document.getElementById('withdrawalHistoryList');
+                if (withdrawals.length === 0) {
+                    wdEl.innerHTML = '<p style="color:#666;font-size:13px;">No withdrawals yet</p>';
+                } else {
+                    wdEl.innerHTML = withdrawals.slice(0, 10).map(w => `
+                        <div style="padding:8px;border-bottom:1px solid #333;font-size:12px;">
+                            <span style="color:${w.status === 'completed' ? '#4caf50' : w.status === 'rejected' ? '#f44336' : '#ff9800'};">●</span>
+                            $${w.amount_usd.toFixed(2)} → ${w.btc_amount} BTC
+                            <span style="color:#666;float:right;">${w.status}</span>
+                        </div>
+                    `).join('');
+                }
+            } catch(e) {
+                console.error('Deposit modal load error:', e);
+            }
+        }
+
+        function switchWalletTab(tab) {
+            ['depositTab', 'withdrawTab', 'historyTab'].forEach(t => {
+                document.getElementById(t).style.display = 'none';
+            });
+            document.getElementById(tab).style.display = 'block';
+            document.querySelectorAll('.wallet-tab-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+
+        function copyBtcAddress() {
+            const addr = document.getElementById('btcWalletAddress').textContent;
+            navigator.clipboard.writeText(addr).then(() => {
+                const btn = document.getElementById('copyBtcBtn');
+                btn.textContent = 'Copied!';
+                setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+            });
+        }
+
+        async function claimDeposit() {
+            const txHash = document.getElementById('claimTxHash').value.trim();
+            if (!txHash) { alert('Enter the transaction hash from your BTC wallet'); return; }
+            try {
+                const res = await fetch('/api/arcade/claim-deposit', {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ txHash })
+                });
+                const text = await res.text();
+                let data; try { data = JSON.parse(text); } catch(e) { alert('Server error. Try again.'); return; }
+                if (!res.ok) { alert(data.error || 'Claim failed'); return; }
+                alert(data.message);
+                document.getElementById('claimTxHash').value = '';
+                document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
+                loadDepositModalData();
+            } catch(e) { alert('Network error. Try again.'); }
+        }
+
+        function showConvertForm(tokenType, maxAmount, usdValue) {
+            const form = document.getElementById('convertForm');
+            form.style.display = 'block';
+            form.dataset.tokenType = tokenType;
+            form.dataset.maxAmount = maxAmount;
+            document.getElementById('convertAmount').value = '';
+            document.getElementById('convertAmount').max = maxAmount;
+            document.getElementById('convertPreview').textContent = '';
+        }
+
+        async function previewConvert() {
+            const form = document.getElementById('convertForm');
+            const tokenType = form.dataset.tokenType;
+            const amount = parseFloat(document.getElementById('convertAmount').value);
+            if (!amount || amount <= 0) { document.getElementById('convertPreview').textContent = ''; return; }
+            const tokens = depositModalData?.tokens || {};
+            const t = tokens[tokenType];
+            if (!t) return;
+            const usdPerToken = t.usdValue / t.amount;
+            const usd = (amount * usdPerToken).toFixed(2);
+            document.getElementById('convertPreview').textContent = `= $${usd} arcade balance`;
+        }
+
+        async function submitConvert() {
+            const form = document.getElementById('convertForm');
+            const tokenType = form.dataset.tokenType;
+            const amount = parseFloat(document.getElementById('convertAmount').value);
+            if (!amount || amount <= 0) { alert('Enter a valid amount'); return; }
+            try {
+                const res = await fetch('/api/arcade/convert-tokens', {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tokenType, tokenAmount: amount })
+                });
+                const text = await res.text();
+                let data; try { data = JSON.parse(text); } catch(e) { alert('Server error. Try again.'); return; }
+                if (!res.ok) { alert(data.error || 'Conversion failed'); return; }
+                alert(data.message);
+                document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
+                document.getElementById('convertForm').style.display = 'none';
+                loadDepositModalData();
+            } catch(e) { alert('Network error. Try again.'); }
+        }
+
+        async function submitWithdrawal() {
+            const amount = parseFloat(document.getElementById('withdrawAmount').value);
+            const btcAddress = document.getElementById('withdrawBtcAddress').value.trim();
+            if (!amount || amount < 5) { alert('Minimum withdrawal is $5.00'); return; }
+            if (!btcAddress || btcAddress.length < 20) { alert('Enter a valid BTC address'); return; }
+            try {
+                const res = await fetch('/api/arcade/withdraw', {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ amountUsd: amount, btcAddress })
+                });
+                const text = await res.text();
+                let data; try { data = JSON.parse(text); } catch(e) { alert('Server error. Try again.'); return; }
+                if (!res.ok) { alert(data.error || 'Withdrawal failed'); return; }
+                alert(data.message);
+                document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
+                document.getElementById('withdrawAmount').value = '';
+                document.getElementById('withdrawBtcAddress').value = '';
+                loadDepositModalData();
+            } catch(e) { alert('Network error. Try again.'); }
         }
 
         // ===== TOKEN DEPOSIT =====

@@ -1843,8 +1843,17 @@ async function registerDiscordSlashCommands() {
     new SlashCommandBuilder().setName('setup-server').setDescription('Admin: Create roles & channels for anime, gaming, gambling niches')
       .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
     new SlashCommandBuilder().setName('balance').setDescription('Check your arcade USD balance'),
-    new SlashCommandBuilder().setName('deposit').setDescription('Get deposit instructions for arcade funds')
-      .addStringOption(opt => opt.setName('amount').setDescription('Amount in USD to deposit').setRequired(true)),
+    new SlashCommandBuilder().setName('deposit').setDescription('Get BTC deposit address for arcade funds'),
+    new SlashCommandBuilder().setName('withdraw').setDescription('Withdraw your arcade balance to BTC')
+      .addNumberOption(opt => opt.setName('amount').setDescription('Amount in USD to withdraw (min $5)').setRequired(true))
+      .addStringOption(opt => opt.setName('btc_address').setDescription('Your BTC wallet address').setRequired(true)),
+    new SlashCommandBuilder().setName('converttokens').setDescription('Convert game tokens to arcade USD balance')
+      .addStringOption(opt => opt.setName('token_type').setDescription('Type of game tokens').setRequired(true).addChoices(
+        { name: 'Steam', value: 'steam' }, { name: 'Roblox (Robux)', value: 'roblox' }, { name: 'Standoff 2', value: 'standoff2' },
+        { name: 'Fortnite (V-Bucks)', value: 'fortnite' }, { name: 'PUBG Mobile (UC)', value: 'pubgmobile' },
+        { name: 'Valorant (VP)', value: 'valorant' }, { name: 'Genshin (Crystals)', value: 'genshin' }, { name: 'Free Fire (Diamonds)', value: 'freefire' }
+      ))
+      .addNumberOption(opt => opt.setName('amount').setDescription('Amount of tokens to convert').setRequired(true)),
     new SlashCommandBuilder().setName('coinflip').setDescription('Flip a coin — heads or tails (min $0.50)')
       .addStringOption(opt => opt.setName('choice').setDescription('heads or tails').setRequired(true).addChoices({ name: 'Heads', value: 'heads' }, { name: 'Tails', value: 'tails' }))
       .addNumberOption(opt => opt.setName('stake').setDescription('Stake amount in USD (min 0.50)').setRequired(true)),
@@ -2382,26 +2391,84 @@ async function handleDiscordSlashCommand(interaction) {
         break;
       }
       case 'deposit': {
-        const amount = interaction.options.getString('amount');
         const user = await dbGet('SELECT id FROM users WHERE discord_id = ?', [interaction.user.id]);
         if (!user) {
           await interaction.reply({ content: 'Link your account first with `/link <username>`', ephemeral: true });
           return;
         }
+        const btcPrice = await getBtcPriceUsd();
+        const minUsd = Math.floor(MIN_BTC_DEPOSIT * btcPrice * 100) / 100;
         const embed = new EmbedBuilder()
-          .setTitle('💳 Deposit to Arcade')
-          .setColor(0xe50914)
+          .setTitle('₿ Deposit BTC to Arcade')
+          .setColor(0xf7931a)
           .setDescription([
-            `To deposit **$${amount}** to your arcade balance:`,
+            `**BTC Wallet Address:**`,
+            `\`${BTC_WALLET}\``,
             '',
-            '1. Go to https://pixelpulse.zentriva-clubsync.online',
-            '2. Login and navigate to Wallet',
-            '3. Deposit BTC — it will be converted to USD automatically',
+            `Minimum: ${MIN_BTC_DEPOSIT} BTC (~$${minUsd})`,
+            `Current BTC Price: $${btcPrice.toLocaleString()}`,
+            '',
+            '**Steps:**',
+            '1. Send BTC to the address above',
+            '2. Wait 1 confirmation (~10 min)',
+            '3. Claim on the website: https://pixelpulse.zentriva-clubsync.online',
             '4. Use /balance to check your updated balance',
             '',
-            'BTC deposits are credited within 1-3 confirmations.',
-            'Your balance is shared between the website and Discord.'
+            'Your balance is shared between website, Telegram, and Discord.'
           ].join('\n'));
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+        break;
+      }
+      case 'withdraw': {
+        const amount = interaction.options.getNumber('amount');
+        const btcAddress = interaction.options.getString('btc_address');
+        const user = await dbGet('SELECT id FROM users WHERE discord_id = ?', [interaction.user.id]);
+        if (!user) {
+          await interaction.reply({ content: 'Link your account first with `/link <username>`', ephemeral: true });
+          return;
+        }
+        if (!amount || amount < MIN_WITHDRAWAL_USD) {
+          await interaction.reply({ content: `Minimum withdrawal is $${MIN_WITHDRAWAL_USD}`, ephemeral: true });
+          return;
+        }
+        if (!btcAddress || btcAddress.length < 20) {
+          await interaction.reply({ content: 'Valid BTC address required', ephemeral: true });
+          return;
+        }
+        const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [user.id]);
+        if (!bal || bal.usd_balance < amount) {
+          await interaction.reply({ content: `Insufficient balance. You have $${(bal?.usd_balance || 0).toFixed(2)}`, ephemeral: true });
+          return;
+        }
+        const btcPrice = await getBtcPriceUsd();
+        const btcAmount = Math.floor((amount / btcPrice) * 100000000) / 100000000;
+        await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_withdrawn = total_withdrawn + ? WHERE user_id = ?', [amount, amount, user.id]);
+        await dbRun('INSERT INTO withdrawal_requests (user_id, amount_usd, btc_amount, btc_address, status) VALUES (?, ?, ?, ?, ?)', [user.id, amount, btcAmount, btcAddress, 'pending']);
+        const embed = new EmbedBuilder()
+          .setTitle('✅ Withdrawal Requested')
+          .setColor(0x4caf50)
+          .setDescription(`Amount: **$${amount.toFixed(2)}**\nBTC: **${btcAmount} BTC**\nTo: \`${btcAddress}\`\n\nYou will receive your BTC within 24-48 hours.`);
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+        break;
+      }
+      case 'converttokens': {
+        const tokenType = interaction.options.getString('token_type');
+        const tokenAmount = interaction.options.getNumber('amount');
+        const user = await dbGet('SELECT id FROM users WHERE discord_id = ?', [interaction.user.id]);
+        if (!user) {
+          await interaction.reply({ content: 'Link your account first with `/link <username>`', ephemeral: true });
+          return;
+        }
+        const result = await stakeWithTokens(user.id, tokenType, tokenAmount);
+        if (result.error) {
+          await interaction.reply({ content: result.error, ephemeral: true });
+          return;
+        }
+        const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [user.id]);
+        const embed = new EmbedBuilder()
+          .setTitle('🎮 Tokens Converted')
+          .setColor(0xe50914)
+          .setDescription(`Converted **${tokenAmount} ${result.tokenLabel}** tokens to **$${result.usdValue}** arcade balance!\n\nNew balance: **$${(bal?.usd_balance || 0).toFixed(2)}**`);
         await interaction.reply({ embeds: [embed], ephemeral: true });
         break;
       }
@@ -3406,8 +3473,51 @@ bot.command('balance', async (ctx) => {
     const user = await getTelegramUser(ctx);
     const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [user.id]);
     const balance = bal?.usd_balance || 0;
-    ctx.reply(`💰 Your Arcade Balance\n\nUSD: $${balance.toFixed(2)}\n\nUse /buy to add funds with Telegram Stars\nPlay: /coinflip, /slots, /crash, /dice\nMore on website: Mines, Plinko, PvP!`);
+    ctx.reply(`💰 Your Arcade Balance\n\nUSD: $${balance.toFixed(2)}\n\nAdd funds:\n/buy — Telegram Stars\n/depositcrypto — BTC crypto\n\nPlay: /coinflip, /slots, /crash, /dice\nMore on website: Mines, Plinko, PvP!`);
   } catch(e) { ctx.reply('Error checking balance. Try again.'); }
+});
+
+// Telegram — deposit crypto (BTC)
+bot.command('depositcrypto', async (ctx) => {
+  try {
+    const btcPrice = await getBtcPriceUsd();
+    const minUsd = Math.floor(MIN_BTC_DEPOSIT * btcPrice * 100) / 100;
+    ctx.reply(`₿ Deposit BTC to Arcade\n\nWallet Address:\n${BTC_WALLET}\n\nMinimum: ${MIN_BTC_DEPOSIT} BTC (~$${minUsd})\nCurrent BTC Price: $${btcPrice.toLocaleString()}\n\nSteps:\n1. Send BTC to the address above\n2. Wait 1 confirmation (~10 min)\n3. Go to the website to claim your deposit:\nhttps://pixelpulse.zentriva-clubsync.online\n\nYour BTC will be converted to USD balance automatically.`);
+  } catch(e) { ctx.reply('Error getting deposit info. Try again.'); }
+});
+
+// Telegram — withdraw to BTC
+bot.command('withdraw', async (ctx) => {
+  try {
+    const user = await getTelegramUser(ctx);
+    const args = ctx.message.text.split(' ').slice(1);
+    const amount = parseFloat(args[0]);
+    const btcAddress = args[1];
+    
+    if (!amount || amount < MIN_WITHDRAWAL_USD) {
+      ctx.reply(`₿ Withdraw to BTC\n\nMinimum: $${MIN_WITHDRAWAL_USD}\n\nUsage:\n/withdraw 50 bc1qyouraddress...\n\nYour balance will be converted to BTC and sent within 24-48 hours.`);
+      return;
+    }
+    if (!btcAddress || btcAddress.length < 20) {
+      ctx.reply('Please provide a valid BTC address.\n\nUsage: /withdraw 50 bc1qyouraddress...');
+      return;
+    }
+    
+    const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [user.id]);
+    if (!bal || bal.usd_balance < amount) {
+      ctx.reply(`Insufficient balance. You have $${(bal?.usd_balance || 0).toFixed(2)}`);
+      return;
+    }
+    
+    const btcPrice = await getBtcPriceUsd();
+    const btcAmount = Math.floor((amount / btcPrice) * 100000000) / 100000000;
+    
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_withdrawn = total_withdrawn + ? WHERE user_id = ?', [amount, amount, user.id]);
+    const result = await dbRun('INSERT INTO withdrawal_requests (user_id, amount_usd, btc_amount, btc_address, status) VALUES (?, ?, ?, ?, ?)',
+      [user.id, amount, btcAmount, btcAddress, 'pending']);
+    
+    ctx.reply(`✅ Withdrawal Requested\n\nAmount: $${amount.toFixed(2)}\nBTC: ${btcAmount} BTC\nTo: ${btcAddress}\n\nYou will receive your BTC within 24-48 hours.`);
+  } catch(e) { console.error('Telegram withdraw error:', e); ctx.reply('Error processing withdrawal. Try again.'); }
 });
 
 // Telegram Stars payment — buy USD balance
@@ -7200,12 +7310,355 @@ function provablyFairResult(serverSeed, clientSeed, nonce) {
 const WEB_MIN_STAKE = 2.00;
 const DISCORD_MIN_STAKE = 0.50;
 const HOUSE_EDGE = 0.05;
+const BTC_WALLET = process.env.BTC_WALLET_ADDRESS || 'bc1q7s36q98hdpsj59np02ky5xlak8vd9pwwpa62hv';
+const MIN_BTC_DEPOSIT = 0.0001; // ~$6.50 at $65k BTC
+const MIN_WITHDRAWAL_USD = 5.00;
 
 // Admin user IDs that get virtual $10,000 arcade balance for testing
 const ARCADE_ADMIN_IDS = [2]; // Nathi101 (mpofuntc@gmail.com)
 async function isArcadeAdmin(userId) {
   return ARCADE_ADMIN_IDS.includes(userId);
 }
+
+// ===== CRYPTO DEPOSIT & WITHDRAWAL SYSTEM =====
+
+// Ensure crypto deposit and withdrawal tables exist
+async function ensureCryptoTables() {
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS crypto_deposits (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER,
+      tx_hash TEXT UNIQUE,
+      btc_amount REAL,
+      usd_credited REAL,
+      confirmations INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'pending',
+      detected_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      credited_at TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  `);
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS withdrawal_requests (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER,
+      amount_usd REAL,
+      btc_amount REAL,
+      btc_address TEXT,
+      status TEXT DEFAULT 'pending',
+      tx_hash TEXT,
+      requested_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      processed_at TEXT,
+      processed_by INTEGER,
+      notes TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  `);
+}
+
+// Get current BTC price in USD from exchange_rates table
+async function getBtcPriceUsd() {
+  const rate = await dbGet('SELECT rate_to_usd FROM exchange_rates WHERE currency = ?', ['BTC']);
+  return rate?.rate_to_usd || 65000;
+}
+
+// Check blockchain for new BTC deposits to our wallet address
+async function checkBtcDeposits() {
+  try {
+    const btcPrice = await getBtcPriceUsd();
+    const url = `https://blockchain.info/rawaddr/${BTC_WALLET}`;
+    
+    https.get(url, (apiRes) => {
+      let data = '';
+      apiRes.on('data', chunk => data += chunk);
+      apiRes.on('end', async () => {
+        try {
+          const addrInfo = JSON.parse(data);
+          if (!addrInfo.txs) return;
+          
+          for (const tx of addrInfo.txs) {
+            // Check if this tx sent funds to our address
+            let receivedSats = 0;
+            for (const out of tx.out) {
+              if (out.addr === BTC_WALLET) {
+                receivedSats += out.value;
+              }
+            }
+            if (receivedSats === 0) continue;
+            
+            const btcAmount = receivedSats / 100000000;
+            const txHash = tx.hash;
+            
+            // Check if we already processed this deposit
+            const existing = await dbGet('SELECT * FROM crypto_deposits WHERE tx_hash = ?', [txHash]);
+            if (existing) {
+              // Update confirmations
+              if (tx.confirmations !== existing.confirmations) {
+                await dbRun('UPDATE crypto_deposits SET confirmations = ? WHERE id = ?', [tx.confirmations || 0, existing.id]);
+                
+                // Credit when we have 1+ confirmations and not yet credited
+                if ((tx.confirmations || 0) >= 1 && existing.status === 'pending') {
+                  const usdAmount = Math.floor(btcAmount * btcPrice * 100) / 100;
+                  await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_deposited = total_deposited + ? WHERE user_id = ?', [usdAmount, usdAmount, existing.user_id]);
+                  await dbRun('UPDATE crypto_deposits SET status = ?, usd_credited = ?, credited_at = CURRENT_TIMESTAMP WHERE id = ?', ['confirmed', usdAmount, existing.id]);
+                  console.log(`BTC deposit confirmed: ${btcAmount} BTC ($${usdAmount}) for user ${existing.user_id}`);
+                }
+              }
+              continue;
+            }
+            
+            // New deposit detected - find which user it belongs to
+            // We use the tx's input addresses to match to a user's deposit address
+            // For simplicity with a shared wallet, we match by amount+timing
+            // Users get a unique memo/reference when they deposit
+            // For now, we need users to claim deposits via the deposit-claim endpoint
+            
+            // Check if amount matches any pending deposit claim
+            const claim = await dbGet('SELECT * FROM crypto_deposits WHERE tx_hash = ? AND status = ?', [txHash, 'pending']);
+            if (claim) continue; // already exists
+            
+            // Insert as unclaimed - user must claim via UI
+            if (btcAmount >= MIN_BTC_DEPOSIT) {
+              await dbRun('INSERT OR IGNORE INTO crypto_deposits (tx_hash, btc_amount, usd_credited, confirmations, status) VALUES (?, ?, 0, ?, ?)',
+                [txHash, btcAmount, tx.confirmations || 0, 'unclaimed']);
+              console.log(`New BTC deposit detected: ${btcAmount} BTC (${tx.confirmations || 0} confirmations) - awaiting user claim`);
+            }
+          }
+        } catch(e) { console.error('BTC deposit parse error:', e.message); }
+      });
+    }).on('error', (e) => { /* silently fail - will retry next interval */ });
+  } catch(e) { console.error('BTC deposit check error:', e.message); }
+}
+
+// Start BTC deposit monitoring (every 2 minutes)
+setInterval(() => { checkBtcDeposits(); }, 2 * 60 * 1000);
+// Run once on startup
+setTimeout(() => { checkBtcDeposits(); }, 10000);
+
+// API: Get BTC wallet address for deposits
+app.get('/api/arcade/deposit-address', authenticateRequest, async (req, res) => {
+  try {
+    const btcPrice = await getBtcPriceUsd();
+    res.json({
+      address: BTC_WALLET,
+      minDeposit: MIN_BTC_DEPOSIT,
+      minDepositUsd: Math.floor(MIN_BTC_DEPOSIT * btcPrice * 100) / 100,
+      btcPriceUsd: btcPrice,
+      qrUrl: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=bitcoin:${BTC_WALLET}`
+    });
+  } catch(e) {
+    console.error('Deposit address error:', e);
+    res.status(500).json({ error: 'Failed to get deposit address' });
+  }
+});
+
+// API: Claim a BTC deposit by providing tx hash
+app.post('/api/arcade/claim-deposit', authenticateRequest, async (req, res) => {
+  try {
+    const { txHash } = req.body;
+    if (!txHash) return res.status(400).json({ error: 'Transaction hash required' });
+    
+    const deposit = await dbGet('SELECT * FROM crypto_deposits WHERE tx_hash = ?', [txHash]);
+    if (!deposit) return res.status(404).json({ error: 'Deposit not found. Wait 2-3 minutes after sending BTC for it to be detected.' });
+    if (deposit.status === 'confirmed') return res.status(400).json({ error: 'This deposit has already been claimed' });
+    if (deposit.user_id && deposit.user_id !== req.userId) return res.status(403).json({ error: 'This deposit belongs to another user' });
+    
+    // Assign to this user
+    const btcPrice = await getBtcPriceUsd();
+    const usdAmount = Math.floor(deposit.btc_amount * btcPrice * 100) / 100;
+    
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_deposited = total_deposited + ? WHERE user_id = ?', [usdAmount, usdAmount, req.userId]);
+    await dbRun('UPDATE crypto_deposits SET user_id = ?, status = ?, usd_credited = ?, credited_at = CURRENT_TIMESTAMP WHERE id = ?', 
+      [req.userId, 'confirmed', usdAmount, deposit.id]);
+    
+    const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    res.json({ 
+      message: `Deposit confirmed! ${deposit.btc_amount} BTC = $${usdAmount} credited to your balance.`,
+      usdAmount,
+      newBalance: bal?.usd_balance || 0
+    });
+  } catch(e) {
+    console.error('Claim deposit error:', e);
+    res.status(500).json({ error: 'Failed to claim deposit' });
+  }
+});
+
+// API: Get user's deposit history (crypto)
+app.get('/api/arcade/deposits', authenticateRequest, async (req, res) => {
+  try {
+    const deposits = await dbAll('SELECT * FROM crypto_deposits WHERE user_id = ? ORDER BY detected_at DESC', [req.userId]);
+    res.json(deposits);
+  } catch(e) {
+    res.status(500).json({ error: 'Failed to load deposits' });
+  }
+});
+
+// API: Request withdrawal
+app.post('/api/arcade/withdraw', authenticateRequest, async (req, res) => {
+  try {
+    const { amountUsd, btcAddress } = req.body;
+    const amount = parseFloat(amountUsd);
+    
+    if (!amount || amount < MIN_WITHDRAWAL_USD) return res.status(400).json({ error: `Minimum withdrawal is $${MIN_WITHDRAWAL_USD}` });
+    if (!btcAddress || btcAddress.length < 20) return res.status(400).json({ error: 'Valid BTC address required' });
+    
+    const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    if (!bal || bal.usd_balance < amount) return res.status(400).json({ error: 'Insufficient balance' });
+    
+    const btcPrice = await getBtcPriceUsd();
+    const btcAmount = Math.floor((amount / btcPrice) * 100000000) / 100000000;
+    
+    // Deduct balance immediately and create withdrawal request
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_withdrawn = total_withdrawn + ? WHERE user_id = ?', [amount, amount, req.userId]);
+    
+    const result = await dbRun('INSERT INTO withdrawal_requests (user_id, amount_usd, btc_amount, btc_address, status) VALUES (?, ?, ?, ?, ?)',
+      [req.userId, amount, btcAmount, btcAddress, 'pending']);
+    
+    logSystemEvent('info', `Withdrawal requested by user ${req.userId}`, `$${amount} to ${btcAddress} (${btcAmount} BTC)`);
+    
+    res.json({ 
+      message: 'Withdrawal request submitted. You will receive your BTC within 24-48 hours.',
+      withdrawalId: result.lastID,
+      btcAmount,
+      btcAddress,
+      newBalance: bal.usd_balance - amount
+    });
+  } catch(e) {
+    console.error('Withdrawal error:', e);
+    res.status(500).json({ error: 'Failed to process withdrawal request' });
+  }
+});
+
+// API: Get user's withdrawal history
+app.get('/api/arcade/withdrawals', authenticateRequest, async (req, res) => {
+  try {
+    const withdrawals = await dbAll('SELECT * FROM withdrawal_requests WHERE user_id = ? ORDER BY requested_at DESC', [req.userId]);
+    res.json(withdrawals);
+  } catch(e) {
+    res.status(500).json({ error: 'Failed to load withdrawals' });
+  }
+});
+
+// API: Admin - get pending withdrawals
+app.get('/api/admin/withdrawals', checkAdminSession, async (req, res) => {
+  try {
+    const withdrawals = await dbAll(`
+      SELECT w.*, u.username, u.email 
+      FROM withdrawal_requests w 
+      JOIN users u ON w.user_id = u.id 
+      WHERE w.status = 'pending' 
+      ORDER BY w.requested_at ASC
+    `);
+    res.json(withdrawals);
+  } catch(e) {
+    res.status(500).json({ error: 'Failed to load withdrawals' });
+  }
+});
+
+// API: Admin - process withdrawal
+app.post('/api/admin/withdrawal/process', checkAdminSession, async (req, res) => {
+  try {
+    const { withdrawalId, approved, txHash, notes } = req.body;
+    const withdrawal = await dbGet('SELECT * FROM withdrawal_requests WHERE id = ?', [withdrawalId]);
+    if (!withdrawal) return res.status(404).json({ error: 'Withdrawal not found' });
+    if (withdrawal.status !== 'pending') return res.status(400).json({ error: 'Already processed' });
+    
+    if (approved) {
+      await dbRun('UPDATE withdrawal_requests SET status = ?, tx_hash = ?, processed_at = CURRENT_TIMESTAMP, processed_by = ?, notes = ? WHERE id = ?',
+        ['completed', txHash || '', req.session.userId, notes || '', withdrawalId]);
+      logSystemEvent('info', `Withdrawal approved`, `ID: ${withdrawalId}, $${withdrawal.amount_usd} to ${withdrawal.btc_address}`);
+      res.json({ message: 'Withdrawal marked as completed' });
+    } else {
+      // Refund the user
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_withdrawn = total_withdrawn - ? WHERE user_id = ?',
+        [withdrawal.amount_usd, withdrawal.amount_usd, withdrawal.user_id]);
+      await dbRun('UPDATE withdrawal_requests SET status = ?, processed_at = CURRENT_TIMESTAMP, processed_by = ?, notes = ? WHERE id = ?',
+        ['rejected', req.session.userId, notes || 'Rejected by admin', withdrawalId]);
+      res.json({ message: 'Withdrawal rejected and balance refunded' });
+    }
+  } catch(e) {
+    console.error('Admin withdrawal process error:', e);
+    res.status(500).json({ error: 'Failed to process withdrawal' });
+  }
+});
+
+// ===== TOKEN STAKING SUPPORT =====
+// Convert game tokens to USD value for staking in arcade games
+async function stakeWithTokens(userId, tokenType, tokenAmount) {
+  const tokenInfo = TOKEN_TYPES[tokenType];
+  if (!tokenInfo) return { error: 'Invalid token type' };
+  
+  const rate = await getTokenRate(tokenType);
+  if (!rate) return { error: 'Token rate not available' };
+  
+  const usdValue = Math.floor(tokenAmount * rate.rate_to_usd * 100) / 100;
+  if (usdValue < WEB_MIN_STAKE) return { error: `Token amount too low. Minimum stake is $${WEB_MIN_STAKE} (need more ${tokenInfo.label} tokens)` };
+  
+  // Check user has enough tokens
+  const user = await dbGet(`SELECT ${tokenInfo.column} FROM users WHERE id = ?`, [userId]);
+  if (!user || user[tokenInfo.column] < tokenAmount) return { error: `Insufficient ${tokenInfo.label} tokens` };
+  
+  // Deduct tokens and add USD balance for this game
+  await dbRun(`UPDATE users SET ${tokenInfo.column} = ${tokenInfo.column} - ? WHERE id = ?`, [tokenAmount, userId]);
+  
+  // Record the conversion
+  await dbRun('INSERT OR IGNORE INTO user_balances (user_id, usd_balance) VALUES (?, 0)', [userId]);
+  await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [usdValue, userId]);
+  
+  logSystemEvent('info', `Token staking by user ${userId}`, `${tokenAmount} ${tokenType} tokens = $${usdValue}`);
+  
+  return { usdValue, tokenType, tokenAmount, tokenLabel: tokenInfo.label };
+}
+
+// API: Convert tokens to USD balance for arcade
+app.post('/api/arcade/convert-tokens', authenticateRequest, async (req, res) => {
+  try {
+    const { tokenType, tokenAmount } = req.body;
+    const amount = parseFloat(tokenAmount);
+    if (!amount || amount <= 0) return res.status(400).json({ error: 'Invalid token amount' });
+    
+    const result = await stakeWithTokens(req.userId, tokenType, amount);
+    if (result.error) return res.status(400).json({ error: result.error });
+    
+    const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    res.json({
+      message: `Converted ${amount} ${result.tokenLabel} tokens to $${result.usdValue} arcade balance!`,
+      usdValue: result.usdValue,
+      newBalance: bal?.usd_balance || 0
+    });
+  } catch(e) {
+    console.error('Token convert error:', e);
+    res.status(500).json({ error: 'Failed to convert tokens' });
+  }
+});
+
+// API: Get user's token balances for arcade staking
+app.get('/api/arcade/token-balances', authenticateRequest, async (req, res) => {
+  try {
+    const user = await dbGet('SELECT steam_tokens, standoff2_tokens, robux_tokens, vbucks_tokens, pubg_uc_tokens, valorant_vp_tokens, genshin_crystals_tokens, freefire_diamonds_tokens FROM users WHERE id = ?', [req.userId]);
+    if (!user) return res.json({});
+    
+    const balances = {};
+    for (const [type, info] of Object.entries(TOKEN_TYPES)) {
+      const bal = user[info.column] || 0;
+      if (bal > 0) {
+        const rate = await getTokenRate(type);
+        balances[type] = {
+          label: info.label,
+          icon: info.icon,
+          amount: bal,
+          usdValue: Math.floor(bal * (rate?.rate_to_usd || 0) * 100) / 100
+        };
+      }
+    }
+    res.json(balances);
+  } catch(e) {
+    res.status(500).json({ error: 'Failed to load token balances' });
+  }
+});
+
+// Initialize crypto tables on startup
+ensureCryptoTables();
 
 // API: Get user's USD balance for arcade
 app.get('/api/arcade/balance', authenticateRequest, async (req, res) => {
