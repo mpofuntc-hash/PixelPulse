@@ -7417,18 +7417,23 @@ app.post('/api/arcade/mines/cashout', authenticateRequest, async (req, res) => {
 });
 
 // ===== DICE =====
-// Roll 2 dice (2-12), player predicts the sum. House edge applied to payouts.
+// Two modes: 'sum' (predict sum 2-12) and 'combo' (predict exact combination e.g. 3+4)
 const DICE_HOUSE_EDGE = 0.05;
-const DICE_PAYOUTS = {
+const DICE_SUM_PAYOUTS = {
   2: 30, 3: 17, 4: 11, 5: 8, 6: 6, 7: 5,
   8: 6, 9: 8, 10: 11, 11: 17, 12: 30
 };
+// Combo payouts: doubles pay more, specific combos pay 5x
+const DICE_COMBO_PAYOUTS = {
+  double: 30, // any double (1+1, 2+2, etc.) — 6/36 = 16.7% chance, fair payout 6x, house edge applied
+  specific: 17 // exact combo like 3+4 — 2/36 = 5.6% chance (order independent), fair payout 18x
+};
 app.post('/api/arcade/dice', authenticateRequest, async (req, res) => {
-  const { prediction, stake, clientSeed } = req.body;
+  const { prediction, stake, mode, clientSeed } = req.body;
   const stakeAmount = parseFloat(stake);
-  const pred = parseInt(prediction);
+  const diceMode = mode || 'sum';
+
   if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
-  if (isNaN(pred) || pred < 2 || pred > 12) return res.status(400).json({ error: 'Predict a number 2-12' });
 
   const isAdmin = await isArcadeAdmin(req.userId);
   let bal = null;
@@ -7440,13 +7445,44 @@ app.post('/api/arcade/dice', authenticateRequest, async (req, res) => {
   const serverSeed = generateServerSeed();
   const cSeed = clientSeed || arcadeCrypto.randomBytes(8).toString('hex');
   const nonce = Date.now();
-  // Roll two dice
   const die1 = Math.floor(provablyFairResult(serverSeed, cSeed, nonce) * 6) + 1;
   const die2 = Math.floor(provablyFairResult(serverSeed, cSeed, nonce + 1) * 6) + 1;
   const sum = die1 + die2;
-  const won = sum === pred;
-  const basePayout = DICE_PAYOUTS[sum] || 0;
-  const multiplier = won ? basePayout * (1 - DICE_HOUSE_EDGE) : 0;
+
+  let won = false;
+  let multiplier = 0;
+  let predLabel = '';
+
+  if (diceMode === 'combo') {
+    // prediction can be "double" or "X+Y" (e.g. "3+4")
+    if (prediction === 'double') {
+      won = die1 === die2;
+      multiplier = won ? DICE_COMBO_PAYOUTS.double * (1 - DICE_HOUSE_EDGE) : 0;
+      predLabel = 'Any Double';
+    } else if (typeof prediction === 'string' && prediction.includes('+')) {
+      const parts = prediction.split('+');
+      const p1 = parseInt(parts[0]);
+      const p2 = parseInt(parts[1]);
+      if (isNaN(p1) || isNaN(p2) || p1 < 1 || p1 > 6 || p2 < 1 || p2 > 6) {
+        return res.status(400).json({ error: 'Invalid combination. Use format like 3+4' });
+      }
+      // Order-independent match
+      won = (die1 === p1 && die2 === p2) || (die1 === p2 && die2 === p1);
+      multiplier = won ? DICE_COMBO_PAYOUTS.specific * (1 - DICE_HOUSE_EDGE) : 0;
+      predLabel = `${p1}+${p2}`;
+    } else {
+      return res.status(400).json({ error: 'Invalid combo prediction. Use "double" or "X+Y" format' });
+    }
+  } else {
+    // Sum mode (default)
+    const pred = parseInt(prediction);
+    if (isNaN(pred) || pred < 2 || pred > 12) return res.status(400).json({ error: 'Predict a number 2-12' });
+    won = sum === pred;
+    const basePayout = DICE_SUM_PAYOUTS[sum] || 0;
+    multiplier = won ? basePayout * (1 - DICE_HOUSE_EDGE) : 0;
+    predLabel = String(pred);
+  }
+
   const payout = won ? Math.floor(stakeAmount * multiplier * 100) / 100 : 0;
 
   if (!isAdmin) {
@@ -7455,10 +7491,10 @@ app.post('/api/arcade/dice', authenticateRequest, async (req, res) => {
   }
 
   await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'dice', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
-    [req.userId, stakeAmount, multiplier, payout, won ? 'won' : 'lost', JSON.stringify({ die1, die2, sum, prediction: pred, admin_test: isAdmin }), serverSeed, cSeed, nonce]);
+    [req.userId, stakeAmount, multiplier, payout, won ? 'won' : 'lost', JSON.stringify({ die1, die2, sum, prediction: predLabel, mode: diceMode, admin_test: isAdmin }), serverSeed, cSeed, nonce]);
 
   const newBalance = isAdmin ? 10000 : (bal.usd_balance - stakeAmount + payout);
-  res.json({ die1, die2, sum, prediction: pred, won, multiplier, payout, stake: stakeAmount, newBalance });
+  res.json({ die1, die2, sum, prediction: predLabel, mode: diceMode, won, multiplier, payout, stake: stakeAmount, newBalance });
 });
 
 // ===== PLINKO =====

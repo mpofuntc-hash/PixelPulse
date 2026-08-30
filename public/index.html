@@ -17,7 +17,10 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(180deg, #0d0d14 0%, #12121c 40%, #141420 100%);
+            background:
+                linear-gradient(180deg, rgba(13,13,20,0.85) 0%, rgba(18,18,28,0.8) 40%, rgba(20,20,32,0.75) 100%),
+                url('/images/pixel-kingdom-bg.svg') center top / cover no-repeat fixed,
+                linear-gradient(180deg, #0d0d14 0%, #12121c 40%, #141420 100%);
             background-attachment: fixed;
             color: #fff;
             min-height: 100vh;
@@ -1471,6 +1474,34 @@
         }
         .dice-pred-btn .payout-info { font-size: 9px; color: #666; }
         .dice-pred-btn.selected .payout-info { color: #00d4ff; }
+        .dice-combo-picker {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+        }
+        .dice-combo-btn {
+            width: 44px;
+            height: 44px;
+            border: 2px solid #2a2a4a;
+            background: #111;
+            color: #aaa;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: 800;
+            font-family: 'Courier New', monospace;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .dice-combo-btn:hover { border-color: #4caf50; color: #fff; transform: scale(1.1); }
+        .dice-combo-btn.selected {
+            border-color: #4caf50;
+            background: rgba(76,175,80,0.15);
+            color: #4caf50;
+            box-shadow: 0 0 10px rgba(76,175,80,0.3);
+        }
         /* ===== PLINKO ===== */
         .plinko-board {
             position: relative;
@@ -2218,24 +2249,65 @@
 
         <!-- Dice -->
         <div id="arcade-dice" style="display: none;">
-            <div class="arcade-game" style="max-width: 500px;">
+            <div class="arcade-game" style="max-width: 560px;">
                 <h3>🎲 DICE ROLL</h3>
-                <p style="color: #888; font-size: 12px; margin-bottom: 16px;">Predict the sum of two dice (2-12). Higher payout for rare numbers!</p>
+                <div style="display: flex; gap: 8px; margin-bottom: 16px; justify-content: center;">
+                    <button class="plinko-risk-btn active" onclick="selectDiceMode('sum', this)" id="diceModeSum">PREDICT SUM</button>
+                    <button class="plinko-risk-btn" onclick="selectDiceMode('combo', this)" id="diceModeCombo">PREDICT COMBO</button>
+                </div>
                 <div class="dice-display" id="diceDisplay">
                     <div class="dice-face" id="die1">?</div>
                     <div class="dice-face" id="die2">?</div>
                 </div>
-                <div style="margin-bottom: 8px;">
-                    <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">PREDICT THE SUM:</label>
-                    <div class="dice-prediction-grid" id="dicePredGrid"></div>
+
+                <!-- Sum Mode -->
+                <div id="diceSumSection">
+                    <p style="color: #888; font-size: 12px; margin-bottom: 12px;">Predict the sum of two dice (2-12). Rarer sums pay more!</p>
+                    <div style="margin-bottom: 8px;">
+                        <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">PREDICT THE SUM:</label>
+                        <div class="dice-prediction-grid" id="dicePredGrid"></div>
+                    </div>
                 </div>
+
+                <!-- Combo Mode -->
+                <div id="diceComboSection" style="display: none;">
+                    <p style="color: #888; font-size: 12px; margin-bottom: 12px;">Predict the exact combination of two dice, or bet on any double!</p>
+                    <div style="margin-bottom: 12px;">
+                        <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">BET TYPE:</label>
+                        <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 12px;">
+                            <button class="plinko-risk-btn active" onclick="selectComboType('specific', this)" id="comboTypeSpecific">EXACT COMBO</button>
+                            <button class="plinko-risk-btn" onclick="selectComboType('double', this)" id="comboTypeDouble">ANY DOUBLE</button>
+                        </div>
+                    </div>
+                    <div id="diceComboPicker" style="margin-bottom: 12px;">
+                        <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">PICK TWO DICE VALUES:</label>
+                        <div style="display: flex; gap: 16px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                            <div>
+                                <div style="color: #aaa; font-size: 11px; margin-bottom: 6px; text-align: center;">DIE 1</div>
+                                <div class="dice-combo-picker" id="diceComboDie1"></div>
+                            </div>
+                            <div style="font-size: 24px; color: #555;">+</div>
+                            <div>
+                                <div style="color: #aaa; font-size: 11px; margin-bottom: 6px; text-align: center;">DIE 2</div>
+                                <div class="dice-combo-picker" id="diceComboDie2"></div>
+                            </div>
+                        </div>
+                        <div style="text-align: center; margin-top: 10px; color: #4caf50; font-size: 14px; font-weight: bold;" id="comboSelectionDisplay">Select dice values</div>
+                    </div>
+                    <div id="diceDoubleInfo" style="display: none; text-align: center; margin-bottom: 12px; padding: 12px; background: #1a1a2e; border-radius: 8px; border: 1px solid #2a2a4a;">
+                        <div style="color: #FFD700; font-size: 18px; font-weight: bold;">🎲 ANY DOUBLE</div>
+                        <div style="color: #888; font-size: 12px; margin-top: 4px;">Win if both dice show the same number (1+1, 2+2, 3+3, 4+4, 5+5, 6+6)</div>
+                        <div style="color: #4caf50; font-size: 14px; margin-top: 6px;">Payout: 28.5x your stake!</div>
+                    </div>
+                </div>
+
                 <div style="margin-bottom: 16px;">
                     <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">STAKE (USD, MIN $2):</label>
                     <input type="number" id="diceStake" value="2" min="2" step="0.50" class="arcade-input">
                 </div>
                 <button class="arcade-btn" onclick="playDice()" id="dicePlayBtn">ROLL DICE</button>
                 <div id="diceResult" class="arcade-payout"></div>
-                <div class="arcade-info">2 or 12 = 30x | 3 or 11 = 17x | 7 = 5x | 5% house edge</div>
+                <div class="arcade-info" id="diceInfoLine">2 or 12 = 28.5x | 3 or 11 = 16.15x | 7 = 4.75x | 5% house edge</div>
             </div>
         </div>
 
@@ -6646,8 +6718,8 @@
                 const data = await res.json();
                 if (!res.ok) { alert(data.error); startBtn.disabled = false; return; }
 
-                minesState = { sessionId: data.sessionId, mineCount: data.mineCount, revealed: [], active: true };
-                document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+                minesState = { sessionId: data.sessionId, mineCount: data.mineCount, stake: stake, revealed: [], active: true };
+                document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
                 document.getElementById('minesSetupArea').style.display = 'none';
                 document.getElementById('minesGameArea').style.display = 'block';
                 document.getElementById('minesMult').textContent = '1.00x';
@@ -6687,9 +6759,9 @@
                         const mc = document.querySelector(`.mine-card[data-index="${pos}"]`);
                         if (mc && !mc.classList.contains('safe')) { mc.classList.add('revealed', 'bomb'); mc.textContent = '💣'; }
                     });
-                    document.getElementById('minesResult').innerHTML = `💥 HIT A MINE! Lost $${(minesState.stake || parseFloat(document.getElementById('minesStake').value)).toFixed(2)}`;
-                    showArcadeToast('loss', '💣', 'BUSTED!', `-$${(minesState.stake || parseFloat(document.getElementById('minesStake').value)).toFixed(2)}`);
-                    document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+                    document.getElementById('minesResult').innerHTML = `💥 HIT A MINE! Lost $${(minesState.stake || 0).toFixed(2)}`;
+                    showArcadeToast('loss', '💣', 'BUSTED!', `-$${(minesState.stake || 0).toFixed(2)}`);
+                    document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
                     document.getElementById('minesCashoutBtn').style.display = 'none';
                     minesState.active = false;
                     setTimeout(() => {
@@ -6722,7 +6794,7 @@
                 minesState.active = false;
                 document.getElementById('minesCashoutBtn').style.display = 'none';
                 document.getElementById('minesResult').innerHTML = `🎉 WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
-                document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+                document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
                 showArcadeToast('win', '💰', 'CASHED OUT!', `+$${data.payout.toFixed(2)}`);
                 // Show all mines
                 data.minePositions.forEach(pos => {
@@ -6742,6 +6814,10 @@
 
         // ===== DICE =====
         let dicePrediction = null;
+        let diceMode = 'sum';
+        let diceComboType = 'specific';
+        let diceComboDie1Val = null;
+        let diceComboDie2Val = null;
         const DICE_PAYOUTS = { 2: 30, 3: 17, 4: 11, 5: 8, 6: 6, 7: 5, 8: 6, 9: 8, 10: 11, 11: 17, 12: 30 };
 
         function initDiceGrid() {
@@ -6755,6 +6831,75 @@
                 btn.onclick = () => selectDicePrediction(i, btn);
                 grid.appendChild(btn);
             }
+            initDiceComboPickers();
+        }
+
+        function initDiceComboPickers() {
+            ['diceComboDie1', 'diceComboDie2'].forEach((pickerId, idx) => {
+                const picker = document.getElementById(pickerId);
+                if (!picker || picker.children.length > 0) return;
+                for (let i = 1; i <= 6; i++) {
+                    const btn = document.createElement('button');
+                    btn.className = 'dice-combo-btn';
+                    btn.textContent = i;
+                    btn.dataset.value = i;
+                    btn.onclick = () => selectComboDie(idx === 0 ? 1 : 2, i, btn);
+                    picker.appendChild(btn);
+                }
+            });
+        }
+
+        function selectDiceMode(mode, btn) {
+            diceMode = mode;
+            document.querySelectorAll('#diceModeSum, #diceModeCombo').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('diceSumSection').style.display = mode === 'sum' ? 'block' : 'none';
+            document.getElementById('diceComboSection').style.display = mode === 'combo' ? 'block' : 'none';
+            const infoLine = document.getElementById('diceInfoLine');
+            if (mode === 'sum') {
+                infoLine.textContent = '2 or 12 = 28.5x | 3 or 11 = 16.15x | 7 = 4.75x | 5% house edge';
+            } else {
+                infoLine.textContent = 'Exact combo = 16.15x | Any double = 28.5x | 5% house edge';
+            }
+            dicePrediction = null;
+        }
+
+        function selectComboType(type, btn) {
+            diceComboType = type;
+            document.querySelectorAll('#comboTypeSpecific, #comboTypeDouble').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('diceComboPicker').style.display = type === 'specific' ? 'block' : 'none';
+            document.getElementById('diceDoubleInfo').style.display = type === 'double' ? 'block' : 'none';
+            if (type === 'double') {
+                dicePrediction = 'double';
+            } else {
+                updateComboSelection();
+            }
+        }
+
+        function selectComboDie(which, value, btn) {
+            if (which === 1) {
+                diceComboDie1Val = value;
+                document.querySelectorAll('#diceComboDie1 .dice-combo-btn').forEach(b => b.classList.remove('selected'));
+            } else {
+                diceComboDie2Val = value;
+                document.querySelectorAll('#diceComboDie2 .dice-combo-btn').forEach(b => b.classList.remove('selected'));
+            }
+            btn.classList.add('selected');
+            updateComboSelection();
+        }
+
+        function updateComboSelection() {
+            const display = document.getElementById('comboSelectionDisplay');
+            if (diceComboDie1Val && diceComboDie2Val) {
+                dicePrediction = `${diceComboDie1Val}+${diceComboDie2Val}`;
+                display.textContent = `Selected: ${diceComboDie1Val} + ${diceComboDie2Val} (pays 16.15x)`;
+                display.style.color = '#4caf50';
+            } else {
+                dicePrediction = null;
+                display.textContent = 'Select dice values';
+                display.style.color = '#888';
+            }
         }
 
         function selectDicePrediction(num, btn) {
@@ -6765,7 +6910,10 @@
 
         async function playDice() {
             if (!sessionToken) { showAuthModal(); return; }
-            if (!dicePrediction) { alert('Select a number 2-12 first!'); return; }
+            if (!dicePrediction) {
+                alert(diceMode === 'sum' ? 'Select a number 2-12 first!' : 'Select your dice combination first!');
+                return;
+            }
             const stake = parseFloat(document.getElementById('diceStake').value);
             const btn = document.getElementById('dicePlayBtn');
             const resultEl = document.getElementById('diceResult');
@@ -6787,19 +6935,20 @@
                     die2El.classList.remove('rolling');
                     fetch('/api/arcade/dice', {
                         method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ prediction: dicePrediction, stake })
+                        body: JSON.stringify({ prediction: dicePrediction, stake, mode: diceMode })
                     }).then(res => res.json()).then(data => {
                         if (data.error) { alert(data.error); btn.disabled=false; btn.textContent='ROLL DICE'; return; }
                         die1El.textContent = data.die1;
                         die2El.textContent = data.die2;
+                        const predLabel = data.mode === 'combo' ? `Combo: ${data.prediction}` : `Sum: ${data.sum}`;
                         if (data.won) {
-                            resultEl.innerHTML = `🎉 SUM: ${data.sum} — WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
+                            resultEl.innerHTML = `🎉 ${data.die1}+${data.die2} = ${data.sum} — WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
                             showArcadeToast('win', '🎲', 'YOU WON!', `+$${data.payout.toFixed(2)}`);
                         } else {
-                            resultEl.innerHTML = `❌ SUM: ${data.sum} — You predicted ${data.prediction}. Lost $${data.stake.toFixed(2)}`;
+                            resultEl.innerHTML = `❌ ${data.die1}+${data.die2} = ${data.sum} — You predicted ${data.prediction}. Lost $${data.stake.toFixed(2)}`;
                             showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
                         }
-                        document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+                        document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
                         setTimeout(() => { btn.disabled = false; btn.textContent = 'ROLL DICE'; }, 2500);
                     }).catch(e => { console.error('Dice error:', e); btn.disabled=false; btn.textContent='ROLL DICE'; });
                 }

@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a0a2e"/>
+      <stop offset="35%" stop-color="#2d1b4e"/>
+      <stop offset="60%" stop-color="#4a2c6e"/>
+      <stop offset="80%" stop-color="#6b3a8e"/>
+      <stop offset="100%" stop-color="#8e4ab5"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="720" fill="url(#sky)"/>
+  <!-- Stars -->
+  <g fill="#FFF" opacity="0.7">
+    <rect x="120" y="80" width="3" height="3"/><rect x="340" y="50" width="3" height="3"/><rect x="560" y="120" width="3" height="3"/><rect x="780" y="60" width="3" height="3"/><rect x="1020" y="90" width="3" height="3"/><rect x="1280" y="40" width="3" height="3"/><rect x="1480" y="110" width="3" height="3"/><rect x="1700" y="70" width="3" height="3"/>
+    <rect x="200" y="200" width="2" height="2"/><rect x="450" y="180" width="2" height="2"/><rect x="680" y="220" width="2" height="2"/><rect x="920" y="170" width="2" height="2"/><rect x="1160" y="210" width="2" height="2"/><rect x="1380" y="190" width="2" height="2"/><rect x="1620" y="230" width="2" height="2"/>
+    <rect x="80" y="300" width="2" height="2"/><rect x="380" y="280" width="2" height="2"/><rect x="620" y="320" width="2" height="2"/><rect x="860" y="290" width="2" height="2"/><rect x="1100" y="310" width="2" height="2"/><rect x="1340" y="270" width="2" height="2"/><rect x="1580" y="300" width="2" height="2"/>
+  </g>
+  <!-- Moon -->
+  <g opacity="0.85">
+    <rect x="1500" y="100" width="28" height="28" fill="#FFF8E0"/>
+    <rect x="1496" y="104" width="4" height="20" fill="#FFF8E0"/>
+    <rect x="1528" y="104" width="4" height="20" fill="#FFF8E0"/>
+    <rect x="1504" y="96" width="20" height="4" fill="#FFF8E0"/>
+    <rect x="1504" y="128" width="20" height="4" fill="#FFF8E0"/>
+    <rect x="1508" y="108" width="6" height="6" fill="#E8E0C0"/>
+    <rect x="1518" y="116" width="4" height="4" fill="#E8E0C0"/>
+  </g>
+  <!-- Distant mountains (pixelated) -->
+  <g>
+    <rect x="0" y="560" width="200" height="160" fill="#1a1a3e"/>
+    <rect x="100" y="520" width="160" height="200" fill="#1a1a3e"/>
+    <rect x="220" y="540" width="180" height="180" fill="#1a1a3e"/>
+    <rect x="350" y="500" width="200" height="220" fill="#222244"/>
+    <rect x="480" y="530" width="160" height="190" fill="#1a1a3e"/>
+    <rect x="580" y="510" width="220" height="210" fill="#222244"/>
+    <rect x="720" y="540" width="180" height="180" fill="#1a1a3e"/>
+    <rect x="850" y="490" width="240" height="230" fill="#222244"/>
+    <rect x="1000" y="520" width="200" height="200" fill="#1a1a3e"/>
+    <rect x="1140" y="530" width="180" height="190" fill="#222244"/>
+    <rect x="1260" y="500" width="220" height="220" fill="#1a1a3e"/>
+    <rect x="1400" y="540" width="180" height="180" fill="#222244"/>
+    <rect x="1540" y="510" width="200" height="210" fill="#1a1a3e"/>
+    <rect x="1680" y="530" width="160" height="190" fill="#222244"/>
+    <rect x="1780" y="560" width="140" height="160" fill="#1a1a3e"/>
+  </g>
+  <!-- Castle silhouette -->
+  <g fill="#0d0d1a" opacity="0.9">
+    <rect x="860" y="440" width="200" height="280"/>
+    <rect x="840" y="480" width="20" height="240"/>
+    <rect x="1060" y="480" width="20" height="240"/>
+    <rect x="880" y="420" width="20" height="20"/><rect x="920" y="420" width="20" height="20"/><rect x="960" y="420" width="20" height="20"/><rect x="1000" y="420" width="20" height="20"/><rect x="1040" y="420" width="20" height="20"/>
+    <rect x="880" y="400" width="20" height="20"/><rect x="920" y="400" width="20" height="20"/><rect x="960" y="400" width="20" height="20"/><rect x="1000" y="400" width="20" height="20"/><rect x="1040" y="400" width="20" height="20"/>
+    <rect x="940" y="380" width="40" height="40"/>
+    <rect x="948" y="360" width="24" height="20"/>
+    <rect x="954" y="340" width="12" height="20"/>
+    <rect x="840" y="460" width="20" height="20"/><rect x="1060" y="460" width="20" height="20"/>
+    <!-- Windows -->
+    <rect x="900" y="500" width="16" height="24" fill="#FFD700" opacity="0.6"/>
+    <rect x="940" y="500" width="16" height="24" fill="#FFD700" opacity="0.6"/>
+    <rect x="980" y="500" width="16" height="24" fill="#FFD700" opacity="0.6"/>
+    <rect x="1020" y="500" width="16" height="24" fill="#FFD700" opacity="0.6"/>
+    <rect x="900" y="560" width="16" height="24" fill="#FFD700" opacity="0.4"/>
+    <rect x="980" y="560" width="16" height="24" fill="#FFD700" opacity="0.4"/>
+  </g>
+  <!-- Ground -->
+  <rect y="720" width="1920" height="360" fill="#1a2a1a"/>
+  <rect y="720" width="1920" height="8" fill="#2a4a2a"/>
+  <!-- Trees (pixelated) -->
+  <g>
+    <rect x="100" y="680" width="12" height="40" fill="#3a2a1a"/>
+    <rect x="88" y="640" width="36" height="44" fill="#1a4a1a"/>
+    <rect x="92" y="620" width="28" height="24" fill="#2a5a2a"/>
+    <rect x="96" y="600" width="20" height="24" fill="#1a4a1a"/>
+    <rect x="300" y="690" width="10" height="30" fill="#3a2a1a"/>
+    <rect x="290" y="660" width="30" height="32" fill="#1a4a1a"/>
+    <rect x="294" y="640" width="22" height="24" fill="#2a5a2a"/>
+    <rect x="1500" y="680" width="12" height="40" fill="#3a2a1a"/>
+    <rect x="1488" y="640" width="36" height="44" fill="#1a4a1a"/>
+    <rect x="1492" y="620" width="28" height="24" fill="#2a5a2a"/>
+    <rect x="1496" y="600" width="20" height="24" fill="#1a4a1a"/>
+    <rect x="1700" y="690" width="10" height="30" fill="#3a2a1a"/>
+    <rect x="1690" y="660" width="30" height="32" fill="#1a4a1a"/>
+    <rect x="1694" y="640" width="22" height="24" fill="#2a5a2a"/>
+  </g>
+  <!-- Grass tufts -->
+  <g fill="#2a5a2a" opacity="0.6">
+    <rect x="50" y="724" width="6" height="4"/><rect x="150" y="724" width="6" height="4"/><rect x="250" y="724" width="6" height="4"/><rect x="400" y="724" width="6" height="4"/><rect x="550" y="724" width="6" height="4"/><rect x="700" y="724" width="6" height="4"/><rect x="1100" y="724" width="6" height="4"/><rect x="1250" y="724" width="6" height="4"/><rect x="1400" y="724" width="6" height="4"/><rect x="1600" y="724" width="6" height="4"/><rect x="1800" y="724" width="6" height="4"/>
+  </g>
+  <!-- Floating pixels (magical atmosphere) -->
+  <g fill="#BB86FC" opacity="0.4">
+    <rect x="200" y="350" width="4" height="4"/>
+    <rect x="500" y="400" width="4" height="4"/>
+    <rect x="800" y="300" width="4" height="4"/>
+    <rect x="1100" y="380" width="4" height="4"/>
+    <rect x="1400" y="350" width="4" height="4"/>
+    <rect x="1700" y="400" width="4" height="4"/>
+  </g>
+  <g fill="#03DAC6" opacity="0.3">
+    <rect x="300" y="450" width="3" height="3"/>
+    <rect x="600" y="480" width="3" height="3"/>
+    <rect x="1200" y="460" width="3" height="3"/>
+    <rect x="1600" y="470" width="3" height="3"/>
+  </g>
+</svg>
