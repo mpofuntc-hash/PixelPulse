@@ -1502,6 +1502,36 @@
             color: #4caf50;
             box-shadow: 0 0 10px rgba(76,175,80,0.3);
         }
+        .dice-single-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 6px;
+            max-width: 360px;
+            margin: 12px auto;
+        }
+        .dice-single-btn {
+            width: 48px;
+            height: 48px;
+            border: 2px solid #2a2a4a;
+            background: #111;
+            color: #aaa;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 20px;
+            font-weight: 800;
+            font-family: 'Courier New', monospace;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .dice-single-btn:hover { border-color: #00d4ff; color: #fff; transform: scale(1.1); }
+        .dice-single-btn.selected {
+            border-color: #00d4ff;
+            background: rgba(0,212,255,0.15);
+            color: #00d4ff;
+            box-shadow: 0 0 10px rgba(0,212,255,0.3);
+        }
         /* ===== PLINKO ===== */
         .plinko-board {
             position: relative;
@@ -2143,6 +2173,11 @@
                 <div class="game-card-name">WINNERS</div>
                 <div class="game-card-tag">LEADERBOARD</div>
             </div>
+            <div class="arcade-game-card" id="arcadeTab-rankings" onclick="switchArcadeTab('rankings')" style="--card-accent:#e50914; --card-glow:rgba(229,9,20,0.25);">
+                <span class="game-card-icon" style="font-size:28px;">🏆</span>
+                <div class="game-card-name">RANKINGS</div>
+                <div class="game-card-tag">GAMBLER RANKS</div>
+            </div>
         </div>
 
         <!-- Coin Flip -->
@@ -2251,17 +2286,27 @@
         <div id="arcade-dice" style="display: none;">
             <div class="arcade-game" style="max-width: 560px;">
                 <h3>🎲 DICE ROLL</h3>
-                <div style="display: flex; gap: 8px; margin-bottom: 16px; justify-content: center;">
-                    <button class="plinko-risk-btn active" onclick="selectDiceMode('sum', this)" id="diceModeSum">PREDICT SUM</button>
-                    <button class="plinko-risk-btn" onclick="selectDiceMode('combo', this)" id="diceModeCombo">PREDICT COMBO</button>
+                <div style="display: flex; gap: 8px; margin-bottom: 16px; justify-content: center; flex-wrap: wrap;">
+                    <button class="plinko-risk-btn active" onclick="selectDiceMode('single', this)" id="diceModeSingle">ONE DIE</button>
+                    <button class="plinko-risk-btn" onclick="selectDiceMode('sum', this)" id="diceModeSum">TWO DICE SUM</button>
+                    <button class="plinko-risk-btn" onclick="selectDiceMode('combo', this)" id="diceModeCombo">TWO DICE COMBO</button>
                 </div>
                 <div class="dice-display" id="diceDisplay">
                     <div class="dice-face" id="die1">?</div>
-                    <div class="dice-face" id="die2">?</div>
+                    <div class="dice-face" id="die2" style="display: none;">?</div>
+                </div>
+
+                <!-- Single Die Mode -->
+                <div id="diceSingleSection">
+                    <p style="color: #888; font-size: 12px; margin-bottom: 12px;">Predict the outcome of a single die roll (1-6). Pays 4.75x!</p>
+                    <div style="margin-bottom: 8px;">
+                        <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">PREDICT THE NUMBER:</label>
+                        <div class="dice-single-grid" id="diceSingleGrid"></div>
+                    </div>
                 </div>
 
                 <!-- Sum Mode -->
-                <div id="diceSumSection">
+                <div id="diceSumSection" style="display: none;">
                     <p style="color: #888; font-size: 12px; margin-bottom: 12px;">Predict the sum of two dice (2-12). Rarer sums pay more!</p>
                     <div style="margin-bottom: 8px;">
                         <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">PREDICT THE SUM:</label>
@@ -2307,7 +2352,7 @@
                 </div>
                 <button class="arcade-btn" onclick="playDice()" id="dicePlayBtn">ROLL DICE</button>
                 <div id="diceResult" class="arcade-payout"></div>
-                <div class="arcade-info" id="diceInfoLine">2 or 12 = 28.5x | 3 or 11 = 16.15x | 7 = 4.75x | 5% house edge</div>
+                <div class="arcade-info" id="diceInfoLine">Single die: predict 1-6, pays 4.75x | 5% house edge</div>
             </div>
         </div>
 
@@ -2404,6 +2449,43 @@
             <h3 style="margin-bottom: 16px;">🏆 Recent Winners</h3>
             <div id="winnersFeed" style="display: flex; flex-direction: column; gap: 10px;">
                 <div style="color: #888; text-align: center; padding: 40px;">Loading winners...</div>
+            </div>
+        </div>
+
+        <!-- Rankings -->
+        <div id="arcade-rankings" style="display: none;">
+            <div style="max-width: 600px; margin: 0 auto;">
+                <h3 style="margin-bottom: 8px;">🏆 GAMBLER RANKINGS</h3>
+                <p style="color: #888; font-size: 12px; margin-bottom: 20px; text-align: center;">Climb the ranks by staking more across all games and predictions. Show off your tier!</p>
+
+                <!-- My Rank Card -->
+                <div id="myRankCard" style="display: none; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border: 2px solid #2a2a4a; border-radius: 12px; padding: 20px; margin-bottom: 20px; text-align: center;">
+                    <div id="myRankIcon" style="font-size: 40px; margin-bottom: 8px;">🥉</div>
+                    <div id="myRankName" style="font-size: 18px; font-weight: 800; font-family: 'Courier New', monospace; margin-bottom: 4px;">Bronze Gambler</div>
+                    <div id="myRankStats" style="color: #aaa; font-size: 13px; margin-bottom: 12px;">Total Staked: $0.00 | Total Won: $0.00 | Bets: 0</div>
+                    <div id="myRankProgressContainer" style="display: none;">
+                        <div style="background: #2a2a4a; border-radius: 10px; height: 12px; overflow: hidden; margin-bottom: 6px;">
+                            <div id="myRankProgressBar" style="background: linear-gradient(90deg, #e50914, #FFD700); height: 100%; width: 0%; transition: width 0.5s;"></div>
+                        </div>
+                        <div id="myRankProgressText" style="color: #888; font-size: 11px;">0% to next rank</div>
+                    </div>
+                </div>
+
+                <!-- Rank Tiers Legend -->
+                <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 20px;">
+                    <div style="padding: 6px 12px; background: #1a1a2e; border-radius: 6px; border: 1px solid #cd7f32; font-size: 11px; color: #cd7f32;">🥉 Bronze ($0+)</div>
+                    <div style="padding: 6px 12px; background: #1a1a2e; border-radius: 6px; border: 1px solid #c0c0c0; font-size: 11px; color: #c0c0c0;">🥈 Silver ($50+)</div>
+                    <div style="padding: 6px 12px; background: #1a1a2e; border-radius: 6px; border: 1px solid #FFD700; font-size: 11px; color: #FFD700;">🥇 Gold ($200+)</div>
+                    <div style="padding: 6px 12px; background: #1a1a2e; border-radius: 6px; border: 1px solid #E5E4E2; font-size: 11px; color: #E5E4E2;">💎 Platinum ($500+)</div>
+                    <div style="padding: 6px 12px; background: #1a1a2e; border-radius: 6px; border: 1px solid #00d4ff; font-size: 11px; color: #00d4ff;">💠 Diamond ($1000+)</div>
+                    <div style="padding: 6px 12px; background: #1a1a2e; border-radius: 6px; border: 1px solid #e50914; font-size: 11px; color: #e50914;">👑 Legend ($5000+)</div>
+                </div>
+
+                <!-- Top 50 Leaderboard -->
+                <h4 style="color: #aaa; font-size: 12px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;">Top Gamblers</h4>
+                <div id="rankingsList" style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="color: #888; text-align: center; padding: 40px;">Loading rankings...</div>
+                </div>
             </div>
         </div>
 
@@ -6435,7 +6517,15 @@
         }
 
         function switchArcadeTab(tab) {
-            const tabs = ['coinflip', 'slots', 'crash', 'mines', 'dice', 'plinko', 'pvp', 'predictions', 'winners'];
+            // Clean up any active game intervals to prevent memory leaks / freezes
+            if (crashState && crashState.animInterval) { clearInterval(crashState.animInterval); crashState.animInterval = null; }
+            if (crashState && crashState.active && !crashState.cashedOut && !crashState.crashed) {
+                // Auto-cashout crash game at current multiplier when leaving
+                crashState.active = false;
+            }
+            if (typeof pvpState !== 'undefined' && pvpState.polling) { clearInterval(pvpState.polling); pvpState.polling = null; }
+
+            const tabs = ['coinflip', 'slots', 'crash', 'mines', 'dice', 'plinko', 'pvp', 'predictions', 'winners', 'rankings'];
             tabs.forEach(t => {
                 const panel = document.getElementById('arcade-' + t);
                 const btn = document.getElementById('arcadeTab-' + t);
@@ -6449,6 +6539,7 @@
             if (tab === 'predictions') loadPredictions();
             if (tab === 'dice') initDiceGrid();
             if (tab === 'plinko') initPlinkoBoard();
+            if (tab === 'rankings') loadRankings();
         }
 
         async function loadArcadeBalance() {
@@ -6514,7 +6605,7 @@
                             payoutEl.innerHTML = `❌ LOST $${data.stake.toFixed(2)}`;
                             showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
                         }
-                        document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+                        document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
                         btn.disabled = false; btn.textContent = 'FLIP COIN';
                     }
                 }, 100);
@@ -6550,7 +6641,7 @@
                             payoutEl.innerHTML = `❌ LOST $${data.stake.toFixed(2)}`;
                             showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
                         }
-                        document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+                        document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
                         // Keep results on screen for 2.5s before re-enabling spin
                         setTimeout(() => { btn.disabled = false; btn.textContent = 'SPIN'; }, 2500);
                     }).catch((e) => { console.error('Slots error:', e); alert('Error: ' + (e.message || 'unknown')); btn.disabled=false; btn.textContent='SPIN'; });
@@ -6578,7 +6669,7 @@
                 if (!res.ok) { alert(data.error); startBtn.disabled = false; return; }
 
                 crashState = { active: true, sessionId: data.sessionId, stake: data.stake, crashPoint: data.crashPoint, currentMult: 1.0, cashedOut: false, crashed: false, animInterval: null };
-                document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+                document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
                 gameArea.style.display = 'flex';
                 setupArea.style.display = 'none';
                 cashoutBtn.style.display = 'block';
@@ -6595,6 +6686,31 @@
                     if (crashState.cashedOut || crashState.crashed) { clearInterval(crashState.animInterval); return; }
                     const elapsed = (Date.now() - startTime) / 1000;
                     crashState.currentMult = 1 + (elapsed * elapsed * 0.15);
+
+                    // Safety: auto-crash after 90 seconds to prevent infinite interval
+                    if (elapsed > 90) {
+                        crashState.crashed = true;
+                        clearInterval(crashState.animInterval);
+                        document.getElementById('crashMultiplier').textContent = `${crashState.crashPoint.toFixed(2)}x`;
+                        document.getElementById('crashMultiplier').style.color = '#f44336';
+                        document.getElementById('crashStatus').innerHTML = '🚨 <strong>CAUGHT!</strong> Time limit reached!';
+                        cashoutBtn.style.display = 'none';
+                        resultEl.innerHTML = `❌ LOST $${crashState.stake.toFixed(2)}`;
+                        showArcadeToast('loss', '🚨', 'CAUGHT!', `-$${crashState.stake.toFixed(2)}`);
+                        fetch('/api/arcade/castle-crash/crash', {
+                            method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ sessionId: crashState.sessionId, stake: crashState.stake, crashPoint: crashState.crashPoint, multiplierAtCrash: crashState.currentMult })
+                        }).then(r => r.json()).then(d => {
+                            if (d && d.newBalance !== undefined) document.getElementById('arcadeBalance').textContent = `$${d.newBalance.toFixed(2)}`;
+                        }).catch(e => {});
+                        setTimeout(() => {
+                            gameArea.style.display = 'none';
+                            setupArea.style.display = 'block';
+                            startBtn.disabled = false;
+                            resultEl.textContent = '';
+                        }, 4000);
+                        return;
+                    }
 
                     if (crashState.currentMult >= crashState.crashPoint) {
                         // CAUGHT
@@ -6614,8 +6730,8 @@
                             method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
                             body: JSON.stringify({ sessionId: crashState.sessionId, stake: crashState.stake, crashPoint: crashState.crashPoint, multiplierAtCrash: crashState.currentMult })
                         }).then(r => r.json()).then(d => {
-                            document.getElementById('arcadeBalance').textContent = `$${d.newBalance.toFixed(2)}`;
-                        });
+                            if (d && d.newBalance !== undefined) document.getElementById('arcadeBalance').textContent = `$${d.newBalance.toFixed(2)}`;
+                        }).catch(e => {});
                         setTimeout(() => {
                             gameArea.style.display = 'none';
                             setupArea.style.display = 'block';
@@ -6681,9 +6797,9 @@
                 document.getElementById('crashRobber').textContent = '💰';
                 document.getElementById('crashGap').textContent = '- - - - - - - - - ->';
                 document.getElementById('crashGap').className = 'chase-gap';
-                document.getElementById('crashResult').innerHTML = `🎉 WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
-                document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
-                showArcadeToast('win', '💰', 'ESCAPED!', `+$${data.payout.toFixed(2)}`);
+                document.getElementById('crashResult').innerHTML = `🎉 WON <span style="color:#4caf50;font-weight:700">$${(data.payout || 0).toFixed(2)}</span> (${(data.multiplier || 0).toFixed(2)}x)`;
+                document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
+                showArcadeToast('win', '💰', 'ESCAPED!', `+$${(data.payout || 0).toFixed(2)}`);
 
                 setTimeout(() => {
                     document.getElementById('crashGameArea').style.display = 'none';
@@ -6814,22 +6930,34 @@
 
         // ===== DICE =====
         let dicePrediction = null;
-        let diceMode = 'sum';
+        let diceMode = 'single';
         let diceComboType = 'specific';
         let diceComboDie1Val = null;
         let diceComboDie2Val = null;
         const DICE_PAYOUTS = { 2: 30, 3: 17, 4: 11, 5: 8, 6: 6, 7: 5, 8: 6, 9: 8, 10: 11, 11: 17, 12: 30 };
 
         function initDiceGrid() {
+            // Single die grid
+            const singleGrid = document.getElementById('diceSingleGrid');
+            if (singleGrid && singleGrid.children.length === 0) {
+                for (let i = 1; i <= 6; i++) {
+                    const btn = document.createElement('button');
+                    btn.className = 'dice-single-btn';
+                    btn.textContent = i;
+                    btn.onclick = () => selectSingleDie(i, btn);
+                    singleGrid.appendChild(btn);
+                }
+            }
+            // Sum grid
             const grid = document.getElementById('dicePredGrid');
-            if (grid.children.length > 0) return;
-            for (let i = 2; i <= 12; i++) {
-                const btn = document.createElement('button');
-                btn.className = 'dice-pred-btn';
-                btn.textContent = i;
-                btn.innerHTML = `${i}<div class="payout-info">${DICE_PAYOUTS[i]}x</div>`;
-                btn.onclick = () => selectDicePrediction(i, btn);
-                grid.appendChild(btn);
+            if (grid && grid.children.length === 0) {
+                for (let i = 2; i <= 12; i++) {
+                    const btn = document.createElement('button');
+                    btn.className = 'dice-pred-btn';
+                    btn.innerHTML = `${i}<div class="payout-info">${DICE_PAYOUTS[i]}x</div>`;
+                    btn.onclick = () => selectDicePrediction(i, btn);
+                    grid.appendChild(btn);
+                }
             }
             initDiceComboPickers();
         }
@@ -6851,17 +6979,28 @@
 
         function selectDiceMode(mode, btn) {
             diceMode = mode;
-            document.querySelectorAll('#diceModeSum, #diceModeCombo').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('#diceModeSingle, #diceModeSum, #diceModeCombo').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
+            document.getElementById('diceSingleSection').style.display = mode === 'single' ? 'block' : 'none';
             document.getElementById('diceSumSection').style.display = mode === 'sum' ? 'block' : 'none';
             document.getElementById('diceComboSection').style.display = mode === 'combo' ? 'block' : 'none';
+            // Show/hide second die
+            document.getElementById('die2').style.display = mode === 'single' ? 'none' : 'flex';
             const infoLine = document.getElementById('diceInfoLine');
-            if (mode === 'sum') {
+            if (mode === 'single') {
+                infoLine.textContent = 'Single die: predict 1-6, pays 4.75x | 5% house edge';
+            } else if (mode === 'sum') {
                 infoLine.textContent = '2 or 12 = 28.5x | 3 or 11 = 16.15x | 7 = 4.75x | 5% house edge';
             } else {
                 infoLine.textContent = 'Exact combo = 16.15x | Any double = 28.5x | 5% house edge';
             }
             dicePrediction = null;
+        }
+
+        function selectSingleDie(num, btn) {
+            dicePrediction = num;
+            document.querySelectorAll('.dice-single-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
         }
 
         function selectComboType(type, btn) {
@@ -6911,7 +7050,10 @@
         async function playDice() {
             if (!sessionToken) { showAuthModal(); return; }
             if (!dicePrediction) {
-                alert(diceMode === 'sum' ? 'Select a number 2-12 first!' : 'Select your dice combination first!');
+                const msg = diceMode === 'single' ? 'Select a number 1-6 first!' :
+                            diceMode === 'sum' ? 'Select a number 2-12 first!' :
+                            'Select your dice combination first!';
+                alert(msg);
                 return;
             }
             const stake = parseFloat(document.getElementById('diceStake').value);
@@ -6922,12 +7064,12 @@
             btn.disabled = true; btn.textContent = 'ROLLING...';
             resultEl.textContent = '';
             die1El.classList.add('rolling');
-            die2El.classList.add('rolling');
+            if (diceMode !== 'single') die2El.classList.add('rolling');
 
             let spins = 0;
             const rollAnim = setInterval(() => {
                 die1El.textContent = Math.floor(Math.random() * 6) + 1;
-                die2El.textContent = Math.floor(Math.random() * 6) + 1;
+                if (diceMode !== 'single') die2El.textContent = Math.floor(Math.random() * 6) + 1;
                 spins++;
                 if (spins > 15) {
                     clearInterval(rollAnim);
@@ -6939,14 +7081,14 @@
                     }).then(res => res.json()).then(data => {
                         if (data.error) { alert(data.error); btn.disabled=false; btn.textContent='ROLL DICE'; return; }
                         die1El.textContent = data.die1;
-                        die2El.textContent = data.die2;
-                        const predLabel = data.mode === 'combo' ? `Combo: ${data.prediction}` : `Sum: ${data.sum}`;
+                        if (data.numDice === 2) die2El.textContent = data.die2;
+                        const resultStr = data.numDice === 2 ? `${data.die1}+${data.die2} = ${data.sum}` : `${data.die1}`;
                         if (data.won) {
-                            resultEl.innerHTML = `🎉 ${data.die1}+${data.die2} = ${data.sum} — WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
-                            showArcadeToast('win', '🎲', 'YOU WON!', `+$${data.payout.toFixed(2)}`);
+                            resultEl.innerHTML = `🎉 ${resultStr} — WON <span style="color:#4caf50;font-weight:700">$${(data.payout || 0).toFixed(2)}</span> (${(data.multiplier || 0).toFixed(2)}x)`;
+                            showArcadeToast('win', '🎲', 'YOU WON!', `+$${(data.payout || 0).toFixed(2)}`);
                         } else {
-                            resultEl.innerHTML = `❌ ${data.die1}+${data.die2} = ${data.sum} — You predicted ${data.prediction}. Lost $${data.stake.toFixed(2)}`;
-                            showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
+                            resultEl.innerHTML = `❌ ${resultStr} — You predicted ${data.prediction}. Lost $${(data.stake || 0).toFixed(2)}`;
+                            showArcadeToast('loss', '❌', 'YOU LOST!', `-$${(data.stake || 0).toFixed(2)}`);
                         }
                         document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
                         setTimeout(() => { btn.disabled = false; btn.textContent = 'ROLL DICE'; }, 2500);
@@ -7042,7 +7184,7 @@
                             resultEl.innerHTML = `Landed on ${data.multiplier.toFixed(2)}x — Lost $${data.stake.toFixed(2)}`;
                             showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
                         }
-                        document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+                        document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
                         setTimeout(() => {
                             btn.disabled = false; btn.textContent = 'DROP BALL';
                             if (slots[data.slotIndex]) { slots[data.slotIndex].style.transform = ''; slots[data.slotIndex].style.boxShadow = ''; }
@@ -7193,7 +7335,7 @@
                     clearInterval(pvpState.polling);
                     document.getElementById('pvpGuessChoice').style.display = 'none';
                     document.getElementById('pvpWaiting').style.display = 'none';
-                    document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+                    document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
                     if (data.winner === 0 || data.winner === 1) {
                         const won = (data.winner === 0 && pvpState.gameId); // simplified
                         document.getElementById('pvpResult').innerHTML = `Game Over! Prize: $${data.prize.toFixed(2)} (House fee: $${data.houseFee.toFixed(2)})`;
@@ -7234,6 +7376,59 @@
                         <div style="color:#4caf50;font-weight:700">+$${w.payout.toFixed(2)} <span style="color:#888;font-weight:400">(${w.multiplier.toFixed(2)}x)</span></div>
                     </div>`;
                 }).join('');
+            } catch(e) {}
+        }
+
+        async function loadRankings() {
+            // Load my rank if logged in
+            if (sessionToken) loadMyRank();
+            // Load top 50
+            try {
+                const res = await fetch('/api/arcade/rankings');
+                const data = await res.json();
+                const list = document.getElementById('rankingsList');
+                if (!data || data.length === 0) { list.innerHTML = '<div style="color:#888;text-align:center;padding:40px;">No gamblers ranked yet. Start playing to claim your spot!</div>'; return; }
+                list.innerHTML = data.map(g => {
+                    const medal = g.rank === 1 ? '🥇' : g.rank === 2 ? '🥈' : g.rank === 3 ? '🥉' : `${g.rank}.`;
+                    return `<div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="font-size:18px;font-weight:800;min-width:30px;text-align:center;color:${g.rank <= 3 ? g.rankColor : '#888'}">${medal}</span>
+                            <span style="font-size:20px">${g.rankIcon}</span>
+                            <div>
+                                <strong style="color:${g.rankColor}">${g.username}</strong>
+                                <div style="color:#888;font-size:11px">${g.rankName} | ${g.totalBets} bets</div>
+                            </div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="color:#00d4ff;font-weight:700;font-size:14px">$${g.totalStaked.toFixed(2)}</div>
+                            <div style="color:#4caf50;font-size:11px">won $${g.totalWon.toFixed(2)}</div>
+                        </div>
+                    </div>`;
+                }).join('');
+            } catch(e) { console.error('Rankings error:', e); }
+        }
+
+        async function loadMyRank() {
+            try {
+                const res = await fetch('/api/arcade/my-rank', { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                const data = await res.json();
+                if (data.error) return;
+                const card = document.getElementById('myRankCard');
+                card.style.display = 'block';
+                card.style.borderColor = data.rankColor;
+                document.getElementById('myRankIcon').textContent = data.rankIcon;
+                document.getElementById('myRankName').textContent = data.rankName;
+                document.getElementById('myRankName').style.color = data.rankColor;
+                document.getElementById('myRankStats').textContent = `Total Staked: $${data.totalStaked.toFixed(2)} | Total Won: $${data.totalWon.toFixed(2)} | Bets: ${data.totalBets}`;
+                if (data.nextRank) {
+                    document.getElementById('myRankProgressContainer').style.display = 'block';
+                    document.getElementById('myRankProgressBar').style.width = `${data.progressToNext}%`;
+                    document.getElementById('myRankProgressText').textContent = `${data.progressToNext}% to ${data.nextRankIcon} ${data.nextRank} ($${data.nextRankMin} total staked)`;
+                } else {
+                    document.getElementById('myRankProgressContainer').style.display = 'block';
+                    document.getElementById('myRankProgressBar').style.width = '100%';
+                    document.getElementById('myRankProgressText').textContent = 'MAX RANK ACHIEVED! 👑';
+                }
             } catch(e) {}
         }
 

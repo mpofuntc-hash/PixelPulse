@@ -1853,6 +1853,7 @@ async function registerDiscordSlashCommands() {
     new SlashCommandBuilder().setName('crash').setDescription('Police Chase — cash out before the cops catch the robber! (min $0.50)')
       .addNumberOption(opt => opt.setName('stake').setDescription('Stake amount in USD (min 0.50)').setRequired(true)),
     new SlashCommandBuilder().setName('winners').setDescription('View recent arcade winners'),
+    new SlashCommandBuilder().setName('rankings').setDescription('View top gambler rankings and tiers'),
     new SlashCommandBuilder().setName('link').setDescription('Link your Discord to your PixelPulse account')
       .addStringOption(opt => opt.setName('username').setDescription('Your PixelPulse username').setRequired(true))
   ].map(cmd => cmd.toJSON());
@@ -1880,6 +1881,8 @@ async function handleDiscordSlashCommand(interaction) {
             '`/slots` — Spin the slot machine (min $0.50)',
             '`/crash` — Police Chase, cash out before the cops catch the robber!',
             '`/markets` — Bet on anime & gaming predictions',
+            '`/winners` — View recent arcade winners',
+            '`/rankings` — View top gambler rankings and tiers',
             '',
             '**💰 FUND YOUR ACCOUNT:**',
             '`/gamble` — Step-by-step guide to start playing',
@@ -2660,6 +2663,40 @@ async function handleDiscordSlashCommand(interaction) {
         await interaction.editReply({ embeds: [embed] });
         break;
       }
+      case 'rankings': {
+        await interaction.deferReply();
+        const gameStaked = await dbAll(`
+          SELECT gb.user_id, u.username,
+            SUM(gb.stake_amount) as total_staked,
+            SUM(gb.payout) as total_won,
+            COUNT(gb.id) as total_bets
+          FROM game_bets gb
+          JOIN users u ON gb.user_id = u.id
+          WHERE gb.stake_currency = 'USD'
+          GROUP BY gb.user_id
+          ORDER BY total_staked DESC
+          LIMIT 10
+        `);
+        if (!gameStaked || gameStaked.length === 0) {
+          await interaction.editReply('No gamblers ranked yet. Start playing to claim your spot!');
+          return;
+        }
+        const predStaked = await dbAll(`SELECT user_id, SUM(stake_amount) as pred_staked FROM prediction_bets GROUP BY user_id`);
+        const predMap = {};
+        predStaked.forEach(p => { predMap[p.user_id] = p.pred_staked || 0; });
+
+        const rankEmbed = new EmbedBuilder().setTitle('🏆 Gambler Rankings').setColor(0xe50914).setDescription('Top gamblers by total staked across all games and predictions!');
+        gameStaked.forEach((u, i) => {
+          const totalStaked = (u.total_staked || 0) + (predMap[u.user_id] || 0);
+          const rank = getGamblerRank(totalStaked);
+          const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+          rankEmbed.addFields({ name: `${medal} ${rank.icon} ${u.username || 'Anonymous'}`, value: `**${rank.name}** | Staked: $${totalStaked.toFixed(2)} | Won: $${(u.total_won || 0).toFixed(2)} | ${u.total_bets} bets` });
+        });
+        rankEmbed.addFields({ name: 'Rank Tiers', value: '🥉 Bronze | 🥈 Silver ($50+) | 🥇 Gold ($200+) | 💎 Platinum ($500+) | 💠 Diamond ($1000+) | 👑 Legend ($5000+)' });
+        rankEmbed.setURL('https://pixelpulse.zentriva-clubsync.online');
+        await interaction.editReply({ embeds: [rankEmbed] });
+        break;
+      }
     }
   } catch (err) {
     console.error('Discord slash command error:', err);
@@ -3291,7 +3328,8 @@ bot.command('help', (ctx) => {
 /coinflip — Bet on heads or tails (min $0.50)
 /slots — Spin the slot machine (min $0.50)
 /crash — Police Chase, cash out before the cops catch the robber!
-/dice — Roll 2 dice, predict the sum (min $0.50)
+/dice — Roll dice, predict the outcome (min $0.50)
+/rankings — View top gambler rankings
 💰 Mines, Plinko & PvP on the website!
 /balance — Check your USD balance
 /buy — Buy USD balance with Telegram Stars
@@ -3641,8 +3679,8 @@ bot.command('dice', async (ctx) => {
     const prediction = parseInt(args[1]);
     const stake = parseFloat(args[2]);
 
-    if (!prediction || prediction < 2 || prediction > 12) {
-      ctx.reply(`🎲 Dice Roll\n\nPredict the sum of two dice (2-12)\n\nUsage: /dice 7 5\n\nPayouts:\n2 or 12 = 28.5x\n3 or 11 = 16.15x\n7 = 4.75x\nMin stake: $${TELEGRAM_MIN_STAKE}`);
+    if (!prediction || prediction < 1 || prediction > 12) {
+      ctx.reply(`🎲 Dice Roll\n\nModes:\n• Single die (1-6): /dice 3 5 → pays 4.75x\n• Two dice sum (2-12): /dice 7 5 → up to 28.5x\n\nUsage:\n/dice 3 5 — predict single die shows 3, stake $5\n/dice 7 5 — predict two dice sum to 7, stake $5\n\nMin stake: $${TELEGRAM_MIN_STAKE}`);
       return;
     }
 
@@ -3650,6 +3688,8 @@ bot.command('dice', async (ctx) => {
       ctx.reply(`Usage: /dice ${prediction} 5\nMin stake: $${TELEGRAM_MIN_STAKE}`);
       return;
     }
+
+    const isSingleDie = prediction >= 1 && prediction <= 6 && !args[3];
 
     const user = await getTelegramUser(ctx);
     const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [user.id]);
@@ -3664,25 +3704,73 @@ bot.command('dice', async (ctx) => {
     const die1 = Math.floor(provablyFairResult(serverSeed, cSeed, nonce) * 6) + 1;
     const die2 = Math.floor(provablyFairResult(serverSeed, cSeed, nonce + 1) * 6) + 1;
     const sum = die1 + die2;
-    const won = sum === prediction;
-    const TG_DICE_PAYOUTS = { 2: 30, 3: 17, 4: 11, 5: 8, 6: 6, 7: 5, 8: 6, 9: 8, 10: 11, 11: 17, 12: 30 };
-    const basePayout = TG_DICE_PAYOUTS[sum] || 0;
-    const multiplier = won ? basePayout * (1 - 0.05) : 0;
+
+    let won, multiplier, numDice;
+    if (isSingleDie) {
+      won = die1 === prediction;
+      multiplier = won ? 5 * (1 - 0.05) : 0;
+      numDice = 1;
+    } else {
+      won = sum === prediction;
+      const TG_DICE_PAYOUTS = { 2: 30, 3: 17, 4: 11, 5: 8, 6: 6, 7: 5, 8: 6, 9: 8, 10: 11, 11: 17, 12: 30 };
+      const basePayout = TG_DICE_PAYOUTS[sum] || 0;
+      multiplier = won ? basePayout * (1 - 0.05) : 0;
+      numDice = 2;
+    }
     const payout = won ? Math.floor(stake * multiplier * 100) / 100 : 0;
 
     await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stake, stake, user.id]);
     if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, user.id]);
 
     await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'dice', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
-      [user.id, stake, multiplier, payout, won ? 'won' : 'lost', JSON.stringify({ die1, die2, sum, prediction, source: 'telegram' }), serverSeed, cSeed, nonce]);
+      [user.id, stake, multiplier, payout, won ? 'won' : 'lost', JSON.stringify({ die1, die2, sum, prediction, numDice, mode: isSingleDie ? 'single' : 'sum', source: 'telegram' }), serverSeed, cSeed, nonce]);
 
     const newBal = bal.usd_balance - stake + payout;
     const diceEmoji = ['⚀','⚁','⚂','⚃','⚄','⚅'];
+    const diceDisplay = numDice === 1 ? diceEmoji[die1-1] : `${diceEmoji[die1-1]} ${diceEmoji[die2-1]}`;
+    const resultLine = numDice === 1 ? `You predicted: ${prediction}\nRolled: ${die1}` : `You predicted: ${prediction}\nSum: ${sum}`;
     const msg = won
-      ? `🎲 Dice Roll\n\n${diceEmoji[die1-1]} ${diceEmoji[die2-1]}\n\nYou predicted: ${prediction}\nSum: ${sum}\n\n🎉 WON $${payout.toFixed(2)} (${multiplier.toFixed(2)}x)\nStake: $${stake.toFixed(2)}\nBalance: $${newBal.toFixed(2)}`
-      : `🎲 Dice Roll\n\n${diceEmoji[die1-1]} ${diceEmoji[die2-1]}\n\nYou predicted: ${prediction}\nSum: ${sum}\n\n❌ You lost $${stake.toFixed(2)}\nBalance: $${newBal.toFixed(2)}`;
+      ? `🎲 Dice Roll\n\n${diceDisplay}\n\n${resultLine}\n\n🎉 WON $${payout.toFixed(2)} (${multiplier.toFixed(2)}x)\nStake: $${stake.toFixed(2)}\nBalance: $${newBal.toFixed(2)}`
+      : `🎲 Dice Roll\n\n${diceDisplay}\n\n${resultLine}\n\n❌ You lost $${stake.toFixed(2)}\nBalance: $${newBal.toFixed(2)}`;
     ctx.reply(msg);
   } catch(e) { console.error('Telegram dice error:', e); ctx.reply('Error playing dice. Try again.'); }
+});
+
+// Telegram Rankings command
+bot.command('rankings', async (ctx) => {
+  try {
+    const gameStaked = await dbAll(`
+      SELECT gb.user_id, u.username,
+        SUM(gb.stake_amount) as total_staked,
+        SUM(gb.payout) as total_won,
+        COUNT(gb.id) as total_bets
+      FROM game_bets gb
+      JOIN users u ON gb.user_id = u.id
+      WHERE gb.stake_currency = 'USD'
+      GROUP BY gb.user_id
+      ORDER BY total_staked DESC
+      LIMIT 10
+    `);
+
+    if (!gameStaked || gameStaked.length === 0) {
+      ctx.reply('🏆 Gambler Rankings\n\nNo gamblers ranked yet. Start playing to claim your spot!\n\n🔗 https://pixelpulse.zentriva-clubsync.online');
+      return;
+    }
+
+    const predStaked = await dbAll(`SELECT user_id, SUM(stake_amount) as pred_staked FROM prediction_bets GROUP BY user_id`);
+    const predMap = {};
+    predStaked.forEach(p => { predMap[p.user_id] = p.pred_staked || 0; });
+
+    let msg = '🏆 TOP 10 GAMBLER RANKINGS\n\n';
+    gameStaked.forEach((u, i) => {
+      const totalStaked = (u.total_staked || 0) + (predMap[u.user_id] || 0);
+      const rank = getGamblerRank(totalStaked);
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+      msg += `${medal} ${rank.icon} ${u.username || 'Anonymous'}\n   💰 Staked: $${totalStaked.toFixed(2)} | 🎯 ${u.total_bets} bets\n   ${rank.name}\n\n`;
+    });
+    msg += 'RANKS:\n🥉 Bronze | 🥈 Silver ($50+) | 🥇 Gold ($200+)\n💎 Platinum ($500+) | 💠 Diamond ($1000+) | 👑 Legend ($5000+)\n\n🔗 https://pixelpulse.zentriva-clubsync.online';
+    ctx.reply(msg);
+  } catch(e) { console.error('Telegram rankings error:', e); ctx.reply('Error loading rankings.'); }
 });
 
 // Handle text messages
@@ -7141,6 +7229,107 @@ app.get('/api/arcade/winners', async (req, res) => {
   })));
 });
 
+// API: Gambler Rankings — top users by total staked
+const GAMBLER_RANKS = [
+  { name: 'Bronze Gambler', icon: '🥉', minStaked: 0, color: '#cd7f32' },
+  { name: 'Silver Gambler', icon: '🥈', minStaked: 50, color: '#c0c0c0' },
+  { name: 'Gold Gambler', icon: '🥇', minStaked: 200, color: '#FFD700' },
+  { name: 'Platinum Gambler', icon: '💎', minStaked: 500, color: '#E5E4E2' },
+  { name: 'Diamond Gambler', icon: '💠', minStaked: 1000, color: '#00d4ff' },
+  { name: 'Legend Gambler', icon: '👑', minStaked: 5000, color: '#e50914' }
+];
+
+function getGamblerRank(totalStaked) {
+  let rank = GAMBLER_RANKS[0];
+  for (const r of GAMBLER_RANKS) {
+    if (totalStaked >= r.minStaked) rank = r;
+  }
+  return rank;
+}
+
+app.get('/api/arcade/rankings', async (req, res) => {
+  try {
+    // Get total staked per user from game_bets
+    const gameStaked = await dbAll(`
+      SELECT gb.user_id, u.username, u.avatar_svg,
+        SUM(gb.stake_amount) as total_staked,
+        SUM(gb.payout) as total_won,
+        COUNT(gb.id) as total_bets
+      FROM game_bets gb
+      JOIN users u ON gb.user_id = u.id
+      WHERE gb.stake_currency = 'USD'
+      GROUP BY gb.user_id
+      ORDER BY total_staked DESC
+      LIMIT 50
+    `);
+
+    // Also get prediction market bets
+    const predStaked = await dbAll(`
+      SELECT pb.user_id, SUM(pb.stake_amount) as pred_staked
+      FROM prediction_bets pb
+      GROUP BY pb.user_id
+    `);
+    const predMap = {};
+    predStaked.forEach(p => { predMap[p.user_id] = p.pred_staked || 0; });
+
+    const rankings = gameStaked.map((u, i) => {
+      const totalStaked = (u.total_staked || 0) + (predMap[u.user_id] || 0);
+      const rank = getGamblerRank(totalStaked);
+      return {
+        rank: i + 1,
+        username: u.username || 'Anonymous',
+        avatarSvg: u.avatar_svg,
+        totalStaked: parseFloat(totalStaked.toFixed(2)),
+        totalWon: parseFloat((u.total_won || 0).toFixed(2)),
+        totalBets: u.total_bets || 0,
+        rankName: rank.name,
+        rankIcon: rank.icon,
+        rankColor: rank.color
+      };
+    });
+
+    res.json(rankings);
+  } catch (err) {
+    console.error('Error fetching rankings:', err);
+    res.status(500).json({ error: 'Failed to fetch rankings' });
+  }
+});
+
+// API: Get current user's rank
+app.get('/api/arcade/my-rank', authenticateRequest, async (req, res) => {
+  try {
+    const gameStaked = await dbGet(`
+      SELECT SUM(stake_amount) as total_staked, SUM(payout) as total_won, COUNT(id) as total_bets
+      FROM game_bets WHERE user_id = ? AND stake_currency = 'USD'
+    `, [req.userId]);
+    const predStaked = await dbGet(`
+      SELECT SUM(stake_amount) as pred_staked FROM prediction_bets WHERE user_id = ?
+    `, [req.userId]);
+
+    const totalStaked = (gameStaked?.total_staked || 0) + (predStaked?.pred_staked || 0);
+    const rank = getGamblerRank(totalStaked);
+
+    // Find next rank
+    const nextRank = GAMBLER_RANKS.find(r => r.minStaked > totalStaked);
+
+    res.json({
+      totalStaked: parseFloat(totalStaked.toFixed(2)),
+      totalWon: parseFloat((gameStaked?.total_won || 0).toFixed(2)),
+      totalBets: gameStaked?.total_bets || 0,
+      rankName: rank.name,
+      rankIcon: rank.icon,
+      rankColor: rank.color,
+      nextRank: nextRank ? nextRank.name : null,
+      nextRankIcon: nextRank ? nextRank.icon : null,
+      nextRankMin: nextRank ? nextRank.minStaked : null,
+      progressToNext: nextRank ? parseFloat(((totalStaked - rank.minStaked) / (nextRank.minStaked - rank.minStaked) * 100).toFixed(1)) : 100
+    });
+  } catch (err) {
+    console.error('Error fetching user rank:', err);
+    res.status(500).json({ error: 'Failed to fetch rank' });
+  }
+});
+
 // API: Get user's bet history
 app.get('/api/arcade/history', authenticateRequest, async (req, res) => {
   const bets = await dbAll('SELECT * FROM game_bets WHERE user_id = ? ORDER BY created_at DESC LIMIT 50', [req.userId]);
@@ -7349,8 +7538,21 @@ app.post('/api/arcade/mines/start', authenticateRequest, async (req, res) => {
   const sessionId = nonce;
   global.minesGames[sessionId] = {
     userId: req.userId, stake: stakeAmount, mines, minePositions: [...minePositions],
-    revealed: [], serverSeed, cSeed, nonce, isAdmin, busted: false, cashedOut: false
+    revealed: [], serverSeed, cSeed, nonce, isAdmin, busted: false, cashedOut: false,
+    createdAt: Date.now()
   };
+
+  // Periodic cleanup: remove abandoned games older than 5 minutes
+  const now = Date.now();
+  for (const [sid, game] of Object.entries(global.minesGames)) {
+    if (game.createdAt && (now - game.createdAt) > 5 * 60 * 1000 && !game.busted && !game.cashedOut) {
+      // Refund the stake for abandoned games
+      if (!game.isAdmin) {
+        try { await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [game.stake, game.userId]); } catch(e) {}
+      }
+      delete global.minesGames[sid];
+    }
+  }
 
   const newBalance = isAdmin ? 10000 : (bal.usd_balance - stakeAmount);
   res.json({ sessionId, stake: stakeAmount, mineCount: mines, totalCards, newBalance });
@@ -7417,21 +7619,21 @@ app.post('/api/arcade/mines/cashout', authenticateRequest, async (req, res) => {
 });
 
 // ===== DICE =====
-// Two modes: 'sum' (predict sum 2-12) and 'combo' (predict exact combination e.g. 3+4)
+// Three modes: 'single' (one die, predict 1-6), 'sum' (two dice sum 2-12), 'combo' (exact combo or double)
 const DICE_HOUSE_EDGE = 0.05;
+const DICE_SINGLE_PAYOUT = 5; // 1/6 = 16.7% chance, fair payout 6x, house edge applied -> 5.7x
 const DICE_SUM_PAYOUTS = {
   2: 30, 3: 17, 4: 11, 5: 8, 6: 6, 7: 5,
   8: 6, 9: 8, 10: 11, 11: 17, 12: 30
 };
-// Combo payouts: doubles pay more, specific combos pay 5x
 const DICE_COMBO_PAYOUTS = {
-  double: 30, // any double (1+1, 2+2, etc.) — 6/36 = 16.7% chance, fair payout 6x, house edge applied
-  specific: 17 // exact combo like 3+4 — 2/36 = 5.6% chance (order independent), fair payout 18x
+  double: 30, // any double — 6/36 = 16.7%, fair 6x
+  specific: 17 // exact combo — 2/36 = 5.6%, fair 18x
 };
 app.post('/api/arcade/dice', authenticateRequest, async (req, res) => {
   const { prediction, stake, mode, clientSeed } = req.body;
   const stakeAmount = parseFloat(stake);
-  const diceMode = mode || 'sum';
+  const diceMode = mode || 'single';
 
   if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
 
@@ -7452,9 +7654,18 @@ app.post('/api/arcade/dice', authenticateRequest, async (req, res) => {
   let won = false;
   let multiplier = 0;
   let predLabel = '';
+  let numDice = 1;
 
-  if (diceMode === 'combo') {
-    // prediction can be "double" or "X+Y" (e.g. "3+4")
+  if (diceMode === 'single') {
+    // One die: predict 1-6
+    const pred = parseInt(prediction);
+    if (isNaN(pred) || pred < 1 || pred > 6) return res.status(400).json({ error: 'Predict a number 1-6' });
+    won = die1 === pred;
+    multiplier = won ? DICE_SINGLE_PAYOUT * (1 - DICE_HOUSE_EDGE) : 0;
+    predLabel = String(pred);
+    numDice = 1;
+  } else if (diceMode === 'combo') {
+    numDice = 2;
     if (prediction === 'double') {
       won = die1 === die2;
       multiplier = won ? DICE_COMBO_PAYOUTS.double * (1 - DICE_HOUSE_EDGE) : 0;
@@ -7466,7 +7677,6 @@ app.post('/api/arcade/dice', authenticateRequest, async (req, res) => {
       if (isNaN(p1) || isNaN(p2) || p1 < 1 || p1 > 6 || p2 < 1 || p2 > 6) {
         return res.status(400).json({ error: 'Invalid combination. Use format like 3+4' });
       }
-      // Order-independent match
       won = (die1 === p1 && die2 === p2) || (die1 === p2 && die2 === p1);
       multiplier = won ? DICE_COMBO_PAYOUTS.specific * (1 - DICE_HOUSE_EDGE) : 0;
       predLabel = `${p1}+${p2}`;
@@ -7474,7 +7684,8 @@ app.post('/api/arcade/dice', authenticateRequest, async (req, res) => {
       return res.status(400).json({ error: 'Invalid combo prediction. Use "double" or "X+Y" format' });
     }
   } else {
-    // Sum mode (default)
+    // Sum mode
+    numDice = 2;
     const pred = parseInt(prediction);
     if (isNaN(pred) || pred < 2 || pred > 12) return res.status(400).json({ error: 'Predict a number 2-12' });
     won = sum === pred;
@@ -7491,10 +7702,10 @@ app.post('/api/arcade/dice', authenticateRequest, async (req, res) => {
   }
 
   await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'dice', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
-    [req.userId, stakeAmount, multiplier, payout, won ? 'won' : 'lost', JSON.stringify({ die1, die2, sum, prediction: predLabel, mode: diceMode, admin_test: isAdmin }), serverSeed, cSeed, nonce]);
+    [req.userId, stakeAmount, multiplier, payout, won ? 'won' : 'lost', JSON.stringify({ die1, die2, sum, prediction: predLabel, mode: diceMode, numDice, admin_test: isAdmin }), serverSeed, cSeed, nonce]);
 
   const newBalance = isAdmin ? 10000 : (bal.usd_balance - stakeAmount + payout);
-  res.json({ die1, die2, sum, prediction: predLabel, mode: diceMode, won, multiplier, payout, stake: stakeAmount, newBalance });
+  res.json({ die1, die2, sum, prediction: predLabel, mode: diceMode, numDice, won, multiplier, payout, stake: stakeAmount, newBalance });
 });
 
 // ===== PLINKO =====
@@ -8962,6 +9173,54 @@ async function notifyMarketResolved(marketTitle, winner, totalVolume, topPayout)
   await postToChannel(msg);
 }
 
+// --- Auto-update: Weekly gambler rankings ---
+async function postWeeklyGamblerRankings() {
+  try {
+    const gameStaked = await dbAll(`
+      SELECT gb.user_id, u.username,
+        SUM(gb.stake_amount) as total_staked,
+        SUM(gb.payout) as total_won,
+        COUNT(gb.id) as total_bets
+      FROM game_bets gb
+      JOIN users u ON gb.user_id = u.id
+      WHERE gb.stake_currency = 'USD'
+      GROUP BY gb.user_id
+      ORDER BY total_staked DESC
+      LIMIT 10
+    `);
+
+    if (!gameStaked || gameStaked.length === 0) return;
+
+    const predStaked = await dbAll(`SELECT user_id, SUM(stake_amount) as pred_staked FROM prediction_bets GROUP BY user_id`);
+    const predMap = {};
+    predStaked.forEach(p => { predMap[p.user_id] = p.pred_staked || 0; });
+
+    let msg = '🏆 WEEKLY GAMBLER RANKINGS 🏆\n\n';
+    gameStaked.forEach((u, i) => {
+      const totalStaked = (u.total_staked || 0) + (predMap[u.user_id] || 0);
+      const rank = getGamblerRank(totalStaked);
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+      msg += `${medal} ${rank.icon} ${u.username || 'Anonymous'}\n   💰 $${totalStaked.toFixed(2)} staked | 🎯 ${u.total_bets} bets\n   ${rank.name}\n\n`;
+    });
+    msg += `Rank up by staking more!\n🥉 Bronze | 🥈 Silver ($50+) | 🥇 Gold ($200+)\n💎 Platinum ($500+) | 💠 Diamond ($1000+) | 👑 Legend ($5000+)\n\n🎮 Play now: https://pixelpulse.zentriva-clubsync.online`;
+
+    await postToChannel(msg);
+
+    // Also broadcast to Discord
+    let discordDesc = '';
+    gameStaked.forEach((u, i) => {
+      const totalStaked = (u.total_staked || 0) + (predMap[u.user_id] || 0);
+      const rank = getGamblerRank(totalStaked);
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+      discordDesc += `${medal} ${rank.icon} **${u.username || 'Anonymous'}** — ${rank.name} | $${totalStaked.toFixed(2)} staked | ${u.total_bets} bets\n`;
+    });
+    discordDesc += '\n🥉 Bronze | 🥈 Silver ($50+) | 🥇 Gold ($200+) | 💎 Platinum ($500+) | 💠 Diamond ($1000+) | 👑 Legend ($5000+)';
+    broadcastToDiscord('🏆 Weekly Gambler Rankings', discordDesc, 0xe50914).catch(() => {});
+  } catch (err) {
+    console.error('Error posting weekly gambler rankings:', err);
+  }
+}
+
 // --- Auto-update: Weekly big wins summary ---
 async function postWeeklyBigWins() {
   try {
@@ -9351,7 +9610,9 @@ function scheduleChannelUpdates() {
   
   setTimeout(() => {
     postWeeklyBigWins();
+    postWeeklyGamblerRankings();
     setInterval(postWeeklyBigWins, 7 * 24 * 60 * 60 * 1000);
+    setInterval(postWeeklyGamblerRankings, 7 * 24 * 60 * 60 * 1000);
   }, msUntilMonday);
   
   // Weekly clip of the week — every Friday 6pm
