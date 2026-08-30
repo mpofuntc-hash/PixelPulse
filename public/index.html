@@ -1224,29 +1224,86 @@
             color: #555;
             font-family: 'Courier New', monospace;
         }
-        .arcade-tabs {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
+        .arcade-game-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 14px;
+            margin-bottom: 24px;
         }
-        .arcade-tab {
-            font-family: 'Courier New', monospace;
-            font-size: 13px;
-            padding: 8px 16px;
-            border: 2px solid #333;
-            background: #1a1a1a;
-            color: #888;
+        .arcade-game-card {
+            position: relative;
+            background: linear-gradient(145deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #2a2a4a;
+            border-radius: 12px;
             cursor: pointer;
-            border-radius: 4px;
-            transition: all 0.2s;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 16px 12px 14px;
+            min-height: 170px;
         }
-        .arcade-tab:hover { border-color: #555; color: #ccc; }
-        .arcade-tab.active {
-            border-color: #e50914;
-            background: #e50914;
-            color: #fff;
-            box-shadow: 0 0 10px rgba(229,9,20,0.4);
+        .arcade-game-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: var(--card-accent, #e50914);
+            opacity: 0;
+            transition: opacity 0.25s;
+        }
+        .arcade-game-card:hover {
+            border-color: var(--card-accent, #e50914);
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 0 20px var(--card-glow, rgba(229,9,20,0.2));
+        }
+        .arcade-game-card:hover::before { opacity: 1; }
+        .arcade-game-card.active {
+            border-color: var(--card-accent, #e50914);
+            background: linear-gradient(145deg, #1e1e3a 0%, #1a2548 100%);
+            box-shadow: 0 0 20px var(--card-glow, rgba(229,9,20,0.3));
+        }
+        .arcade-game-card.active::before { opacity: 1; }
+        .arcade-game-card .game-card-icon {
+            width: 72px;
+            height: 72px;
+            margin-bottom: 10px;
+            filter: drop-shadow(2px 2px 0 rgba(0,0,0,0.5));
+            transition: transform 0.25s;
+        }
+        .arcade-game-card:hover .game-card-icon {
+            transform: scale(1.1);
+        }
+        .arcade-game-card .game-card-name {
+            font-family: 'PressStart2P', 'Courier New', monospace;
+            font-size: 11px;
+            color: #e0e0e0;
+            text-align: center;
+            line-height: 1.4;
+            letter-spacing: 0.5px;
+            text-shadow: 1px 1px 0 #000;
+        }
+        .arcade-game-card:hover .game-card-name { color: #fff; }
+        .arcade-game-card .game-card-tag {
+            font-family: 'Courier New', monospace;
+            font-size: 9px;
+            color: #666;
+            margin-top: 6px;
+            padding: 2px 8px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            letter-spacing: 0.5px;
+        }
+        .arcade-game-card.active .game-card-tag {
+            color: var(--card-accent, #e50914);
+            background: rgba(229,9,20,0.1);
+        }
+        @media (max-width: 600px) {
+            .arcade-game-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+            .arcade-game-card { min-height: 140px; padding: 12px 8px 10px; }
+            .arcade-game-card .game-card-icon { width: 56px; height: 56px; }
+            .arcade-game-card .game-card-name { font-size: 9px; }
         }
         /* ===== TRADE HUB BANNER TABS ===== */
         .tradehub-banner {
@@ -1988,16 +2045,73 @@
             <button class="btn btn-secondary" onclick="loadArcadeHistory()" style="font-size: 13px;">My History</button>
         </div>
 
-        <div class="arcade-tabs">
-            <button class="arcade-tab active" id="arcadeTab-coinflip" onclick="switchArcadeTab('coinflip')">🪙 COIN FLIP</button>
-            <button class="arcade-tab" id="arcadeTab-slots" onclick="switchArcadeTab('slots')">🎰 SLOTS</button>
-            <button class="arcade-tab" id="arcadeTab-crash" onclick="switchArcadeTab('crash')">🚔 POLICE CHASE</button>
-            <button class="arcade-tab" id="arcadeTab-mines" onclick="switchArcadeTab('mines')">💣 MINES</button>
-            <button class="arcade-tab" id="arcadeTab-dice" onclick="switchArcadeTab('dice')">🎲 DICE</button>
-            <button class="arcade-tab" id="arcadeTab-plinko" onclick="switchArcadeTab('plinko')">🔵 PLINKO</button>
-            <button class="arcade-tab" id="arcadeTab-pvp" onclick="switchArcadeTab('pvp')">⚔️ PVP</button>
-            <button class="arcade-tab" id="arcadeTab-predictions" onclick="switchArcadeTab('predictions')">🔮 PREDICTIONS</button>
-            <button class="arcade-tab" id="arcadeTab-winners" onclick="switchArcadeTab('winners')">🏆 WINNERS</button>
+        <!-- SVG Game Icons (pixelated) -->
+        <div id="gameIconsContainer" style="display:none"></div>
+        <script>
+        (function(){
+            var s = document.createElement('script');
+            // Inline SVG sprite load
+            fetch('/images/game-icons.svg').then(function(r){return r.text()}).then(function(t){
+                var div = document.createElement('div');
+                div.innerHTML = t;
+                div.style.display = 'none';
+                document.body.insertBefore(div, document.body.firstChild);
+            }).catch(function(){
+                // fallback: inline the SVG defs
+                var div = document.createElement('div');
+                div.style.display = 'none';
+                div.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" style="display:none"><symbol id="icon-coinflip" viewBox="0 0 64 64"><rect x="16" y="16" width="32" height="28" fill="#FFC000"/><rect x="20" y="8" width="24" height="4" fill="#FFD700"/><rect x="8" y="20" width="4" height="24" fill="#FFD700"/><rect x="52" y="20" width="4" height="24" fill="#FFD700"/><rect x="20" y="52" width="24" height="4" fill="#FFD700"/><rect x="20" y="20" width="24" height="20" fill="#FFE000"/><rect x="28" y="28" width="8" height="4" fill="#B8860B"/><rect x="28" y="32" width="8" height="4" fill="#B8860B"/></symbol><symbol id="icon-slots" viewBox="0 0 64 64"><rect x="8" y="4" width="48" height="56" fill="#2A2A2A" rx="4"/><rect x="16" y="24" width="32" height="20" fill="#0D0D0D" rx="2"/><rect x="20" y="30" width="4" height="4" fill="#FFD700"/><rect x="30" y="30" width="4" height="4" fill="#FF4444"/><rect x="40" y="30" width="4" height="4" fill="#4CAF50"/><rect x="16" y="12" width="32" height="8" fill="#E50914"/><rect x="24" y="48" width="16" height="8" fill="#E50914" rx="2"/></symbol><symbol id="icon-crash" viewBox="0 0 64 64"><rect x="0" y="0" width="64" height="64" fill="#0D1117"/><rect x="8" y="40" width="20" height="12" fill="#1A4D8F"/><rect x="12" y="32" width="4" height="4" fill="#FF0000"/><rect x="18" y="32" width="4" height="4" fill="#0066FF"/><rect x="44" y="32" width="16" height="16" fill="#D4A574"/><rect x="48" y="36" width="4" height="4" fill="#FFF"/><rect x="52" y="36" width="4" height="4" fill="#000"/><rect x="30" y="36" width="4" height="4" fill="#FFD700"/><rect x="36" y="36" width="4" height="4" fill="#FFD700"/><rect x="42" y="36" width="4" height="4" fill="#FFD700"/></symbol><symbol id="icon-mines" viewBox="0 0 64 64"><rect x="4" y="4" width="56" height="56" fill="#1A1A2E" rx="4"/><rect x="8" y="8" width="14" height="14" fill="#16213E" stroke="#0F3460" stroke-width="1"/><rect x="25" y="8" width="14" height="14" fill="#16213E" stroke="#0F3460" stroke-width="1"/><rect x="42" y="8" width="14" height="14" fill="#16213E" stroke="#0F3460" stroke-width="1"/><rect x="8" y="25" width="14" height="14" fill="#E94560" stroke="#0F3460" stroke-width="1"/><rect x="25" y="25" width="14" height="14" fill="#16213E" stroke="#0F3460" stroke-width="1"/><rect x="42" y="25" width="14" height="14" fill="#16213E" stroke="#0F3460" stroke-width="1"/><rect x="8" y="42" width="14" height="14" fill="#16213E" stroke="#0F3460" stroke-width="1"/><rect x="25" y="42" width="14" height="14" fill="#16213E" stroke="#0F3460" stroke-width="1"/><rect x="42" y="42" width="14" height="14" fill="#16213E" stroke="#0F3460" stroke-width="1"/><circle cx="32" cy="32" r="5" fill="#1A1A1A"/><rect x="30" y="30" width="4" height="4" fill="#FFD700"/><rect x="12" y="12" width="4" height="4" fill="#4CAF50"/><rect x="29" y="12" width="4" height="4" fill="#4CAF50"/><rect x="46" y="12" width="4" height="4" fill="#4CAF50"/><rect x="12" y="29" width="4" height="4" fill="#4CAF50"/><rect x="46" y="29" width="4" height="4" fill="#4CAF50"/><rect x="12" y="46" width="4" height="4" fill="#4CAF50"/><rect x="29" y="46" width="4" height="4" fill="#4CAF50"/><rect x="46" y="46" width="4" height="4" fill="#4CAF50"/></symbol><symbol id="icon-dice" viewBox="0 0 64 64"><rect x="8" y="8" width="24" height="24" fill="#F5F5F5" rx="4" stroke="#333" stroke-width="2"/><rect x="14" y="14" width="4" height="4" fill="#222"/><rect x="22" y="14" width="4" height="4" fill="#222"/><rect x="14" y="22" width="4" height="4" fill="#222"/><rect x="22" y="22" width="4" height="4" fill="#222"/><rect x="32" y="32" width="24" height="24" fill="#E50914" rx="4" stroke="#333" stroke-width="2"/><rect x="38" y="38" width="4" height="4" fill="#FFF"/><rect x="46" y="38" width="4" height="4" fill="#FFF"/><rect x="38" y="46" width="4" height="4" fill="#FFF"/><rect x="42" y="42" width="4" height="4" fill="#FFF"/><rect x="46" y="46" width="4" height="4" fill="#FFF"/></symbol><symbol id="icon-plinko" viewBox="0 0 64 64"><rect x="4" y="4" width="56" height="56" fill="#0D1117" rx="4"/><rect x="30" y="8" width="4" height="4" fill="#58A6FF" rx="2"/><rect x="16" y="20" width="4" height="4" fill="#444" rx="2"/><rect x="28" y="20" width="4" height="4" fill="#444" rx="2"/><rect x="40" y="20" width="4" height="4" fill="#444" rx="2"/><rect x="10" y="30" width="4" height="4" fill="#444" rx="2"/><rect x="22" y="30" width="4" height="4" fill="#444" rx="2"/><rect x="34" y="30" width="4" height="4" fill="#444" rx="2"/><rect x="46" y="30" width="4" height="4" fill="#444" rx="2"/><rect x="16" y="40" width="4" height="4" fill="#444" rx="2"/><rect x="28" y="40" width="4" height="4" fill="#444" rx="2"/><rect x="40" y="40" width="4" height="4" fill="#444" rx="2"/><rect x="8" y="50" width="8" height="8" fill="#F85149" rx="2"/><rect x="20" y="50" width="8" height="8" fill="#FFB800" rx="2"/><rect x="32" y="50" width="8" height="8" fill="#4CAF50" rx="2"/><rect x="44" y="50" width="8" height="8" fill="#F85149" rx="2"/></symbol><symbol id="icon-pvp" viewBox="0 0 64 64"><rect x="0" y="0" width="32" height="64" fill="#0D1520"/><rect x="32" y="0" width="32" height="64" fill="#1A0D20"/><rect x="28" y="28" width="8" height="8" fill="#FFD700"/><rect x="30" y="30" width="4" height="4" fill="#FFF"/><rect x="12" y="16" width="4" height="4" fill="#FF0000"/><rect x="48" y="16" width="4" height="4" fill="#0066FF"/><rect x="8" y="20" width="4" height="36" fill="#C0C0C0"/><rect x="52" y="20" width="4" height="36" fill="#C0C0C0"/></symbol><symbol id="icon-predictions" viewBox="0 0 64 64"><rect x="12" y="16" width="40" height="28" fill="#8E44AD" rx="4"/><rect x="16" y="20" width="32" height="20" fill="#BB86FC" rx="4"/><rect x="22" y="22" width="4" height="2" fill="#FFF"/><rect x="20" y="44" width="24" height="8" fill="#6A1B9A"/><rect x="16" y="48" width="32" height="8" fill="#4A148C" rx="2"/></symbol><symbol id="icon-winners" viewBox="0 0 64 64"><rect x="12" y="16" width="40" height="16" fill="#FFC000"/><rect x="8" y="18" width="4" height="8" fill="#FFD700"/><rect x="52" y="18" width="4" height="8" fill="#FFD700"/><rect x="20" y="32" width="24" height="4" fill="#FFD700"/><rect x="24" y="36" width="16" height="8" fill="#DAA520"/><rect x="16" y="44" width="32" height="4" fill="#B8860B"/><rect x="20" y="48" width="24" height="8" fill="#8B6914" rx="2"/></symbol></svg>';
+                document.body.insertBefore(div, document.body.firstChild);
+            });
+        })();
+        </script>
+
+        <div class="arcade-game-grid">
+            <div class="arcade-game-card active" id="arcadeTab-coinflip" onclick="switchArcadeTab('coinflip')" style="--card-accent:#FFD700; --card-glow:rgba(255,215,0,0.25);">
+                <svg class="game-card-icon"><use href="#icon-coinflip"/></svg>
+                <div class="game-card-name">COIN FLIP</div>
+                <div class="game-card-tag">1.90x PAYOUT</div>
+            </div>
+            <div class="arcade-game-card" id="arcadeTab-slots" onclick="switchArcadeTab('slots')" style="--card-accent:#E50914; --card-glow:rgba(229,9,20,0.25);">
+                <svg class="game-card-icon"><use href="#icon-slots"/></svg>
+                <div class="game-card-name">SLOTS</div>
+                <div class="game-card-tag">UP TO 47.5x</div>
+            </div>
+            <div class="arcade-game-card" id="arcadeTab-crash" onclick="switchArcadeTab('crash')" style="--card-accent:#1A4D8F; --card-glow:rgba(26,77,143,0.25);">
+                <svg class="game-card-icon"><use href="#icon-crash"/></svg>
+                <div class="game-card-name">POLICE CHASE</div>
+                <div class="game-card-tag">CRASH GAME</div>
+            </div>
+            <div class="arcade-game-card" id="arcadeTab-mines" onclick="switchArcadeTab('mines')" style="--card-accent:#E94560; --card-glow:rgba(233,69,96,0.25);">
+                <svg class="game-card-icon"><use href="#icon-mines"/></svg>
+                <div class="game-card-name">MINES</div>
+                <div class="game-card-tag">AVOID BOMBS</div>
+            </div>
+            <div class="arcade-game-card" id="arcadeTab-dice" onclick="switchArcadeTab('dice')" style="--card-accent:#4CAF50; --card-glow:rgba(76,175,80,0.25);">
+                <svg class="game-card-icon"><use href="#icon-dice"/></svg>
+                <div class="game-card-name">DICE ROLL</div>
+                <div class="game-card-tag">UP TO 28.5x</div>
+            </div>
+            <div class="arcade-game-card" id="arcadeTab-plinko" onclick="switchArcadeTab('plinko')" style="--card-accent:#58A6FF; --card-glow:rgba(88,166,255,0.25);">
+                <svg class="game-card-icon"><use href="#icon-plinko"/></svg>
+                <div class="game-card-name">PLINKO</div>
+                <div class="game-card-tag">DROP &amp; WIN</div>
+            </div>
+            <div class="arcade-game-card" id="arcadeTab-pvp" onclick="switchArcadeTab('pvp')" style="--card-accent:#FFD700; --card-glow:rgba(255,215,0,0.25);">
+                <svg class="game-card-icon"><use href="#icon-pvp"/></svg>
+                <div class="game-card-name">PVP CLASH</div>
+                <div class="game-card-tag">3% FEE</div>
+            </div>
+            <div class="arcade-game-card" id="arcadeTab-predictions" onclick="switchArcadeTab('predictions')" style="--card-accent:#9B59B6; --card-glow:rgba(155,89,182,0.25);">
+                <svg class="game-card-icon"><use href="#icon-predictions"/></svg>
+                <div class="game-card-name">PREDICTIONS</div>
+                <div class="game-card-tag">BET ON EVENTS</div>
+            </div>
+            <div class="arcade-game-card" id="arcadeTab-winners" onclick="switchArcadeTab('winners')" style="--card-accent:#FFD700; --card-glow:rgba(255,215,0,0.25);">
+                <svg class="game-card-icon"><use href="#icon-winners"/></svg>
+                <div class="game-card-name">WINNERS</div>
+                <div class="game-card-tag">LEADERBOARD</div>
+            </div>
         </div>
 
         <!-- Coin Flip -->
