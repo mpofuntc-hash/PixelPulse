@@ -9744,7 +9744,7 @@ async function postWeeklyStats() {
     const totalClips = (await dbGet('SELECT COUNT(*) as count FROM clips')).count;
     const totalSkins = (await dbGet('SELECT COUNT(*) as count FROM skins WHERE status = ?', ['available'])).count;
     const activeMarkets = (await dbGet('SELECT COUNT(*) as count FROM betting_markets WHERE status = ?', ['active'])).count;
-    const resolvedThisWeek = (await dbGet(`SELECT COUNT(*) as count FROM betting_markets WHERE status = 'resolved' AND updated_at >= ?`, [new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()])).count;
+    const resolvedThisWeek = (await dbGet(`SELECT COUNT(*) as count FROM betting_markets WHERE status = 'resolved' AND created_at >= ?`, [new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()])).count;
     const totalVolume = (await dbGet('SELECT COALESCE(SUM(total_volume), 0) as volume FROM betting_markets')).volume;
     const pool = await dbGet('SELECT * FROM platform_fee_pool WHERE id = 1');
     
