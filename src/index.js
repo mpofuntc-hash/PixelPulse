@@ -141,6 +141,7 @@ function postJson(url, payload) {
     const body = JSON.stringify(payload);
     const request = https.request(url, {
       method: 'POST',
+      timeout: 10000,
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Content-Length': Buffer.byteLength(body) }
     }, response => {
       let data = '';
@@ -153,6 +154,7 @@ function postJson(url, payload) {
       });
     });
     request.on('error', reject);
+    request.on('timeout', () => { request.destroy(); reject(new Error('Request timeout')); });
     request.write(body);
     request.end();
   });
@@ -233,7 +235,7 @@ async function initializeExchangeRates() {
 // Fetch real-time crypto prices from CoinGecko API
 async function updateCryptoPrices() {
   return new Promise((resolve, reject) => {
-    https.get('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether&vs_currencies=usd,btc', (res) => {
+    const req = https.get('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether&vs_currencies=usd,btc', (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', async () => {
@@ -270,6 +272,7 @@ async function updateCryptoPrices() {
         }
       });
     }).on('error', reject);
+    req.setTimeout(10000, () => { req.destroy(); reject(new Error('CoinGecko timeout')); });
   });
 }
 
@@ -300,7 +303,7 @@ async function fetchPandaScoreMatches(game = 'cs2', state = 'upcoming') {
   url.searchParams.set('filter[videogame]', gameId);
   url.searchParams.set('token', apiKey);
   return new Promise((resolve, reject) => {
-    https.get(url, (res) => {
+    const req = https.get(url, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
@@ -313,6 +316,7 @@ async function fetchPandaScoreMatches(game = 'cs2', state = 'upcoming') {
         }
       });
     }).on('error', reject);
+    req.setTimeout(10000, () => { req.destroy(); reject(new Error('PandaScore timeout')); });
   });
 }
 
@@ -547,7 +551,7 @@ async function resolveBettingMarkets() {
 async function fetchMatchResult(apiSource, eventId) {
   if (apiSource === 'pandascore') {
     return new Promise((resolve, reject) => {
-      https.get(`https://api.pandascore.co/matches/${eventId}`, {
+      const req = https.get(`https://api.pandascore.co/matches/${eventId}`, {
         headers: { 'Authorization': `Bearer ${process.env.PANDASCORE_API_KEY || ''}` }
       }, (res) => {
         let data = '';
@@ -565,6 +569,7 @@ async function fetchMatchResult(apiSource, eventId) {
           }
         });
       }).on('error', reject);
+      req.setTimeout(10000, () => { req.destroy(); reject(new Error('PandaScore timeout')); });
     });
   }
   return null;
@@ -575,7 +580,7 @@ async function fetchMatchResult(apiSource, eventId) {
 // MyAnimeList API integration
 async function fetchMALAnime() {
   return new Promise((resolve, reject) => {
-    https.get('https://api.jikan.moe/v4/seasons/upcoming?limit=20', (res) => {
+    const req = https.get('https://api.jikan.moe/v4/seasons/upcoming?limit=20', (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
@@ -587,6 +592,7 @@ async function fetchMALAnime() {
         }
       });
     }).on('error', reject);
+    req.setTimeout(10000, () => { req.destroy(); reject(new Error('Jikan timeout')); });
   });
 }
 
@@ -618,7 +624,7 @@ async function fetchAniListAnime() {
 // LiveChart API integration
 async function fetchLiveChartAnime() {
   return new Promise((resolve, reject) => {
-    https.get('https://api.livechart.me/anime/upcoming', (res) => {
+    const req = https.get('https://api.livechart.me/anime/upcoming', (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
@@ -630,6 +636,7 @@ async function fetchLiveChartAnime() {
         }
       });
     }).on('error', reject);
+    req.setTimeout(10000, () => { req.destroy(); reject(new Error('LiveChart timeout')); });
   });
 }
 
@@ -7368,7 +7375,7 @@ async function checkBtcDeposits() {
     const btcPrice = await getBtcPriceUsd();
     const url = `https://blockchain.info/rawaddr/${BTC_WALLET}`;
     
-    https.get(url, (apiRes) => {
+    const req = https.get(url, (apiRes) => {
       let data = '';
       apiRes.on('data', chunk => data += chunk);
       apiRes.on('end', async () => {
@@ -7427,6 +7434,7 @@ async function checkBtcDeposits() {
         } catch(e) { console.error('BTC deposit parse error:', e.message); }
       });
     }).on('error', (e) => { /* silently fail - will retry next interval */ });
+    req.setTimeout(10000, () => { req.destroy(); });
   } catch(e) { console.error('BTC deposit check error:', e.message); }
 }
 
@@ -9797,12 +9805,13 @@ async function fetchGamingNews() {
   for (const feed of feeds) {
     try {
       const res = await new Promise((resolve, reject) => {
-        https.get(feed.url, { headers: { 'User-Agent': 'PixelPulse/1.0' } }, (response) => {
+        const req = https.get(feed.url, { headers: { 'User-Agent': 'PixelPulse/1.0' } }, (response) => {
           let data = '';
           response.on('data', chunk => data += chunk);
           response.on('end', () => resolve(data));
           response.on('error', reject);
         }).on('error', reject);
+        req.setTimeout(10000, () => { req.destroy(); reject(new Error('RSS feed timeout')); });
       });
 
       const items = [];
@@ -10163,12 +10172,16 @@ setTimeout(() => {
   postAndPinGameModules();
 }, 8000);
 
-bot.launch().then(() => {
-  console.log('Telegram bot stopped gracefully');
+// Launch Telegram bot with timeout so it can't block server startup
+Promise.race([
+  bot.launch(),
+  new Promise((_, reject) => setTimeout(() => reject(new Error('Telegram launch timeout')), 15000))
+]).then(() => {
+  console.log('Telegram bot launched successfully');
 }).catch(err => {
-  console.error('Failed to start Telegram bot:', err);
+  console.error('Telegram bot launch failed (server continues without Telegram):', err.message || err);
 });
 
 // Enable graceful stop
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+process.once('SIGINT', () => { try { bot.stop('SIGINT'); } catch(e) {} });
+process.once('SIGTERM', () => { try { bot.stop('SIGTERM'); } catch(e) {} });
