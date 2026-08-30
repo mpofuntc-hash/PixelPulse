@@ -7058,11 +7058,20 @@
         }
 
         // ===== MINES =====
-        let minesState = { sessionId: null, mineCount: 3, revealed: [], active: false };
+        let minesState = { sessionId: null, mineCount: 3, revealed: [], active: false, picking: false, cashingOut: false };
         function selectMineCount(count, btn) {
             minesState.mineCount = count;
             document.querySelectorAll('[id^="mineCount"]').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
+        }
+
+        function resetMinesUI() {
+            document.getElementById('minesGameArea').style.display = 'none';
+            document.getElementById('minesSetupArea').style.display = 'block';
+            document.getElementById('minesStartBtn').disabled = false;
+            document.getElementById('minesCashoutBtn').style.display = 'block';
+            document.getElementById('minesResult').textContent = '';
+            minesState = { sessionId: null, mineCount: minesState.mineCount, revealed: [], active: false, picking: false, cashingOut: false };
         }
 
         async function startMines() {
@@ -7083,7 +7092,7 @@
                 try { data = JSON.parse(text); } catch(e) { alert('Server error. Please try again.'); startBtn.disabled = false; return; }
                 if (!res.ok) { alert(data.error || 'Error starting game'); startBtn.disabled = false; return; }
 
-                minesState = { sessionId: data.sessionId, mineCount: data.mineCount, stake: stake, revealed: [], active: true };
+                minesState = { sessionId: data.sessionId, mineCount: data.mineCount, stake: stake, revealed: [], active: true, picking: false, cashingOut: false };
                 document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
                 document.getElementById('minesSetupArea').style.display = 'none';
                 document.getElementById('minesGameArea').style.display = 'block';
@@ -7104,9 +7113,13 @@
         }
 
         async function pickMineCard(index) {
-            if (!minesState.active || minesState.revealed.includes(index)) return;
+            if (!minesState.active || minesState.picking || minesState.cashingOut) return;
+            if (minesState.revealed.includes(index)) return;
             const card = document.querySelector(`.mine-card[data-index="${index}"]`);
-            if (card.classList.contains('revealed')) return;
+            if (!card || card.classList.contains('revealed')) return;
+
+            minesState.picking = true;
+            card.style.opacity = '0.5';
 
             try {
                 const res = await fetch('/api/arcade/mines/pick', {
@@ -7115,8 +7128,12 @@
                 });
                 const text = await res.text();
                 let data;
-                try { data = JSON.parse(text); } catch(e) { alert('Server error. Please restart the game.'); return; }
-                if (!res.ok) { alert(data.error || 'Error picking card'); return; }
+                try { data = JSON.parse(text); } catch(e) { alert('Server error. Please restart the game.'); resetMinesUI(); return; }
+                if (!res.ok) {
+                    if (data.error === 'Game not found' || data.error === 'Game already ended') { resetMinesUI(); return; }
+                    alert(data.error || 'Error picking card');
+                    return;
+                }
 
                 if (data.busted) {
                     card.classList.add('revealed', 'bomb');
@@ -7131,25 +7148,29 @@
                     document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
                     document.getElementById('minesCashoutBtn').style.display = 'none';
                     minesState.active = false;
-                    setTimeout(() => {
-                        document.getElementById('minesGameArea').style.display = 'none';
-                        document.getElementById('minesSetupArea').style.display = 'block';
-                        document.getElementById('minesStartBtn').disabled = false;
-                        document.getElementById('minesCashoutBtn').style.display = 'block';
-                        document.getElementById('minesResult').textContent = '';
-                    }, 3500);
+                    minesState.picking = false;
+                    setTimeout(() => { resetMinesUI(); }, 3500);
                 } else {
                     card.classList.add('revealed', 'safe');
                     card.textContent = '✅';
+                    card.style.opacity = '';
                     minesState.revealed = data.revealed;
+                    minesState.picking = false;
                     document.getElementById('minesMult').textContent = `${data.currentMult.toFixed(2)}x`;
                     document.getElementById('minesPotential').textContent = `$${data.potentialPayout.toFixed(2)}`;
+                    // Auto-cashout if all safe cards picked
+                    if (data.picksLeft === 0) {
+                        cashoutMines();
+                    }
                 }
-            } catch(e) { console.error('Mines pick error:', e); alert('Network error. Please try again.'); }
+            } catch(e) { console.error('Mines pick error:', e); alert('Network error. Please try again.'); minesState.picking = false; card.style.opacity = ''; }
         }
 
         async function cashoutMines() {
-            if (!minesState.active || minesState.revealed.length === 0) return;
+            if (!minesState.active || minesState.cashingOut || minesState.revealed.length === 0) return;
+            minesState.cashingOut = true;
+            document.getElementById('minesCashoutBtn').style.display = 'none';
+
             try {
                 const res = await fetch('/api/arcade/mines/cashout', {
                     method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
@@ -7157,11 +7178,17 @@
                 });
                 const text = await res.text();
                 let data;
-                try { data = JSON.parse(text); } catch(e) { alert('Server error. Please try again.'); return; }
-                if (!res.ok) { alert(data.error || 'Error cashing out'); return; }
+                try { data = JSON.parse(text); } catch(e) { alert('Server error. Please try again.'); resetMinesUI(); return; }
+                if (!res.ok) {
+                    if (data.error === 'Game not found' || data.error === 'Game already ended') { resetMinesUI(); return; }
+                    alert(data.error || 'Error cashing out');
+                    minesState.cashingOut = false;
+                    document.getElementById('minesCashoutBtn').style.display = 'block';
+                    return;
+                }
 
                 minesState.active = false;
-                document.getElementById('minesCashoutBtn').style.display = 'none';
+                minesState.cashingOut = false;
                 document.getElementById('minesResult').innerHTML = `🎉 WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
                 document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
                 showArcadeToast('win', '💰', 'CASHED OUT!', `+$${data.payout.toFixed(2)}`);
@@ -7171,13 +7198,7 @@
                     if (mc && !mc.classList.contains('safe')) { mc.classList.add('revealed', 'bomb'); mc.textContent = '💣'; }
                 });
 
-                setTimeout(() => {
-                    document.getElementById('minesGameArea').style.display = 'none';
-                    document.getElementById('minesSetupArea').style.display = 'block';
-                    document.getElementById('minesStartBtn').disabled = false;
-                    document.getElementById('minesCashoutBtn').style.display = 'block';
-                    document.getElementById('minesResult').textContent = '';
-                }, 3500);
+                setTimeout(() => { resetMinesUI(); }, 3500);
             } catch(e) { console.error('Mines cashout error:', e); alert('Network error. Please try again.'); }
         }
 

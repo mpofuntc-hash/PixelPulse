@@ -8020,9 +8020,9 @@ app.post('/api/arcade/mines/pick', authenticateRequest, async (req, res) => {
 
     if (isMine) {
       game.busted = true;
-      if (!game.isAdmin) await dbRun('UPDATE user_balances SET total_lost = total_lost + ? WHERE user_id = ?', [game.stake, req.userId]);
-      await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'mines', ?, 'USD', 0, 0, 'busted', ?, ?)`,
-        [req.userId, game.stake, JSON.stringify({ mines: game.mines, revealed: game.revealed, minePositions: game.minePositions, admin_test: game.isAdmin }), sid]);
+      if (!game.isAdmin) { try { await dbRun('UPDATE user_balances SET total_lost = total_lost + ? WHERE user_id = ?', [game.stake, req.userId]); } catch(e) {} }
+      try { await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'mines', ?, 'USD', 0, 0, 'busted', ?, ?)`,
+        [req.userId, game.stake, JSON.stringify({ mines: game.mines, revealed: game.revealed, minePositions: game.minePositions, admin_test: game.isAdmin }), sid]); } catch(e) { console.error('Mines pick DB log error:', e); }
       const bal = game.isAdmin ? null : await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
       delete global.minesGames[sid];
       return res.json({ busted: true, minePositions: game.minePositions, revealed: game.revealed, newBalance: game.isAdmin ? 10000 : (bal?.usd_balance || 0) });
@@ -8063,9 +8063,9 @@ app.post('/api/arcade/mines/cashout', authenticateRequest, async (req, res) => {
     const multiplier = fairMult * (1 - MINES_HOUSE_EDGE);
     const payout = Math.floor(game.stake * multiplier * 100) / 100;
 
-    if (!game.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
-    await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'mines', ?, 'USD', ?, ?, 'cashed_out', ?, ?)`,
-      [req.userId, game.stake, multiplier, payout, JSON.stringify({ mines: game.mines, revealed: game.revealed, minePositions: game.minePositions, admin_test: game.isAdmin }), sid]);
+    if (!game.isAdmin) { try { await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]); } catch(e) { console.error('Mines cashout balance update error:', e); } }
+    try { await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'mines', ?, 'USD', ?, ?, 'cashed_out', ?, ?)`,
+      [req.userId, game.stake, multiplier, payout, JSON.stringify({ mines: game.mines, revealed: game.revealed, minePositions: game.minePositions, admin_test: game.isAdmin }), sid]); } catch(e) { console.error('Mines cashout DB log error:', e); }
 
     const bal = game.isAdmin ? null : await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
     delete global.minesGames[sid];
