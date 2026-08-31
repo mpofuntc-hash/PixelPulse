@@ -1709,6 +1709,7 @@
                 <span id="nav-avatar" style="width: 24px; height: 24px; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; background: #0f0f0f; border: 1px solid #444;"></span>
                 Profile
             </a>
+            <a href="#" onclick="showSection('support')" id="nav-support" style="display:none;">Support</a>
             <a href="#" onclick="showAuthModal()" id="nav-auth" style="background: #e50914; color: #fff; padding: 6px 18px; border-radius: 6px; font-weight: 600;">Login</a>
         </div>
         <div class="search-container">
@@ -3069,6 +3070,64 @@
     </div>
 
     <!-- Site Footer -->
+    <section id="support" style="display:none; max-width: 900px; margin: 40px auto; padding: 0 20px;">
+        <h2 style="font-size: 28px; margin-bottom: 20px;">Support Center</h2>
+        <p style="color: #888; margin-bottom: 24px;">Submit a ticket for any query, bug report, or issue. We'll get back to you.</p>
+        
+        <div id="supportTicketForm" style="background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 24px; margin-bottom: 30px;">
+            <h3 style="font-size: 18px; margin-bottom: 16px;">New Ticket</h3>
+            <div style="display: grid; gap: 14px;">
+                <div>
+                    <label style="color: #aaa; font-size: 13px; display: block; margin-bottom: 6px;">Subject</label>
+                    <input type="text" id="ticketSubject" placeholder="Brief summary of your issue" style="width: 100%; padding: 10px 14px; background: #0f0f0f; border: 1px solid #444; border-radius: 8px; color: #fff; font-size: 14px;">
+                </div>
+                <div style="display: flex; gap: 14px;">
+                    <div style="flex: 1;">
+                        <label style="color: #aaa; font-size: 13px; display: block; margin-bottom: 6px;">Category</label>
+                        <select id="ticketCategory" style="width: 100%; padding: 10px 14px; background: #0f0f0f; border: 1px solid #444; border-radius: 8px; color: #fff; font-size: 14px;">
+                            <option value="general">General Question</option>
+                            <option value="bug">Bug Report</option>
+                            <option value="payment">Payment / Deposit / Withdrawal</option>
+                            <option value="account">Account Issue</option>
+                            <option value="game">Game / Arcade Issue</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1;">
+                        <label style="color: #aaa; font-size: 13px; display: block; margin-bottom: 6px;">Priority</label>
+                        <select id="ticketPriority" style="width: 100%; padding: 10px 14px; background: #0f0f0f; border: 1px solid #444; border-radius: 8px; color: #fff; font-size: 14px;">
+                            <option value="low">Low</option>
+                            <option value="normal" selected>Normal</option>
+                            <option value="high">High</option>
+                            <option value="urgent">Urgent</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label style="color: #aaa; font-size: 13px; display: block; margin-bottom: 6px;">Message</label>
+                    <textarea id="ticketMessage" rows="5" placeholder="Describe your issue in detail..." style="width: 100%; padding: 10px 14px; background: #0f0f0f; border: 1px solid #444; border-radius: 8px; color: #fff; font-size: 14px; resize: vertical;"></textarea>
+                </div>
+                <button class="arcade-btn" onclick="submitTicket()" id="ticketSubmitBtn" style="width: fit-content;">Submit Ticket</button>
+                <div id="ticketFormMsg" style="font-size: 13px; min-height: 18px;"></div>
+            </div>
+        </div>
+
+        <div id="supportTicketList" style="margin-bottom: 30px;">
+            <h3 style="font-size: 18px; margin-bottom: 16px;">Your Tickets</h3>
+            <div id="ticketsContainer" style="display: grid; gap: 12px;"></div>
+        </div>
+
+        <div id="supportTicketDetail" style="display:none; background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 24px;">
+            <button onclick="showTicketList()" style="background: none; border: none; color: #e50914; cursor: pointer; font-size: 14px; margin-bottom: 16px;">&larr; Back to tickets</button>
+            <div id="ticketDetailHeader" style="margin-bottom: 20px;"></div>
+            <div id="ticketRepliesContainer" style="display: grid; gap: 12px; margin-bottom: 20px;"></div>
+            <div id="ticketReplyBox" style="display: grid; gap: 10px;">
+                <textarea id="ticketReplyText" rows="3" placeholder="Type your reply..." style="width: 100%; padding: 10px 14px; background: #0f0f0f; border: 1px solid #444; border-radius: 8px; color: #fff; font-size: 14px; resize: vertical;"></textarea>
+                <button class="arcade-btn" onclick="replyToTicket()" style="width: fit-content;">Send Reply</button>
+            </div>
+        </div>
+    </section>
+
     <footer class="site-footer">
         <div class="footer-grid">
             <div class="footer-col">
@@ -3093,6 +3152,7 @@
                 <h4>Account</h4>
                 <a onclick="showSection('wallet')">Wallet</a>
                 <a onclick="showSection('profile')">Profile</a>
+                <a onclick="showSection('support')">Support</a>
                 <a href="https://t.me/PixelPulse" target="_blank" rel="noopener">Telegram Bot</a>
             </div>
         </div>
@@ -3170,6 +3230,7 @@
                 document.getElementById('nav-auth').style.fontWeight = 'normal';
                 document.getElementById('nav-profile').style.display = 'inline-flex';
                 document.getElementById('nav-wallet').style.display = '';
+                document.getElementById('nav-support').style.display = '';
                 document.getElementById('signupPrompt').style.display = 'none';
                 closeAuthModal();
                 loadWalletData();
@@ -3236,6 +3297,7 @@
             document.getElementById('nav-auth').style.fontWeight = '600';
             document.getElementById('nav-profile').style.display = 'none';
             document.getElementById('nav-wallet').style.display = 'none';
+            document.getElementById('nav-support').style.display = 'none';
             document.getElementById('nav-avatar').innerHTML = '';
             document.getElementById('signupPrompt').style.display = 'flex';
         }
@@ -3944,6 +4006,7 @@
             document.getElementById('leaderboard').style.display = 'none';
             document.getElementById('wallet').style.display = 'none';
             document.getElementById('profile').style.display = 'none';
+            document.getElementById('support').style.display = 'none';
             
             // Remove active class from all nav links
             document.getElementById('nav-clips').classList.remove('active');
@@ -3956,6 +4019,7 @@
             document.getElementById('nav-leaderboard').classList.remove('active');
             document.getElementById('nav-wallet').classList.remove('active');
             document.getElementById('nav-profile').classList.remove('active');
+            document.getElementById('nav-support').classList.remove('active');
             document.getElementById('nav-home').classList.remove('active');
 
             // Handle 'home' section (hero + how it works)
@@ -3999,6 +4063,8 @@
                 loadWalletData();
             } else if (section === 'profile') {
                 loadProfile();
+            } else if (section === 'support') {
+                loadTickets();
             }
         }
 
@@ -6720,6 +6786,7 @@
             document.getElementById('nav-auth').style.fontWeight = 'normal';
             document.getElementById('nav-profile').style.display = 'inline-flex';
             document.getElementById('nav-wallet').style.display = '';
+            document.getElementById('nav-support').style.display = '';
             loadNavAvatar();
             // Restore currentUserId from profile
             fetch('/api/profile', { headers: { 'Authorization': `Bearer ${sessionToken}` } })
@@ -6729,6 +6796,7 @@
         } else {
             document.getElementById('nav-wallet').style.display = 'none';
             document.getElementById('nav-profile').style.display = 'none';
+            document.getElementById('nav-support').style.display = 'none';
         }
 
         // Show signup prompt for non-logged-in users after 8 seconds
@@ -7763,6 +7831,163 @@
                 }
                 document.getElementById('arcadeHistoryModal').style.display = 'flex';
             } catch(e) {}
+        }
+
+        // ===== SUPPORT TICKETS =====
+        let currentTicketId = null;
+
+        async function submitTicket() {
+            const subject = document.getElementById('ticketSubject').value.trim();
+            const category = document.getElementById('ticketCategory').value;
+            const priority = document.getElementById('ticketPriority').value;
+            const message = document.getElementById('ticketMessage').value.trim();
+            const msgEl = document.getElementById('ticketFormMsg');
+            const btn = document.getElementById('ticketSubmitBtn');
+
+            if (!subject) { msgEl.style.color = '#f44336'; msgEl.textContent = 'Please enter a subject.'; return; }
+            if (!message) { msgEl.style.color = '#f44336'; msgEl.textContent = 'Please enter a message.'; return; }
+
+            btn.disabled = true;
+            btn.textContent = 'Submitting...';
+            msgEl.textContent = '';
+
+            try {
+                const res = await fetch('/api/tickets', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                    body: JSON.stringify({ subject, category, priority, message })
+                });
+                const data = await res.json();
+                if (!res.ok) { msgEl.style.color = '#f44336'; msgEl.textContent = data.error || 'Error creating ticket'; return; }
+                msgEl.style.color = '#4caf50';
+                msgEl.textContent = 'Ticket #' + data.id + ' created successfully!';
+                document.getElementById('ticketSubject').value = '';
+                document.getElementById('ticketMessage').value = '';
+                document.getElementById('ticketCategory').value = 'general';
+                document.getElementById('ticketPriority').value = 'normal';
+                loadTickets();
+                setTimeout(() => { msgEl.textContent = ''; }, 4000);
+            } catch(e) {
+                msgEl.style.color = '#f44336';
+                msgEl.textContent = 'Network error. Please try again.';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Submit Ticket';
+            }
+        }
+
+        async function loadTickets() {
+            const container = document.getElementById('ticketsContainer');
+            if (!sessionToken) { container.innerHTML = '<div style="color:#888;text-align:center;padding:20px;">Please log in to view your tickets.</div>'; return; }
+            container.innerHTML = '<div style="color:#888;text-align:center;padding:20px;">Loading...</div>';
+            try {
+                const res = await fetch('/api/tickets', { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                const data = await res.json();
+                if (!res.ok) { container.innerHTML = '<div style="color:#f44336;text-align:center;padding:20px;">Error loading tickets.</div>'; return; }
+                if (!data.tickets || data.tickets.length === 0) {
+                    container.innerHTML = '<div style="color:#888;text-align:center;padding:20px;">No tickets yet. Create one above.</div>';
+                    return;
+                }
+                const statusColors = { open: '#4caf50', pending: '#ff9800', closed: '#888' };
+                const catLabels = { general: 'General', bug: 'Bug Report', payment: 'Payment', account: 'Account', game: 'Game', other: 'Other' };
+                container.innerHTML = data.tickets.map(t => `
+                    <div onclick="viewTicket(${t.id})" style="background:#0f0f0f;border:1px solid #333;border-radius:10px;padding:16px;cursor:pointer;transition:border-color 0.2s;" onmouseover="this.style.borderColor='#555'" onmouseout="this.style.borderColor='#333'">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                            <span style="font-weight:600;font-size:15px;">#${t.id} — ${t.subject}</span>
+                            <span style="font-size:12px;padding:3px 10px;border-radius:12px;background:${statusColors[t.status]||'#888'}33;color:${statusColors[t.status]||'#888'};font-weight:600;text-transform:capitalize;">${t.status}</span>
+                        </div>
+                        <div style="display:flex;gap:12px;font-size:12px;color:#888;">
+                            <span>${catLabels[t.category]||t.category}</span>
+                            <span style="text-transform:capitalize;">${t.priority} priority</span>
+                            <span>${new Date(t.created_at).toLocaleDateString()}</span>
+                        </div>
+                    </div>
+                `).join('');
+            } catch(e) {
+                container.innerHTML = '<div style="color:#f44336;text-align:center;padding:20px;">Network error.</div>';
+            }
+        }
+
+        async function viewTicket(id) {
+            currentTicketId = id;
+            document.getElementById('supportTicketForm').style.display = 'none';
+            document.getElementById('supportTicketList').style.display = 'none';
+            document.getElementById('supportTicketDetail').style.display = 'block';
+
+            try {
+                const res = await fetch(`/api/tickets/${id}`, { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error || 'Error loading ticket'); showTicketList(); return; }
+
+                const t = data.ticket;
+                const statusColors = { open: '#4caf50', pending: '#ff9800', closed: '#888' };
+                const catLabels = { general: 'General', bug: 'Bug Report', payment: 'Payment', account: 'Account', game: 'Game', other: 'Other' };
+
+                document.getElementById('ticketDetailHeader').innerHTML = `
+                    <h3 style="font-size:20px;margin-bottom:8px;">#${t.id} — ${t.subject}</h3>
+                    <div style="display:flex;gap:14px;font-size:13px;color:#888;margin-bottom:4px;">
+                        <span>${catLabels[t.category]||t.category}</span>
+                        <span style="text-transform:capitalize;">${t.priority} priority</span>
+                        <span style="color:${statusColors[t.status]||'#888'};font-weight:600;text-transform:capitalize;">${t.status}</span>
+                        <span>${new Date(t.created_at).toLocaleString()}</span>
+                    </div>
+                `;
+
+                const repliesEl = document.getElementById('ticketRepliesContainer');
+                if (!data.replies || data.replies.length === 0) {
+                    repliesEl.innerHTML = '<div style="color:#888;text-align:center;padding:16px;">No messages yet.</div>';
+                } else {
+                    repliesEl.innerHTML = data.replies.map(r => {
+                        const isStaff = r.is_staff;
+                        const bg = isStaff ? '#1a2332' : '#0f1a0f';
+                        const border = isStaff ? '#2a4a6a' : '#2a4a2a';
+                        const label = isStaff ? 'Staff' : 'You';
+                        const labelColor = isStaff ? '#4a9eff' : '#4caf50';
+                        return `
+                            <div style="background:${bg};border:1px solid ${border};border-radius:10px;padding:14px;">
+                                <div style="font-size:12px;margin-bottom:6px;">
+                                    <span style="color:${labelColor};font-weight:600;">${label}</span>
+                                    <span style="color:#666;margin-left:8px;">${new Date(r.created_at).toLocaleString()}</span>
+                                </div>
+                                <div style="color:#ddd;font-size:14px;white-space:pre-wrap;">${r.message}</div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+
+                document.getElementById('ticketReplyBox').style.display = t.status === 'closed' ? 'none' : 'grid';
+                document.getElementById('ticketReplyText').value = '';
+            } catch(e) {
+                alert('Network error loading ticket');
+                showTicketList();
+            }
+        }
+
+        function showTicketList() {
+            currentTicketId = null;
+            document.getElementById('supportTicketDetail').style.display = 'none';
+            document.getElementById('supportTicketForm').style.display = 'block';
+            document.getElementById('supportTicketList').style.display = 'block';
+            loadTickets();
+        }
+
+        async function replyToTicket() {
+            if (!currentTicketId) return;
+            const text = document.getElementById('ticketReplyText').value.trim();
+            if (!text) return;
+
+            try {
+                const res = await fetch(`/api/tickets/${currentTicketId}/reply`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                    body: JSON.stringify({ message: text })
+                });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error || 'Error sending reply'); return; }
+                viewTicket(currentTicketId);
+            } catch(e) {
+                alert('Network error sending reply');
+            }
         }
 
     </script>

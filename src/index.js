@@ -1717,6 +1717,29 @@ async function initSchema() {
       FOREIGN KEY (user_id) REFERENCES users(id),
       FOREIGN KEY (market_id) REFERENCES prediction_markets(id)
     );
+
+    CREATE TABLE IF NOT EXISTS support_tickets (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      subject TEXT NOT NULL,
+      category TEXT DEFAULT 'general',
+      priority TEXT DEFAULT 'normal',
+      status TEXT DEFAULT 'open',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS ticket_replies (
+      id INTEGER PRIMARY KEY,
+      ticket_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      is_staff INTEGER DEFAULT 0,
+      message TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (ticket_id) REFERENCES support_tickets(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
   `);
 }
 async function initDatabaseAndSchema() {
@@ -9560,6 +9583,64 @@ app.get('/api/admin/referrals/overview', checkAdminSession, async (req, res) => 
     totalPaidOut,
     pendingPayouts
   });
+});
+
+// ===== SUPPORT TICKETS =====
+app.post('/api/tickets', authenticateRequest, async (req, res) => {
+  try {
+    const { subject, category, priority, message } = req.body;
+    if (!subject || !subject.trim()) return res.status(400).json({ error: 'Subject is required' });
+    if (!message || !message.trim()) return res.status(400).json({ error: 'Message is required' });
+    const cat = ['general', 'bug', 'payment', 'account', 'game', 'other'].includes(category) ? category : 'general';
+    const pri = ['low', 'normal', 'high', 'urgent'].includes(priority) ? priority : 'normal';
+    const result = await dbRun('INSERT INTO support_tickets (user_id, subject, category, priority, status) VALUES (?, ?, ?, ?, ?)',
+      [req.userId, subject.trim(), cat, pri, 'open']);
+    await dbRun('INSERT INTO ticket_replies (ticket_id, user_id, is_staff, message) VALUES (?, ?, 0, ?)',
+      [result.lastID, req.userId, message.trim()]);
+    res.json({ id: result.lastID, status: 'open', message: 'Ticket created' });
+  } catch (err) {
+    console.error('Create ticket error:', err);
+    res.status(500).json({ error: 'Server error creating ticket' });
+  }
+});
+
+app.get('/api/tickets', authenticateRequest, async (req, res) => {
+  try {
+    const tickets = await dbAll('SELECT * FROM support_tickets WHERE user_id = ? ORDER BY updated_at DESC', [req.userId]);
+    res.json({ tickets });
+  } catch (err) {
+    console.error('List tickets error:', err);
+    res.status(500).json({ error: 'Server error listing tickets' });
+  }
+});
+
+app.get('/api/tickets/:id', authenticateRequest, async (req, res) => {
+  try {
+    const ticket = await dbGet('SELECT * FROM support_tickets WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    const replies = await dbAll('SELECT * FROM ticket_replies WHERE ticket_id = ? ORDER BY created_at ASC', [req.params.id]);
+    res.json({ ticket, replies });
+  } catch (err) {
+    console.error('Get ticket error:', err);
+    res.status(500).json({ error: 'Server error getting ticket' });
+  }
+});
+
+app.post('/api/tickets/:id/reply', authenticateRequest, async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message || !message.trim()) return res.status(400).json({ error: 'Message is required' });
+    const ticket = await dbGet('SELECT * FROM support_tickets WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    if (ticket.status === 'closed') return res.status(400).json({ error: 'Ticket is closed' });
+    await dbRun('INSERT INTO ticket_replies (ticket_id, user_id, is_staff, message) VALUES (?, ?, 0, ?)',
+      [req.params.id, req.userId, message.trim()]);
+    await dbRun("UPDATE support_tickets SET status = 'open', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [req.params.id]);
+    res.json({ message: 'Reply added' });
+  } catch (err) {
+    console.error('Reply ticket error:', err);
+    res.status(500).json({ error: 'Server error replying to ticket' });
+  }
 });
 
 // Start the HTTP server only after tables and default rates exist.
