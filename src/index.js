@@ -1740,6 +1740,15 @@ async function initSchema() {
       FOREIGN KEY (ticket_id) REFERENCES support_tickets(id),
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
+
+    CREATE TABLE IF NOT EXISTS house_pool (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      total_deposits_usd REAL DEFAULT 0,
+      total_payouts_usd REAL DEFAULT 0,
+      total_house_revenue_usd REAL DEFAULT 0,
+      current_balance_usd REAL DEFAULT 0,
+      last_updated TEXT DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 }
 async function initDatabaseAndSchema() {
@@ -3540,13 +3549,16 @@ bot.command('withdraw', async (ctx) => {
     }
     
     const btcPrice = await getBtcPriceUsd();
-    const btcAmount = Math.floor((amount / btcPrice) * 100000000) / 100000000;
+    const feeUsd = Math.floor(amount * WITHDRAWAL_FEE_PERCENT * 100) / 100;
+    const netUsd = amount - feeUsd;
+    const btcAmount = Math.floor((netUsd / btcPrice) * 100000000) / 100000000;
     
     await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_withdrawn = total_withdrawn + ? WHERE user_id = ?', [amount, amount, user.id]);
+    await creditHouseRevenue(feeUsd);
     const result = await dbRun('INSERT INTO withdrawal_requests (user_id, amount_usd, btc_amount, btc_address, status) VALUES (?, ?, ?, ?, ?)',
-      [user.id, amount, btcAmount, btcAddress, 'pending']);
+      [user.id, netUsd, btcAmount, btcAddress, 'pending']);
     
-    ctx.reply(`✅ Withdrawal Requested\n\nAmount: $${amount.toFixed(2)}\nBTC: ${btcAmount} BTC\nTo: ${btcAddress}\n\nYou will receive your BTC within 24-48 hours.`);
+    ctx.reply(`✅ Withdrawal Requested\n\nAmount: $${amount.toFixed(2)} (3% fee: $${feeUsd.toFixed(2)})\nBTC: ${btcAmount} BTC ($${netUsd.toFixed(2)})\nTo: ${btcAddress}\n\nYou will receive your BTC within 24-48 hours.`);
   } catch(e) { console.error('Telegram withdraw error:', e); ctx.reply('Error processing withdrawal. Try again.'); }
 });
 
@@ -3586,10 +3598,14 @@ bot.on('successful_payment', async (ctx) => {
   try {
     const payload = JSON.parse(ctx.message.successful_payment.invoice_payload);
     const { userId, usd } = payload;
+    const feeUsd = Math.floor(usd * DEPOSIT_FEE_PERCENT * 100) / 100;
+    const netUsd = usd - feeUsd;
     await dbRun('INSERT OR IGNORE INTO user_balances (user_id, usd_balance) VALUES (?, 0)', [userId]);
-    await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [usd, userId]);
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_deposited = total_deposited + ? WHERE user_id = ?', [netUsd, usd, userId]);
+    await creditPoolDeposit(netUsd);
+    await creditHouseRevenue(feeUsd);
     const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [userId]);
-    ctx.reply(`✅ Payment received!\n\n+$${usd.toFixed(2)} added to your balance.\nNew balance: $${(bal?.usd_balance || 0).toFixed(2)}\n\nNow play: /coinflip, /slots, or /crash!`);
+    ctx.reply(`✅ Payment received!\n\n+$${netUsd.toFixed(2)} added to your balance (2% fee: $${feeUsd.toFixed(2)}).\nNew balance: $${(bal?.usd_balance || 0).toFixed(2)}\n\nNow play: /coinflip, /slots, or /crash!`);
   } catch(e) { console.error('Payment processing error:', e); ctx.reply('Payment received but error crediting balance. Contact support.'); }
 });
 
@@ -3625,8 +3641,15 @@ bot.command('coinflip', async (ctx) => {
     const multiplier = won ? (2 - HOUSE_EDGE * 2) : 0;
     const payout = won ? Math.floor(stake * multiplier * 100) / 100 : 0;
 
+    const coverage = await checkPoolCoverage(stake);
+    if (!coverage.allowed) {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stake, stake, user.id]);
+      await creditHouseRevenue(stake);
+      ctx.reply(`House pool cannot cover this bet ($${stake.toFixed(2)}). Try a smaller stake.`);
+      return;
+    }
     await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stake, stake, user.id]);
-    if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, user.id]);
+    if (payout > 0) { await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, user.id]); await debitPoolPayout(payout); } else { await creditHouseRevenue(stake); }
     await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'coinflip', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
       [user.id, stake, multiplier, payout, won ? 'won' : 'lost', JSON.stringify({ choice, result, source: 'telegram' }), serverSeed, cSeed, nonce]);
 
@@ -3675,8 +3698,15 @@ bot.command('slots', async (ctx) => {
     }
     const payout = multiplier > 0 ? Math.floor(stake * multiplier * 100) / 100 : 0;
 
+    const coverage = await checkPoolCoverage(stake);
+    if (!coverage.allowed) {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stake, stake, user.id]);
+      await creditHouseRevenue(stake);
+      ctx.reply(`House pool cannot cover this bet ($${stake.toFixed(2)}). Try a smaller stake.`);
+      return;
+    }
     await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stake, stake, user.id]);
-    if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, user.id]);
+    if (payout > 0) { await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, user.id]); await debitPoolPayout(payout); } else { await creditHouseRevenue(stake); }
     await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'slots', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
       [user.id, stake, multiplier, payout, result, JSON.stringify({ reels, source: 'telegram' }), serverSeed, cSeed, nonce]);
 
@@ -3710,6 +3740,14 @@ bot.command('crash', async (ctx) => {
     const nonce = Date.now();
     const crashPoint = generateCrashPoint(serverSeed, cSeed, nonce);
 
+    const coverage = await checkPoolCoverage(stake);
+    if (!coverage.allowed) {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stake, stake, user.id]);
+      await creditHouseRevenue(stake);
+      ctx.reply(`House pool cannot cover this bet ($${stake.toFixed(2)}). Try a smaller stake.`);
+      return;
+    }
+
     await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stake, user.id]);
 
     const { Markup } = require('telegraf');
@@ -3729,12 +3767,16 @@ bot.command('crash', async (ctx) => {
     const updateInterval = setInterval(async () => {
       if (cashedOut || crashed) { clearInterval(updateInterval); return; }
       const elapsed = (Date.now() - startTime) / 1000;
-      currentMult = 1 + (elapsed * elapsed * 0.15);
+      const baseGrowth = Math.exp(0.18 * elapsed) - 1;
+      const stutter = Math.sin(elapsed * 7.3) * 0.015 + Math.sin(elapsed * 13.1) * 0.008;
+      currentMult = 1 + baseGrowth + stutter;
+      if (currentMult < 1.01) currentMult = 1.01;
 
       if (currentMult >= crashPoint) {
         crashed = true;
         clearInterval(updateInterval);
         await dbRun('UPDATE user_balances SET total_lost = total_lost + ? WHERE user_id = ?', [stake, user.id]);
+        await creditHouseRevenue(stake);
         await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'castle_crash', ?, 'USD', 0, 0, 'crashed', ?, ?)`,
           [user.id, stake, JSON.stringify({ crashPoint, multiplierAtCrash: currentMult, source: 'telegram' }), nonce]);
         try {
@@ -3766,6 +3808,7 @@ bot.command('crash', async (ctx) => {
         game.crashed = true;
         clearInterval(game.updateInterval);
         await dbRun('UPDATE user_balances SET total_lost = total_lost + ? WHERE user_id = ?', [stake, user.id]);
+        await creditHouseRevenue(stake);
         await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'castle_crash', ?, 'USD', 0, 0, 'crashed', ?, ?)`,
           [user.id, stake, JSON.stringify({ crashPoint, multiplierAtCrash: game.currentMult, source: 'telegram', reason: 'timeout' }), nonce]);
         try {
@@ -3801,6 +3844,7 @@ bot.action(/crash_cashout_(\d+)_(\d+)_([\d.]+)/, async (ctx) => {
 
     const payout = Math.floor(stake * game.currentMult * 100) / 100;
     await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, userId]);
+    await debitPoolPayout(payout);
     await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'castle_crash', ?, 'USD', ?, ?, 'cashed_out', ?, ?)`,
       [userId, stake, game.currentMult, payout, JSON.stringify({ cashoutMultiplier: game.currentMult, source: 'telegram' }), nonce]);
 
@@ -3859,8 +3903,15 @@ bot.command('dice', async (ctx) => {
     }
     const payout = won ? Math.floor(stake * multiplier * 100) / 100 : 0;
 
+    const coverage = await checkPoolCoverage(stake);
+    if (!coverage.allowed) {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stake, stake, user.id]);
+      await creditHouseRevenue(stake);
+      ctx.reply(`House pool cannot cover this bet ($${stake.toFixed(2)}). Try a smaller stake.`);
+      return;
+    }
     await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stake, stake, user.id]);
-    if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, user.id]);
+    if (payout > 0) { await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, user.id]); await debitPoolPayout(payout); } else { await creditHouseRevenue(stake); }
 
     await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'dice', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
       [user.id, stake, multiplier, payout, won ? 'won' : 'lost', JSON.stringify({ die1, die2, sum, prediction, numDice, mode: isSingleDie ? 'single' : 'sum', source: 'telegram' }), serverSeed, cSeed, nonce]);
@@ -5713,6 +5764,8 @@ app.post('/api/convert', authenticateRequest, async (req, res) => {
   
   // Track the fee in BTC equivalent for platform revenue pool
   const feeInBTC = await trackFeeFromConversion(fee, targetCurrency);
+  const feeUsd = Math.floor(usdValue * CONVERSION_FEE * 100) / 100;
+  await creditHouseRevenue(feeUsd);
   trackConversion();
   
   // Deduct tokens now and queue a payout - actual crypto is sent manually by an admin
@@ -6702,6 +6755,13 @@ async function completeEscrowTrade(tradeId) {
     WHERE skin_id = ? AND seller_id = ? AND buyer_id = ? AND status = 'pending'
   `, [priceUsd, buyerCurrency, priceInBuyerCurrency, trade.skin_id, trade.seller_id, trade.buyer_id]);
 
+  // Marketplace fee: 3% of USD value goes to house pool
+  if (priceUsd > 0) {
+    const marketplaceFee = Math.floor(priceUsd * 0.03 * 100) / 100;
+    await creditHouseRevenue(marketplaceFee);
+    logSystemEvent('info', `Marketplace fee collected`, `Trade ID: ${tradeId}, Fee: $${marketplaceFee.toFixed(2)} (3% of $${priceUsd.toFixed(2)})`);
+  }
+
   // Referral commission: credit agent on buyer's first completed purchase
   if (priceUsd > 0) {
     const buyerRecord = await dbGet('SELECT referred_by FROM users WHERE id = ?', [trade.buyer_id]);
@@ -7343,11 +7403,58 @@ const HOUSE_EDGE = 0.05;
 const BTC_WALLET = process.env.BTC_WALLET_ADDRESS || 'bc1q7s36q98hdpsj59np02ky5xlak8vd9pwwpa62hv';
 const MIN_BTC_DEPOSIT = 0.0001; // ~$6.50 at $65k BTC
 const MIN_WITHDRAWAL_USD = 5.00;
+const DEPOSIT_FEE_PERCENT = 0.02;  // 2% fee on deposits goes to house
+const WITHDRAWAL_FEE_PERCENT = 0.03; // 3% fee on withdrawals goes to house
 
 // Admin user IDs that get virtual $10,000 arcade balance for testing
 const ARCADE_ADMIN_IDS = [2]; // Nathi101 (mpofuntc@gmail.com)
 async function isArcadeAdmin(userId) {
   return ARCADE_ADMIN_IDS.includes(userId);
+}
+
+// ===== HOUSE POOL =====
+// Pool-backed model: all deposits feed the pool, payouts come from the pool.
+// If pool can't cover a potential payout, max multiplier is capped.
+// House revenue (fees) is tracked separately and added to pool.
+
+async function ensureHousePool() {
+  const pool = await dbGet('SELECT * FROM house_pool WHERE id = 1');
+  if (!pool) {
+    await dbRun('INSERT INTO house_pool (id, total_deposits_usd, total_payouts_usd, total_house_revenue_usd, current_balance_usd) VALUES (1, 0, 0, 0, 0)');
+  }
+  return pool || { id: 1, total_deposits_usd: 0, total_payouts_usd: 0, total_house_revenue_usd: 0, current_balance_usd: 0 };
+}
+
+async function getPoolBalance() {
+  const pool = await dbGet('SELECT current_balance_usd FROM house_pool WHERE id = 1');
+  return pool ? pool.current_balance_usd : 0;
+}
+
+async function creditPoolDeposit(amountUsd) {
+  await ensureHousePool();
+  await dbRun('UPDATE house_pool SET total_deposits_usd = total_deposits_usd + ?, current_balance_usd = current_balance_usd + ?, last_updated = CURRENT_TIMESTAMP WHERE id = 1', [amountUsd, amountUsd]);
+}
+
+async function debitPoolPayout(amountUsd) {
+  await dbRun('UPDATE house_pool SET total_payouts_usd = total_payouts_usd + ?, current_balance_usd = current_balance_usd - ?, last_updated = CURRENT_TIMESTAMP WHERE id = 1', [amountUsd, amountUsd]);
+}
+
+async function creditHouseRevenue(amountUsd) {
+  await ensureHousePool();
+  await dbRun('UPDATE house_pool SET total_house_revenue_usd = total_house_revenue_usd + ?, current_balance_usd = current_balance_usd + ?, last_updated = CURRENT_TIMESTAMP WHERE id = 1', [amountUsd, amountUsd]);
+}
+
+// Check if pool can cover a potential max payout for a stake.
+// Returns { allowed, maxMultiplier } — maxMultiplier is capped if pool is low.
+async function checkPoolCoverage(stakeAmount) {
+  const poolBalance = await getPoolBalance();
+  if (poolBalance <= 0) return { allowed: false, maxMultiplier: 0, poolBalance };
+  // Max multiplier the pool can afford for this stake
+  const maxAffordMult = Math.floor((poolBalance / stakeAmount) * 100) / 100;
+  // Cap at game's theoretical max (100x for crash, game-specific for others)
+  const cappedMult = Math.min(maxAffordMult, 100);
+  // Allow bet only if pool can at least cover the stake (1x return)
+  return { allowed: cappedMult >= 1, maxMultiplier: cappedMult, poolBalance };
 }
 
 // ===== CRYPTO DEPOSIT & WITHDRAWAL SYSTEM =====
@@ -7496,16 +7603,22 @@ app.post('/api/arcade/claim-deposit', authenticateRequest, async (req, res) => {
     
     // Assign to this user
     const btcPrice = await getBtcPriceUsd();
-    const usdAmount = Math.floor(deposit.btc_amount * btcPrice * 100) / 100;
+    const grossUsd = Math.floor(deposit.btc_amount * btcPrice * 100) / 100;
+    const feeUsd = Math.floor(grossUsd * DEPOSIT_FEE_PERCENT * 100) / 100;
+    const usdAmount = grossUsd - feeUsd;
     
-    await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_deposited = total_deposited + ? WHERE user_id = ?', [usdAmount, usdAmount, req.userId]);
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_deposited = total_deposited + ? WHERE user_id = ?', [usdAmount, grossUsd, req.userId]);
     await dbRun('UPDATE crypto_deposits SET user_id = ?, status = ?, usd_credited = ?, credited_at = CURRENT_TIMESTAMP WHERE id = ?', 
       [req.userId, 'confirmed', usdAmount, deposit.id]);
+    // Credit net deposit to pool and fee as house revenue
+    await creditPoolDeposit(usdAmount);
+    await creditHouseRevenue(feeUsd);
     
     const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
     res.json({ 
-      message: `Deposit confirmed! ${deposit.btc_amount} BTC = $${usdAmount} credited to your balance.`,
+      message: `Deposit confirmed! ${deposit.btc_amount} BTC = $${grossUsd} (2% fee: $${feeUsd}). $${usdAmount} credited to your balance.`,
       usdAmount,
+      feeUsd,
       newBalance: bal?.usd_balance || 0
     });
   } catch(e) {
@@ -7537,21 +7650,27 @@ app.post('/api/arcade/withdraw', authenticateRequest, async (req, res) => {
     if (!bal || bal.usd_balance < amount) return res.status(400).json({ error: 'Insufficient balance' });
     
     const btcPrice = await getBtcPriceUsd();
-    const btcAmount = Math.floor((amount / btcPrice) * 100000000) / 100000000;
+    const feeUsd = Math.floor(amount * WITHDRAWAL_FEE_PERCENT * 100) / 100;
+    const netUsd = amount - feeUsd;
+    const btcAmount = Math.floor((netUsd / btcPrice) * 100000000) / 100000000;
     
     // Deduct balance immediately and create withdrawal request
     await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_withdrawn = total_withdrawn + ? WHERE user_id = ?', [amount, amount, req.userId]);
+    // Credit withdrawal fee to house pool
+    await creditHouseRevenue(feeUsd);
     
     const result = await dbRun('INSERT INTO withdrawal_requests (user_id, amount_usd, btc_amount, btc_address, status) VALUES (?, ?, ?, ?, ?)',
-      [req.userId, amount, btcAmount, btcAddress, 'pending']);
+      [req.userId, netUsd, btcAmount, btcAddress, 'pending']);
     
-    logSystemEvent('info', `Withdrawal requested by user ${req.userId}`, `$${amount} to ${btcAddress} (${btcAmount} BTC)`);
+    logSystemEvent('info', `Withdrawal requested by user ${req.userId}`, `$${amount} (fee: $${feeUsd}) to ${btcAddress} (${btcAmount} BTC)`);
     
     res.json({ 
-      message: 'Withdrawal request submitted. You will receive your BTC within 24-48 hours.',
+      message: `Withdrawal request submitted. 3% fee: $${feeUsd}. You will receive ${btcAmount} BTC ($${netUsd}) within 24-48 hours.`,
       withdrawalId: result.lastID,
       btcAmount,
       btcAddress,
+      feeUsd,
+      netUsd,
       newBalance: bal.usd_balance - amount
     });
   } catch(e) {
@@ -7832,6 +7951,12 @@ app.post('/api/arcade/coinflip', authenticateRequest, async (req, res) => {
   if (!isAdmin) {
     bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
     if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+    const coverage = await checkPoolCoverage(stakeAmount);
+    if (!coverage.allowed) {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
+      await creditHouseRevenue(stakeAmount);
+      return res.status(400).json({ error: 'House pool cannot cover this bet. Try a smaller stake.', poolInsufficient: true, newBalance: bal.usd_balance - stakeAmount });
+    }
   }
 
   const serverSeed = generateServerSeed();
@@ -7845,7 +7970,12 @@ app.post('/api/arcade/coinflip', authenticateRequest, async (req, res) => {
 
   if (!isAdmin) {
     await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
-    if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+    if (payout > 0) {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+      await debitPoolPayout(payout);
+    } else {
+      await creditHouseRevenue(stakeAmount);
+    }
   }
 
   await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'coinflip', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
@@ -7869,6 +7999,12 @@ app.post('/api/arcade/slots', authenticateRequest, async (req, res) => {
   if (!isAdmin) {
     bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
     if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+    const coverage = await checkPoolCoverage(stakeAmount);
+    if (!coverage.allowed) {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
+      await creditHouseRevenue(stakeAmount);
+      return res.status(400).json({ error: 'House pool cannot cover this bet. Try a smaller stake.', poolInsufficient: true, newBalance: bal.usd_balance - stakeAmount });
+    }
   }
 
   const serverSeed = generateServerSeed();
@@ -7892,7 +8028,12 @@ app.post('/api/arcade/slots', authenticateRequest, async (req, res) => {
   const payout = multiplier > 0 ? Math.floor(stakeAmount * multiplier * 100) / 100 : 0;
   if (!isAdmin) {
     await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
-    if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+    if (payout > 0) {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+      await debitPoolPayout(payout);
+    } else {
+      await creditHouseRevenue(stakeAmount);
+    }
   }
 
   await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'slots', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
@@ -7903,11 +8044,72 @@ app.post('/api/arcade/slots', authenticateRequest, async (req, res) => {
 });
 
 // ===== CASTLE CRASH =====
+// Three-roll system for Aviator-level unpredictability:
+// Roll 1: picks a bucket with non-round, irregular boundaries (harder to learn)
+// Roll 2: power-curve jitter within the bucket (non-linear distribution)
+// Roll 3: introduces "dead zones" (false security) and "danger clusters" (elevated risk)
+// This creates psychological tension: players can't develop a "feel" for crash patterns.
 function generateCrashPoint(serverSeed, clientSeed, nonce) {
-  const roll = provablyFairResult(serverSeed, clientSeed, nonce);
-  if (roll < HOUSE_EDGE) return 1.00;
-  const crash = 1 / (1 - roll);
-  return Math.min(crash, 100);
+  const roll1 = provablyFairResult(serverSeed, clientSeed, nonce);
+  const roll2 = provablyFairResult(serverSeed, clientSeed, nonce + 1);
+  const roll3 = provablyFairResult(serverSeed, clientSeed, nonce + 2);
+
+  // 5% instant crash (house edge) — but use roll3 so it's not correlated with bucket selection
+  if (roll3 < HOUSE_EDGE) return 1.00;
+
+  // Normalize roll1 above house edge
+  const r = (roll1 - 0) / 1; // full range, house edge handled above by roll3
+
+  // Irregular bucket boundaries (non-round numbers — harder for players to memorize)
+  // Probabilities are weighted to create tension: lots of early crashes (fear),
+  // a "safe zone" dead zone in the mid range (false confidence), then danger clusters.
+  let minCrash, maxCrash;
+  if (r < 0.35) {
+    // 35% — early crash (1.01x - 2.13x) — keeps players on edge from the start
+    minCrash = 1.01;
+    maxCrash = 2.13;
+  } else if (r < 0.58) {
+    // 23% — low-mid crash (2.13x - 3.87x) — common enough that 2-3x feels risky
+    minCrash = 2.13;
+    maxCrash = 3.87;
+  } else if (r < 0.74) {
+    // 16% — "dead zone" (3.87x - 7.42x) — crashes here feel "safe" but aren't
+    // This builds false confidence: players who cash out at 4x feel smart
+    minCrash = 3.87;
+    maxCrash = 7.42;
+  } else if (r < 0.87) {
+    // 13% — danger cluster (7.42x - 16.81x) — the "tempting zone" where greed kicks in
+    minCrash = 7.42;
+    maxCrash = 16.81;
+  } else if (r < 0.96) {
+    // 9% — high zone (16.81x - 43.55x) — moon shots that keep players coming back
+    minCrash = 16.81;
+    maxCrash = 43.55;
+  } else {
+    // 4% — extreme moon (43.55x - 100x) — rare jackpots that create legends
+    minCrash = 43.55;
+    maxCrash = 100.00;
+  }
+
+  // Roll 3: dead zone / danger cluster modifier
+  // 15% chance of a "danger nudge" — pushes crash point toward the lower end of its bucket
+  // 10% chance of a "lucky nudge" — pushes crash point toward the upper end of its bucket
+  // This means even within a bucket, the distribution isn't consistent
+  let withinRoll = roll2;
+  if (roll3 > 0.05 && roll3 < 0.20) {
+    // Danger nudge — bias toward lower end (crash sooner than expected)
+    withinRoll = Math.pow(withinRoll, 2.5);
+  } else if (roll3 > 0.90) {
+    // Lucky nudge — bias toward upper end (crash later than expected)
+    withinRoll = Math.pow(withinRoll, 0.4);
+  }
+
+  // Power curve with variable exponent from roll2 for non-linear distribution
+  const jitterExp = 0.6 + roll2 * 1.2;
+  const within = Math.pow(withinRoll, jitterExp);
+  const crash = minCrash + within * (maxCrash - minCrash);
+
+  return Math.min(Math.floor(crash * 100) / 100, 100);
 }
 
 app.post('/api/arcade/castle-crash/start', authenticateRequest, async (req, res) => {
@@ -7920,12 +8122,31 @@ app.post('/api/arcade/castle-crash/start', authenticateRequest, async (req, res)
   if (!isAdmin) {
     bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
     if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+    // Pool coverage check — if pool can't cover, user loses stake immediately
+    const coverage = await checkPoolCoverage(stakeAmount);
+    if (!coverage.allowed) {
+      // Pool can't cover this bet — forfeit stake to pool
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
+      await creditHouseRevenue(stakeAmount);
+      await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'castle_crash', ?, 'USD', 0, 0, 'pool_insufficient', ?, ?)`,
+        [req.userId, stakeAmount, JSON.stringify({ reason: 'pool_insufficient', poolBalance: coverage.poolBalance }), Date.now()]);
+      const newBal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+      return res.status(400).json({ error: 'The house pool cannot cover this bet right now. Your stake has been returned as house credit. Try a smaller stake.', poolInsufficient: true, newBalance: newBal?.usd_balance || 0 });
+    }
   }
 
   const serverSeed = generateServerSeed();
   const cSeed = clientSeed || arcadeCrypto.randomBytes(8).toString('hex');
   const nonce = Date.now();
-  const crashPoint = generateCrashPoint(serverSeed, cSeed, nonce);
+  let crashPoint = generateCrashPoint(serverSeed, cSeed, nonce);
+
+  // Cap crash point to what the pool can afford
+  if (!isAdmin) {
+    const coverage = await checkPoolCoverage(stakeAmount);
+    if (coverage.maxMultiplier > 0 && crashPoint > coverage.maxMultiplier) {
+      crashPoint = coverage.maxMultiplier;
+    }
+  }
 
   if (!isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stakeAmount, req.userId]);
 
@@ -7944,7 +8165,10 @@ app.post('/api/arcade/castle-crash/cashout', authenticateRequest, async (req, re
   if (existing) return res.status(400).json({ error: 'Already cashed out' });
 
   const payout = Math.floor(stakeAmount * cashoutMult * 100) / 100;
-  if (!isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+  if (!isAdmin) {
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+    await debitPoolPayout(payout);
+  }
   await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'castle_crash', ?, 'USD', ?, ?, 'cashed_out', ?, ?)`,
     [req.userId, stakeAmount, cashoutMult, payout, JSON.stringify({ cashoutMultiplier: cashoutMult, admin_test: isAdmin }), sessionId]);
 
@@ -7962,7 +8186,10 @@ app.post('/api/arcade/castle-crash/crash', authenticateRequest, async (req, res)
   const { sessionId, stake, crashPoint, multiplierAtCrash } = req.body;
   const stakeAmount = parseFloat(stake);
   const isAdmin = await isArcadeAdmin(req.userId);
-  if (!isAdmin) await dbRun('UPDATE user_balances SET total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, req.userId]);
+  if (!isAdmin) {
+    await dbRun('UPDATE user_balances SET total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, req.userId]);
+    await creditHouseRevenue(stakeAmount);
+  }
   await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'castle_crash', ?, 'USD', 0, 0, 'crashed', ?, ?)`,
     [req.userId, stakeAmount, JSON.stringify({ crashPoint, multiplierAtCrash, admin_test: isAdmin }), sessionId]);
 
@@ -7992,6 +8219,12 @@ app.post('/api/arcade/mines/start', authenticateRequest, async (req, res) => {
     if (!isAdmin) {
       bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
       if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+      const coverage = await checkPoolCoverage(stakeAmount);
+      if (!coverage.allowed) {
+        await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
+        await creditHouseRevenue(stakeAmount);
+        return res.status(400).json({ error: 'House pool cannot cover this bet. Try a smaller stake.', poolInsufficient: true, newBalance: bal.usd_balance - stakeAmount });
+      }
     }
 
     const serverSeed = generateServerSeed();
@@ -8051,7 +8284,7 @@ app.post('/api/arcade/mines/pick', authenticateRequest, async (req, res) => {
 
     if (isMine) {
       game.busted = true;
-      if (!game.isAdmin) { try { await dbRun('UPDATE user_balances SET total_lost = total_lost + ? WHERE user_id = ?', [game.stake, req.userId]); } catch(e) {} }
+      if (!game.isAdmin) { try { await dbRun('UPDATE user_balances SET total_lost = total_lost + ? WHERE user_id = ?', [game.stake, req.userId]); await creditHouseRevenue(game.stake); } catch(e) {} }
       try { await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'mines', ?, 'USD', 0, 0, 'busted', ?, ?)`,
         [req.userId, game.stake, JSON.stringify({ mines: game.mines, revealed: game.revealed, minePositions: game.minePositions, admin_test: game.isAdmin }), sid]); } catch(e) { console.error('Mines pick DB log error:', e); }
       const bal = game.isAdmin ? null : await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
@@ -8094,7 +8327,7 @@ app.post('/api/arcade/mines/cashout', authenticateRequest, async (req, res) => {
     const multiplier = fairMult * (1 - MINES_HOUSE_EDGE);
     const payout = Math.floor(game.stake * multiplier * 100) / 100;
 
-    if (!game.isAdmin) { try { await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]); } catch(e) { console.error('Mines cashout balance update error:', e); } }
+    if (!game.isAdmin) { try { await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]); await debitPoolPayout(payout); } catch(e) { console.error('Mines cashout balance update error:', e); } }
     try { await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'mines', ?, 'USD', ?, ?, 'cashed_out', ?, ?)`,
       [req.userId, game.stake, multiplier, payout, JSON.stringify({ mines: game.mines, revealed: game.revealed, minePositions: game.minePositions, admin_test: game.isAdmin }), sid]); } catch(e) { console.error('Mines cashout DB log error:', e); }
 
@@ -8131,6 +8364,12 @@ app.post('/api/arcade/dice', authenticateRequest, async (req, res) => {
   if (!isAdmin) {
     bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
     if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+    const coverage = await checkPoolCoverage(stakeAmount);
+    if (!coverage.allowed) {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
+      await creditHouseRevenue(stakeAmount);
+      return res.status(400).json({ error: 'House pool cannot cover this bet. Try a smaller stake.', poolInsufficient: true, newBalance: bal.usd_balance - stakeAmount });
+    }
   }
 
   const serverSeed = generateServerSeed();
@@ -8187,7 +8426,12 @@ app.post('/api/arcade/dice', authenticateRequest, async (req, res) => {
 
   if (!isAdmin) {
     await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
-    if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+    if (payout > 0) {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+      await debitPoolPayout(payout);
+    } else {
+      await creditHouseRevenue(stakeAmount);
+    }
   }
 
   await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'dice', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
@@ -8218,6 +8462,12 @@ app.post('/api/arcade/plinko', authenticateRequest, async (req, res) => {
   if (!isAdmin) {
     bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
     if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+    const coverage = await checkPoolCoverage(stakeAmount);
+    if (!coverage.allowed) {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
+      await creditHouseRevenue(stakeAmount);
+      return res.status(400).json({ error: 'House pool cannot cover this bet. Try a smaller stake.', poolInsufficient: true, newBalance: bal.usd_balance - stakeAmount });
+    }
   }
 
   const serverSeed = generateServerSeed();
@@ -8241,7 +8491,12 @@ app.post('/api/arcade/plinko', authenticateRequest, async (req, res) => {
 
   if (!isAdmin) {
     await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
-    if (payout > 0) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+    if (payout > 0) {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+      await debitPoolPayout(payout);
+    } else {
+      await creditHouseRevenue(stakeAmount);
+    }
   }
 
   await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'plinko', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
@@ -8372,6 +8627,7 @@ app.post('/api/arcade/pvp/action', authenticateRequest, async (req, res) => {
         const totalPot = game.stake * 2;
         const houseFee = Math.floor(totalPot * PVP_HOUSE_FEE * 100) / 100;
         const prize = Math.floor((totalPot - houseFee) * 100) / 100;
+        await creditHouseRevenue(houseFee);
 
         if (winner === 0) {
           if (!game.player1.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [prize, prize, game.player1.userId]);
@@ -9387,6 +9643,24 @@ app.get('/api/admin/fee-pool', checkAdminSession, async (req, res) => {
   });
 });
 
+// API: View house pool balance (arcade collateral)
+app.get('/api/admin/house-pool', checkAdminSession, async (req, res) => {
+  const pool = await dbGet('SELECT * FROM house_pool WHERE id = 1');
+  const recentBets = await dbAll('SELECT * FROM game_bets ORDER BY id DESC LIMIT 20');
+  const totalWagered = await dbGet("SELECT COALESCE(SUM(stake_amount), 0) as total FROM game_bets WHERE admin_test = 0 OR admin_test IS NULL");
+  const totalWon = await dbGet("SELECT COALESCE(SUM(payout), 0) as total FROM game_bets WHERE result IN ('won', 'cashed_out', 'jackpot') AND (admin_test = 0 OR admin_test IS NULL)");
+  
+  res.json({
+    pool: pool || { total_deposits: 0, total_payouts: 0, house_revenue: 0, current_balance: 0 },
+    stats: {
+      totalWagered: totalWagered?.total || 0,
+      totalWon: totalWon?.total || 0,
+      netPosition: (pool?.current_balance || 0)
+    },
+    recentBets
+  });
+});
+
 // API: Manual trigger fee sweep
 app.post('/api/admin/sweep-fees', checkAdminSession, async (req, res) => {
   const pool = await dbGet('SELECT * FROM platform_fee_pool WHERE id = 1');
@@ -9958,7 +10232,7 @@ async function postQuizOfTheDay() {
     await postToChannel(msg);
 
     await dbRun('INSERT INTO community_posts (post_type, title, content, link) VALUES (?, ?, ?, ?)',
-      ['quiz', `Quiz of the Day: ${quiz.title}`, `${quiz.description || ''} | Difficulty: ${quiz.difficulty} | Reward: ${quiz.reward_points} Royal Coins`, 'https://pixelpulse.zentriva-clubsync.online']);
+      ['quiz', `Quiz of the Day: ${quiz.title}`, `${quiz.description || ''} | Difficulty: ${quiz.difficulty} | Reward: ${quiz.reward_points} Royal Coins`, `quiz:${quiz.id}`]);
   } catch (err) {
     console.error('Error posting quiz of the day:', err);
   }

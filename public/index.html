@@ -26,6 +26,220 @@
             min-height: 100vh;
         }
 
+        /* ===== THEME SYSTEM: DAY / NIGHT ===== */
+        :root {
+            --bg-primary: #0d0d14;
+            --bg-secondary: #12121c;
+            --bg-card: #161616;
+            --bg-input: #2f2f2f;
+            --text-primary: #fff;
+            --text-secondary: #aaa;
+            --text-muted: #888;
+            --border-color: #333;
+            --accent: #e50914;
+        }
+
+        body.light-mode {
+            --bg-primary: #f2f4f7;
+            --bg-secondary: #ffffff;
+            --bg-card: #ffffff;
+            --bg-input: #f5f5f5;
+            --text-primary: #1a1a2e;
+            --text-secondary: #4a4a5a;
+            --text-muted: #6b6b7b;
+            --border-color: #d0d0e0;
+            --accent: #e50914;
+        }
+
+        body.light-mode {
+            background:
+                linear-gradient(180deg, rgba(220,230,245,0.92) 0%, rgba(235,240,250,0.9) 40%, rgba(240,245,255,0.88) 100%),
+                url('/images/pixel-kingdom-bg.svg') center top / cover no-repeat fixed,
+                linear-gradient(180deg, #dbe4f0 0%, #e8eef8 40%, #f0f4fa 100%);
+            color: var(--text-primary);
+            background-attachment: fixed;
+        }
+
+        body.light-mode .navbar {
+            background: rgba(255, 255, 255, 0.94);
+            border-bottom: 1px solid rgba(229, 9, 20, 0.15);
+        }
+
+        body.light-mode .nav-links a,
+        body.light-mode .footer-link,
+        body.light-mode a {
+            color: #1a1a2e;
+        }
+
+        body.light-mode .nav-links a:hover,
+        body.light-mode .footer-link:hover {
+            color: var(--accent);
+        }
+
+        body.light-mode .search-container,
+        body.light-mode .search-input,
+        body.light-mode input,
+        body.light-mode select,
+        body.light-mode textarea {
+            background: #f5f5f5;
+            border-color: #d0d0e0;
+            color: #1a1a2e;
+        }
+
+        body.light-mode .search-input::placeholder {
+            color: #6b6b7b;
+        }
+
+        body.light-mode .market-option,
+        body.light-mode .anime-card,
+        body.light-mode .your-bets,
+        body.light-mode .bet-item,
+        body.light-mode .modal-content,
+        body.light-mode .info-banner,
+        body.light-mode .footer-badge,
+        body.light-mode .arcade-game,
+        body.light-mode .arcade-info,
+        body.light-mode .arcade-input,
+        body.light-mode .dice-pred-btn,
+        body.light-mode .dice-single-btn,
+        body.light-mode .dice-combo-btn,
+        body.light-mode .coinflip-history,
+        body.light-mode .stats-card,
+        body.light-mode .skin-card,
+        body.light-mode .trade-card,
+        body.light-mode .leaderboard-row,
+        body.light-mode .wallet-card,
+        body.light-mode .transaction-item,
+        body.light-mode .notif-item,
+        body.light-mode .chat-bubble {
+            background: var(--bg-card);
+            border-color: var(--border-color);
+            color: var(--text-primary);
+        }
+
+        body.light-mode .market-description,
+        body.light-mode .footer-col,
+        body.light-mode .footer-bottom,
+        body.light-mode .stat-label,
+        body.light-mode .info-banner,
+        body.light-mode .market-options,
+        body.light-mode .arcade-info,
+        body.light-mode .dice-pred-btn .payout-info,
+        body.light-mode .section-subtitle,
+        body.light-mode .muted-text {
+            color: var(--text-secondary);
+        }
+
+        body.light-mode .hero {
+            background: transparent;
+        }
+
+        body.light-mode .hero-title,
+        body.light-mode .hero-subtitle,
+        body.light-mode .section-title,
+        body.light-mode h1,
+        body.light-mode h2,
+        body.light-mode h3,
+        body.light-mode h4,
+        body.light-mode h5,
+        body.light-mode h6 {
+            color: var(--text-primary);
+        }
+
+        body.light-mode .modal {
+            background: rgba(255, 255, 255, 0.8);
+        }
+
+        body.light-mode .modal-content {
+            background: #fff;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+        }
+
+        body.light-mode .modal-title {
+            color: #1a1a2e;
+        }
+
+        body.light-mode .close-btn {
+            color: #666;
+        }
+
+        /* Theme Toggle Button */
+        .theme-toggle {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            z-index: 9999;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: 1px solid var(--border-color);
+            background: rgba(20, 20, 30, 0.95);
+            color: var(--text-primary);
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            transition: all 0.3s;
+        }
+
+        body.light-mode .theme-toggle {
+            background: rgba(255, 255, 255, 0.95);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .theme-toggle:hover {
+            transform: scale(1.1);
+            border-color: var(--accent);
+        }
+
+        .theme-toggle-menu {
+            position: absolute;
+            top: 52px;
+            right: 0;
+            background: rgba(20, 20, 30, 0.98);
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 8px 0;
+            min-width: 130px;
+            display: none;
+            flex-direction: column;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        }
+
+        body.light-mode .theme-toggle-menu {
+            background: rgba(255, 255, 255, 0.98);
+            border-color: #d0d0e0;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+        }
+
+        .theme-toggle-menu.show {
+            display: flex;
+        }
+
+        .theme-option {
+            padding: 10px 16px;
+            font-size: 13px;
+            text-align: left;
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .theme-option:hover {
+            background: rgba(229, 9, 20, 0.1);
+        }
+
+        .theme-option.active {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
         .navbar {
             display: flex;
             justify-content: space-between;
@@ -1092,13 +1306,17 @@
             background: linear-gradient(180deg, #1a0a00 0%, #0d0d0d 100%);
             border: 2px solid #4a2c00;
             min-height: 140px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .arcade-crash-screen.crash-shake {
+            border-color: #f44336;
+            box-shadow: 0 0 12px rgba(244, 67, 54, 0.4), inset 0 0 8px rgba(244, 67, 54, 0.2);
         }
         .arcade-mult {
             font-size: 36px;
             font-weight: 800;
             font-family: 'PressStart2P', 'Courier New', monospace;
             text-shadow: 3px 3px 0 #000;
-            transition: color 0.3s;
         }
         .arcade-chase-track {
             display: flex;
@@ -1117,6 +1335,15 @@
         .chase-gap.closing { color: #ff9800; }
         .chase-gap.danger { color: #f44336; animation: pulse 0.5s infinite; }
         @keyframes pulse { 50% { opacity: 0.5; } }
+        .crash-shake { animation: crashShake 0.15s infinite; }
+        @keyframes crashShake {
+            0% { transform: translate(0, 0); }
+            25% { transform: translate(-1px, 1px); }
+            50% { transform: translate(1px, -1px); }
+            75% { transform: translate(-1px, 0); }
+            100% { transform: translate(0, 1px); }
+        }
+        .arcade-mult { transition: color 0.15s ease; }
         .arcade-btn {
             font-family: 'PressStart2P', 'Courier New', monospace;
             font-size: 12px;
@@ -1692,6 +1919,65 @@
     </style>
 </head>
 <body>
+    <script>
+        // ===== THEME INITIALIZATION =====
+        (function() {
+            const STORAGE_KEY = 'pixelpulse-theme';
+            const HOUR = new Date().getHours();
+            const saved = localStorage.getItem(STORAGE_KEY);
+            let mode = saved || 'auto';
+
+            function isDaytime() {
+                return HOUR >= 6 && HOUR < 18;
+            }
+
+            function applyTheme() {
+                document.body.classList.remove('light-mode');
+                if (mode === 'day' || (mode === 'auto' && isDaytime())) {
+                    document.body.classList.add('light-mode');
+                }
+            }
+
+            window.setThemeMode = function(newMode) {
+                mode = newMode;
+                localStorage.setItem(STORAGE_KEY, newMode);
+                applyTheme();
+                updateThemeToggleIcon();
+            };
+
+            window.getThemeMode = function() { return mode; };
+
+            window.cycleThemeMode = function() {
+                const next = { 'auto': 'day', 'day': 'night', 'night': 'auto' };
+                setThemeMode(next[mode] || 'auto');
+            };
+
+            window.toggleThemeMenu = function() {
+                const menu = document.getElementById('themeToggleMenu');
+                if (menu) menu.classList.toggle('show');
+            };
+
+            window.selectThemeMode = function(selectedMode) {
+                setThemeMode(selectedMode);
+                toggleThemeMenu();
+            };
+
+            window.updateThemeToggleIcon = function() {
+                const btn = document.getElementById('themeToggleBtn');
+                if (!btn) return;
+                const isLight = mode === 'day' || (mode === 'auto' && isDaytime());
+                btn.textContent = isLight ? '☀️' : '🌙';
+                btn.title = `Theme: ${mode} (click to change)`;
+            };
+
+            document.addEventListener('DOMContentLoaded', function() {
+                applyTheme();
+                updateThemeToggleIcon();
+            });
+
+            applyTheme();
+        })();
+    </script>
     <nav class="navbar">
         <a href="#" class="logo">🏰 PixelPulse</a>
         <div class="nav-links">
@@ -1716,6 +2002,11 @@
             <input type="text" class="search-input" placeholder="Search clips..." id="searchInput">
         </div>
     </nav>
+
+    <!-- Theme Toggle -->
+    <div style="position: relative;">
+        <button id="themeToggleBtn" class="theme-toggle" onclick="cycleThemeMode()" title="Theme: auto (click to change)">🌙</button>
+    </div>
 
     <div class="hero" id="home">
         <svg class="hero-pixel-bg" viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" shape-rendering="crispEdges">
@@ -2236,6 +2527,9 @@
                         <span id="crashRobber" class="chase-robber">🏃</span>
                     </div>
                     <div id="crashStatus" style="font-size: 12px; color: #888; font-family: 'Courier New', monospace;">THE ROBBER IS RUNNING...</div>
+                    <div id="crashTensionBar" style="width: 100%; height: 4px; background: #222; border-radius: 2px; overflow: hidden; margin-top: 2px;">
+                        <div id="crashTensionFill" style="height: 100%; width: 0%; background: #4caf50; transition: width 0.1s, background 0.3s;"></div>
+                    </div>
                     <div id="crashPotentialPayout" style="font-size: 12px; color: #aaa; font-family: 'Courier New', monospace;">POTENTIAL: $0.00</div>
                 </div>
                 <div id="crashSetupArea">
@@ -2797,6 +3091,19 @@
                     <input type="text" id="so2PlayerName" placeholder="Your Standoff 2 Player Name" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px; margin-bottom: 10px;">
                     <button class="btn btn-primary" style="width: 100%;" onclick="linkStandoff2Account()">Link Standoff 2 Account</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quiz Modal -->
+    <div class="modal" id="quizModal" style="display: none;">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3 class="modal-title" id="quizModalTitle">🧠 Quiz</h3>
+                <button class="close-btn" onclick="closeQuizModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="quizModalBody">
+                <div style="text-align:center;padding:30px;color:#999;">Loading quiz...</div>
             </div>
         </div>
     </div>
@@ -4736,13 +5043,14 @@
                     </div>
                 `).join('');
             } else if (post.post_type === 'quiz') {
+                const quizId = (post.link && post.link.startsWith('quiz:')) ? post.link.split(':')[1] : null;
                 body = `
                     <div style="font-size: 16px; margin-bottom: 8px;">${post.title}</div>
                     <div style="font-size: 14px; color: #ccc; margin-bottom: 12px;">${post.content}</div>
-                    <a href="${post.link || 'https://pixelpulse.zentriva-clubsync.online'}" target="_blank"
-                       style="display: inline-block; background: #e50914; color: #fff; padding: 8px 20px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600;">
+                    <button onclick="openQuizModal(${quizId || 'null'})"
+                       style="display: inline-block; background: #e50914; color: #fff; padding: 8px 20px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600; border: none; cursor: pointer;">
                         Take Quiz & Earn Coins →
-                    </a>
+                    </button>
                 `;
             } else if (post.post_type === 'discussion') {
                 body = `
@@ -5917,6 +6225,134 @@
         function closeEscrowDetailModal() { document.getElementById('escrowDetailModal').style.display = 'none'; }
         function closeMySkinListingsModal() { document.getElementById('mySkinListingsModal').style.display = 'none'; }
 
+        // ===== QUIZ MODAL =====
+        let currentQuizQuestions = [];
+        let currentQuizId = null;
+        let selectedQuizAnswers = {};
+
+        async function openQuizModal(quizId) {
+            if (!quizId) {
+                alert('Quiz not available right now.');
+                return;
+            }
+            if (!sessionToken) {
+                alert('Please login first');
+                return;
+            }
+            currentQuizId = quizId;
+            currentQuizQuestions = [];
+            selectedQuizAnswers = {};
+            document.getElementById('quizModal').style.display = 'flex';
+            document.getElementById('quizModalBody').innerHTML = '<div style="text-align:center;padding:30px;color:#999;">Loading quiz...</div>';
+            try {
+                const res = await fetch(`/api/quizzes/${quizId}`, {
+                    headers: { 'Authorization': `Bearer ${sessionToken}` }
+                });
+                if (!res.ok) throw new Error('Failed to load quiz');
+                const quiz = await res.json();
+                if (quiz.completed) {
+                    document.getElementById('quizModalBody').innerHTML = '<div style="text-align:center;padding:30px;color:#4caf50;">✅ You already completed this quiz and earned your Royal Coins!</div>';
+                    return;
+                }
+                currentQuizQuestions = quiz.questions || [];
+                document.getElementById('quizModalTitle').textContent = `🧠 ${quiz.title}`;
+                renderQuizQuestion(0);
+            } catch (err) {
+                console.error('Error loading quiz:', err);
+                document.getElementById('quizModalBody').innerHTML = '<div style="text-align:center;padding:30px;color:#e50914;">Failed to load quiz. Please try again.</div>';
+            }
+        }
+
+        function closeQuizModal() {
+            document.getElementById('quizModal').style.display = 'none';
+            currentQuizQuestions = [];
+            currentQuizId = null;
+            selectedQuizAnswers = {};
+        }
+
+        function renderQuizQuestion(index) {
+            const body = document.getElementById('quizModalBody');
+            const question = currentQuizQuestions[index];
+            if (!question) {
+                renderQuizSubmitButton();
+                return;
+            }
+            const total = currentQuizQuestions.length;
+            const selected = selectedQuizAnswers[index] !== undefined ? selectedQuizAnswers[index] : -1;
+            const optionsHtml = question.options.map((opt, i) => `
+                <label style="display:block;background:#1a1a1a;border:1px solid ${selected === i ? '#e50914' : '#333'};border-radius:8px;padding:12px 14px;margin-bottom:10px;cursor:pointer;transition:border-color 0.2s;"
+                       onmouseover="this.style.borderColor='#555'" onmouseout="this.style.borderColor='${selected === i ? '#e50914' : '#333'}'">
+                    <input type="radio" name="quiz-option" value="${i}" style="margin-right:10px;" ${selected === i ? 'checked' : ''} onchange="selectQuizAnswer(${index}, ${i})">
+                    <span style="font-size:14px;">${opt}</span>
+                </label>
+            `).join('');
+            body.innerHTML = `
+                <div style="font-size:14px;color:#aaa;margin-bottom:12px;">Question ${index + 1} of ${total}</div>
+                <div style="font-size:16px;font-weight:600;margin-bottom:18px;color:#fff;">${question.question}</div>
+                <div id="quizOptions">${optionsHtml}</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:24px;">
+                    <button class="btn btn-secondary" ${index === 0 ? 'disabled' : ''} onclick="renderQuizQuestion(${index - 1})" style="${index === 0 ? 'opacity:0.4;cursor:not-allowed;' : ''}">← Previous</button>
+                    <button class="btn btn-primary" id="quizNextBtn" onclick="renderQuizQuestion(${index + 1})" ${selected === -1 ? 'disabled' : ''}>Next →</button>
+                </div>
+            `;
+        }
+
+        function selectQuizAnswer(questionIndex, optionIndex) {
+            selectedQuizAnswers[questionIndex] = optionIndex;
+            renderQuizQuestion(questionIndex);
+        }
+
+        function renderQuizSubmitButton() {
+            const body = document.getElementById('quizModalBody');
+            const answered = Object.keys(selectedQuizAnswers).length;
+            const total = currentQuizQuestions.length;
+            const allAnswered = answered === total;
+            body.innerHTML = `
+                <div style="text-align:center;padding:20px;">
+                    <div style="font-size:18px;font-weight:600;margin-bottom:12px;color:#fff;">Ready to Submit?</div>
+                    <div style="font-size:14px;color:#aaa;margin-bottom:20px;">You answered ${answered} of ${total} questions.</div>
+                    ${!allAnswered ? '<div style="color:#e50914;font-size:13px;margin-bottom:15px;">Please answer all questions before submitting.</div>' : ''}
+                    <button class="btn btn-primary" onclick="submitQuiz()" ${allAnswered ? '' : 'disabled'} style="${allAnswered ? '' : 'opacity:0.4;cursor:not-allowed;'}">Submit Quiz & Earn Coins</button>
+                </div>
+            `;
+        }
+
+        async function submitQuiz() {
+            if (!currentQuizId) return;
+            const answers = Object.keys(selectedQuizAnswers).map(idx => ({
+                questionIndex: parseInt(idx),
+                selectedOption: selectedQuizAnswers[idx]
+            }));
+            try {
+                const res = await fetch(`/api/quizzes/${currentQuizId}/submit`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${sessionToken}`
+                    },
+                    body: JSON.stringify({ answers })
+                });
+                const result = await res.json();
+                if (!res.ok) {
+                    document.getElementById('quizModalBody').innerHTML = `<div style="text-align:center;padding:30px;color:#e50914;">${result.error || 'Failed to submit quiz.'}</div>`;
+                    return;
+                }
+                const color = result.passed ? '#4caf50' : '#e50914';
+                const coinText = result.passed ? `<div style="color:#f7931a;font-size:16px;margin-top:10px;">+${result.royalCoinsEarned} Royal Coins added to your balance!</div>` : '';
+                document.getElementById('quizModalBody').innerHTML = `
+                    <div style="text-align:center;padding:30px;color:${color};">
+                        <div style="font-size:24px;font-weight:700;margin-bottom:10px;">${result.passed ? '🎉 Quiz Passed!' : '❌ Quiz Not Passed'}</div>
+                        <div style="font-size:16px;color:#fff;margin-bottom:8px;">Score: ${result.score}% (${result.correctCount}/${result.totalQuestions})</div>
+                        ${coinText}
+                        <button class="btn btn-primary" style="margin-top:20px;" onclick="closeQuizModal()">Close</button>
+                    </div>
+                `;
+            } catch (err) {
+                console.error('Error submitting quiz:', err);
+                document.getElementById('quizModalBody').innerHTML = '<div style="text-align:center;padding:30px;color:#e50914;">Failed to submit quiz. Please try again.</div>';
+            }
+        }
+
         // ===== MY SKIN LISTINGS (delist) =====
         async function loadMySkinListings() {
             if (!sessionToken) { alert('Please login first'); return; }
@@ -7000,7 +7436,15 @@
                 crashState.animInterval = setInterval(() => {
                     if (crashState.cashedOut || crashState.crashed) { clearInterval(crashState.animInterval); return; }
                     const elapsed = (Date.now() - startTime) / 1000;
-                    crashState.currentMult = 1 + (elapsed * elapsed * 0.15);
+
+                    // Exponential growth curve (Aviator-style): starts slow, accelerates
+                    // Base: 1.0 + e^(0.18 * elapsed) - 1, which gives gentle start then steep climb
+                    // Micro-stutter: small sinusoidal variation makes the speed feel non-mechanical
+                    const baseGrowth = Math.exp(0.18 * elapsed) - 1;
+                    const stutter = Math.sin(elapsed * 7.3) * 0.015 + Math.sin(elapsed * 13.1) * 0.008;
+                    crashState.currentMult = 1 + baseGrowth + stutter;
+                    // Clamp minimum
+                    if (crashState.currentMult < 1.01) crashState.currentMult = 1.01;
 
                     // Safety: auto-crash after 90 seconds to prevent infinite interval
                     if (elapsed > 90) {
@@ -7009,6 +7453,7 @@
                         document.getElementById('crashMultiplier').textContent = `${crashState.crashPoint.toFixed(2)}x`;
                         document.getElementById('crashMultiplier').style.color = '#f44336';
                         document.getElementById('crashStatus').innerHTML = '🚨 <strong>CAUGHT!</strong> Time limit reached!';
+                        document.getElementById('crashGameArea').classList.remove('crash-shake');
                         cashoutBtn.style.display = 'none';
                         resultEl.innerHTML = `❌ LOST $${crashState.stake.toFixed(2)}`;
                         showArcadeToast('loss', '🚨', 'CAUGHT!', `-$${crashState.stake.toFixed(2)}`);
@@ -7034,6 +7479,7 @@
                         document.getElementById('crashMultiplier').textContent = `${crashState.crashPoint.toFixed(2)}x`;
                         document.getElementById('crashMultiplier').style.color = '#f44336';
                         document.getElementById('crashStatus').innerHTML = '🚨 <strong>CAUGHT!</strong> The police caught the robber!';
+                        document.getElementById('crashGameArea').classList.remove('crash-shake');
                         document.getElementById('crashRobber').textContent = '🚔';
                         document.getElementById('crashGap').textContent = 'XX';
                         document.getElementById('crashGap').className = 'chase-gap danger';
@@ -7060,33 +7506,59 @@
                     const potential = Math.floor(crashState.stake * crashState.currentMult * 100) / 100;
                     document.getElementById('crashPotentialPayout').textContent = `POTENTIAL: $${potential.toFixed(2)}`;
                     
-                    // Visualizer: gap shrinks as multiplier approaches crash point
-                    const ratio = crashState.currentMult / crashState.crashPoint;
+                    // Tension visualizer — based on TIME and MULTIPLIER only, NOT crash point
+                    // This is the key change: players can NOT gauge how close they are to crashing
                     const gapEl = document.getElementById('crashGap');
                     const robberEl = document.getElementById('crashRobber');
                     const policeEl = document.getElementById('crashPolice');
+                    const multEl = document.getElementById('crashMultiplier');
+                    const screenEl = document.getElementById('crashGameArea');
                     
-                    // Gap dashes reduce as police gets closer
+                    // Tension level: rises with multiplier, but with random surges and dips
+                    // This creates false alarms (police lunges, then falls back) and false security
+                    const baseTension = Math.min(1, (crashState.currentMult - 1) / 8); // saturates around 9x
+                    const tensionWave = Math.sin(elapsed * 2.7) * 0.15 + Math.sin(elapsed * 5.1) * 0.08;
+                    let tension = Math.max(0, Math.min(1, baseTension + tensionWave));
+                    // Random micro-surges: occasionally police "lunges" forward (false alarm)
+                    if (Math.random() < 0.04) tension = Math.min(1, tension + 0.25);
+                    
+                    // Gap dashes: based on tension, NOT crash point ratio
                     const totalDashes = 10;
-                    const remainingDashes = Math.max(1, Math.ceil(totalDashes * (1 - ratio)));
+                    const remainingDashes = Math.max(1, Math.ceil(totalDashes * (1 - tension)));
                     gapEl.textContent = '- '.repeat(remainingDashes).trim() + '>';
                     
-                    // Color changes based on danger
-                    if (ratio > 0.8) {
+                    // Color and effects based on tension level
+                    if (tension > 0.75) {
                         gapEl.className = 'chase-gap danger';
-                    } else if (ratio > 0.5) {
+                        screenEl.classList.add('crash-shake');
+                        multEl.style.color = '#f44336';
+                        document.getElementById('crashStatus').textContent = '🚨 THE POLICE ARE CLOSING IN!';
+                    } else if (tension > 0.45) {
                         gapEl.className = 'chase-gap closing';
+                        screenEl.classList.remove('crash-shake');
+                        multEl.style.color = '#ff9800';
+                        document.getElementById('crashStatus').textContent = '⚠️ The chase is heating up...';
                     } else {
                         gapEl.className = 'chase-gap';
+                        screenEl.classList.remove('crash-shake');
+                        multEl.style.color = '#4caf50';
+                        document.getElementById('crashStatus').textContent = '🏃 The robber is running...';
                     }
+
+                    // Tension meter bar
+                    const tensionFill = document.getElementById('crashTensionFill');
+                    tensionFill.style.width = `${tension * 100}%`;
+                    tensionFill.style.background = tension > 0.75 ? '#f44336' : tension > 0.45 ? '#ff9800' : '#4caf50';
                     
-                    // Robber running animation
-                    const runSteps = ['🏃', '🏃‍♂️', '🏃'];
-                    robberEl.textContent = runSteps[Math.floor(elapsed * 4) % runSteps.length];
+                    // Robber running animation — speeds up with tension
+                    const runSpeed = 4 + Math.floor(tension * 6);
+                    const runSteps = ['🏃', '🏃‍♂️', '🏃', '🏃‍♀️'];
+                    robberEl.textContent = runSteps[Math.floor(elapsed * runSpeed) % runSteps.length];
                     
-                    // Police car siren flash
+                    // Police car siren flash — flashes faster as tension rises
+                    const policeSpeed = 3 + Math.floor(tension * 5);
                     const policeSteps = ['🚔', '🚓', '🚔'];
-                    policeEl.textContent = policeSteps[Math.floor(elapsed * 3) % policeSteps.length];
+                    policeEl.textContent = policeSteps[Math.floor(elapsed * policeSpeed) % policeSteps.length];
                 }, 100);
             } catch(e) { console.error('Crash start error:', e); alert('Error starting crash: ' + (e.message || 'unknown')); startBtn.disabled = false; }
         }
@@ -7097,6 +7569,7 @@
             clearInterval(crashState.animInterval);
             const cashoutBtn = document.getElementById('crashCashoutBtn');
             cashoutBtn.style.display = 'none';
+            document.getElementById('crashGameArea').classList.remove('crash-shake');
 
             try {
                 const res = await fetch('/api/arcade/castle-crash/cashout', {
