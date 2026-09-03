@@ -1357,6 +1357,132 @@
             .arcade-game-card .game-card-icon { width: 56px; height: 56px; }
             .arcade-game-card .game-card-name { font-size: 9px; }
         }
+
+        /* ===== ARCADE FULLSCREEN & VFX ===== */
+        #arcade.arcade-fullscreen {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            width: 100%; height: 100%;
+            z-index: 9990;
+            background: radial-gradient(circle at center, #141420 0%, #0d0d14 100%);
+            overflow-y: auto;
+            padding: 24px;
+            display: flex !important;
+            flex-direction: column;
+            align-items: center;
+            animation: arcadeEnter 0.35s ease-out;
+        }
+        @keyframes arcadeEnter {
+            from { opacity: 0; transform: scale(0.96); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        #arcade.arcade-fullscreen .info-banner,
+        #arcade.arcade-fullscreen .arcade-game-grid {
+            display: none !important;
+        }
+        #arcade.arcade-fullscreen > div[id^="arcade-"] {
+            display: none !important;
+            width: 100%;
+            flex: 1;
+            align-items: center;
+            justify-content: flex-start;
+            padding-top: 40px;
+        }
+        #arcade.arcade-fullscreen > div[id^="arcade-"].active {
+            display: flex !important;
+            animation: gamePanelEnter 0.35s ease;
+        }
+        @keyframes gamePanelEnter {
+            from { opacity: 0; transform: translateY(20px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        #arcade.arcade-fullscreen .arcade-game {
+            width: 100%;
+            max-width: 760px;
+            min-height: 70vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            border-width: 3px;
+            box-shadow: 0 0 50px rgba(229,9,20,0.2), inset 0 0 40px rgba(0,0,0,0.6);
+        }
+        #arcade.arcade-fullscreen .arcade-screen {
+            min-height: 220px;
+        }
+        #arcade.arcade-fullscreen .close-game-btn {
+            position: fixed;
+            top: 18px; left: 18px;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(20,20,30,0.9);
+            border: 1px solid #333;
+            color: #fff;
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: 'PressStart2P', monospace;
+            font-size: 10px;
+            transition: all 0.2s;
+        }
+        #arcade.arcade-fullscreen .close-game-btn:hover {
+            border-color: #e50914;
+            color: #e50914;
+        }
+        .close-game-btn { display: none; }
+
+        .camera-shake {
+            animation: cameraShake 0.32s steps(8);
+        }
+        @keyframes cameraShake {
+            0%, 100% { transform: translate(0,0) rotate(0deg); }
+            12% { transform: translate(-3px, 2px) rotate(-0.5deg); }
+            25% { transform: translate(3px, -2px) rotate(0.5deg); }
+            37% { transform: translate(-2px, -3px) rotate(-0.3deg); }
+            50% { transform: translate(3px, 3px) rotate(0.3deg); }
+            62% { transform: translate(-3px, 1px) rotate(-0.5deg); }
+            75% { transform: translate(2px, -2px) rotate(0.5deg); }
+            87% { transform: translate(-1px, 3px) rotate(-0.2deg); }
+        }
+
+        .big-win-glow {
+            animation: bigWinPulse 0.8s ease-in-out infinite alternate;
+            box-shadow: 0 0 40px rgba(76,175,80,0.6), inset 0 0 30px rgba(76,175,80,0.2);
+            border-color: #4caf50 !important;
+        }
+        @keyframes bigWinPulse {
+            from { box-shadow: 0 0 20px rgba(76,175,80,0.4); }
+            to { box-shadow: 0 0 60px rgba(76,175,80,0.9); }
+        }
+
+        .pixel-particle {
+            position: fixed;
+            width: 8px; height: 8px;
+            background: #e50914;
+            pointer-events: none;
+            z-index: 10001;
+            image-rendering: pixelated;
+        }
+
+        .sound-toggle {
+            position: fixed;
+            top: 18px; right: 18px;
+            z-index: 10000;
+            display: none;
+            align-items: center;
+            gap: 6px;
+            background: rgba(20,20,30,0.9);
+            border: 1px solid #333;
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        #arcade.arcade-fullscreen .sound-toggle { display: flex; }
+        .sound-toggle.muted { opacity: 0.5; text-decoration: line-through; }
+
         /* ===== TRADE HUB BANNER TABS ===== */
         .tradehub-banner {
             position: relative;
@@ -2194,6 +2320,8 @@
     </button>
 
     <div class="section" id="arcade" style="display: none;">
+        <button class="close-game-btn" onclick="exitArcadeGame()" aria-label="Back to arcade">← BACK TO ARCADE</button>
+        <button class="sound-toggle" id="arcadeSoundToggle" onclick="toggleArcadeSound()" aria-label="Toggle sound">🔊 SOUND</button>
         <div class="info-banner"><strong>PixelPulse Arcade</strong> — Provably fair games with USD stakes. 8 game modules with house edge. Minimum stake $2 on web, $0.50 on Discord/Telegram.</div>
 
         <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
@@ -2227,42 +2355,42 @@
         </script>
 
         <div class="arcade-game-grid">
-            <div class="arcade-game-card active" id="arcadeTab-coinflip" onclick="switchArcadeTab('coinflip')" style="--card-accent:#FFD700; --card-glow:rgba(255,215,0,0.25);">
+            <div class="arcade-game-card active" id="arcadeTab-coinflip" onclick="openArcadeGame('coinflip')" style="--card-accent:#FFD700; --card-glow:rgba(255,215,0,0.25);">
                 <svg class="game-card-icon"><use href="#icon-coinflip"/></svg>
                 <div class="game-card-name">COIN FLIP</div>
                 <div class="game-card-tag">1.90x PAYOUT</div>
             </div>
-            <div class="arcade-game-card" id="arcadeTab-slots" onclick="switchArcadeTab('slots')" style="--card-accent:#E50914; --card-glow:rgba(229,9,20,0.25);">
+            <div class="arcade-game-card" id="arcadeTab-slots" onclick="openArcadeGame('slots')" style="--card-accent:#E50914; --card-glow:rgba(229,9,20,0.25);">
                 <svg class="game-card-icon"><use href="#icon-slots"/></svg>
                 <div class="game-card-name">SLOTS</div>
                 <div class="game-card-tag">UP TO 47.5x</div>
             </div>
-            <div class="arcade-game-card" id="arcadeTab-crash" onclick="switchArcadeTab('crash')" style="--card-accent:#1A4D8F; --card-glow:rgba(26,77,143,0.25);">
+            <div class="arcade-game-card" id="arcadeTab-crash" onclick="openArcadeGame('crash')" style="--card-accent:#1A4D8F; --card-glow:rgba(26,77,143,0.25);">
                 <svg class="game-card-icon"><use href="#icon-crash"/></svg>
                 <div class="game-card-name">POLICE CHASE</div>
                 <div class="game-card-tag">CRASH GAME</div>
             </div>
-            <div class="arcade-game-card" id="arcadeTab-mines" onclick="switchArcadeTab('mines')" style="--card-accent:#E94560; --card-glow:rgba(233,69,96,0.25);">
+            <div class="arcade-game-card" id="arcadeTab-mines" onclick="openArcadeGame('mines')" style="--card-accent:#E94560; --card-glow:rgba(233,69,96,0.25);">
                 <svg class="game-card-icon"><use href="#icon-mines"/></svg>
                 <div class="game-card-name">MINES</div>
                 <div class="game-card-tag">AVOID BOMBS</div>
             </div>
-            <div class="arcade-game-card" id="arcadeTab-dice" onclick="switchArcadeTab('dice')" style="--card-accent:#4CAF50; --card-glow:rgba(76,175,80,0.25);">
+            <div class="arcade-game-card" id="arcadeTab-dice" onclick="openArcadeGame('dice')" style="--card-accent:#4CAF50; --card-glow:rgba(76,175,80,0.25);">
                 <svg class="game-card-icon"><use href="#icon-dice"/></svg>
                 <div class="game-card-name">DICE ROLL</div>
                 <div class="game-card-tag">UP TO 28.5x</div>
             </div>
-            <div class="arcade-game-card" id="arcadeTab-plinko" onclick="switchArcadeTab('plinko')" style="--card-accent:#58A6FF; --card-glow:rgba(88,166,255,0.25);">
+            <div class="arcade-game-card" id="arcadeTab-plinko" onclick="openArcadeGame('plinko')" style="--card-accent:#58A6FF; --card-glow:rgba(88,166,255,0.25);">
                 <svg class="game-card-icon"><use href="#icon-plinko"/></svg>
                 <div class="game-card-name">PLINKO</div>
                 <div class="game-card-tag">DROP &amp; WIN</div>
             </div>
-            <div class="arcade-game-card" id="arcadeTab-pvp" onclick="switchArcadeTab('pvp')" style="--card-accent:#FFD700; --card-glow:rgba(255,215,0,0.25);">
+            <div class="arcade-game-card" id="arcadeTab-pvp" onclick="openArcadeGame('pvp')" style="--card-accent:#FFD700; --card-glow:rgba(255,215,0,0.25);">
                 <svg class="game-card-icon"><use href="#icon-pvp"/></svg>
                 <div class="game-card-name">PVP CLASH</div>
                 <div class="game-card-tag">3% FEE</div>
             </div>
-            <div class="arcade-game-card" id="arcadeTab-predictions" onclick="switchArcadeTab('predictions')" style="--card-accent:#9B59B6; --card-glow:rgba(155,89,182,0.25);">
+            <div class="arcade-game-card" id="arcadeTab-predictions" onclick="openArcadeGame('predictions')" style="--card-accent:#9B59B6; --card-glow:rgba(155,89,182,0.25);">
                 <svg class="game-card-icon"><use href="#icon-predictions"/></svg>
                 <div class="game-card-name">PREDICTIONS</div>
                 <div class="game-card-tag">BET ON EVENTS</div>
@@ -4109,7 +4237,9 @@
             document.getElementById('clips').style.display = 'none';
             document.getElementById('community').style.display = 'none';
             document.getElementById('betting').style.display = 'none';
-            document.getElementById('arcade').style.display = 'none';
+            const arcade = document.getElementById('arcade');
+            if (arcade) { arcade.style.display = 'none'; arcade.classList.remove('arcade-fullscreen'); }
+            document.body.style.overflow = '';
             document.getElementById('marketplace').style.display = 'none';
             document.getElementById('gold-transfer').style.display = 'none';
             document.getElementById('chat').style.display = 'none';
@@ -7070,6 +7200,163 @@
             setTimeout(() => toast.classList.remove('show'), 2000);
         }
 
+        let arcadeSoundEnabled = true;
+        let arcadeAudioCtx = null;
+
+        function ensureArcadeAudio() {
+            if (!arcadeAudioCtx && typeof AudioContext !== 'undefined') arcadeAudioCtx = new AudioContext();
+            else if (!arcadeAudioCtx && typeof webkitAudioContext !== 'undefined') arcadeAudioCtx = new webkitAudioContext();
+            if (arcadeAudioCtx && arcadeAudioCtx.state === 'suspended') arcadeAudioCtx.resume();
+        }
+
+        function toggleArcadeSound() {
+            arcadeSoundEnabled = !arcadeSoundEnabled;
+            const btn = document.getElementById('arcadeSoundToggle');
+            if (btn) {
+                btn.textContent = arcadeSoundEnabled ? '🔊 SOUND' : '🔇 SOUND';
+                btn.classList.toggle('muted', !arcadeSoundEnabled);
+            }
+        }
+
+        function playGameSound(type) {
+            if (!arcadeSoundEnabled) return;
+            ensureArcadeAudio();
+            if (!arcadeAudioCtx) return;
+            const ctx = arcadeAudioCtx;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            const now = ctx.currentTime;
+
+            if (type === 'win' || type === 'jackpot') {
+                const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51];
+                notes.forEach((freq, i) => {
+                    const o = ctx.createOscillator();
+                    const g = ctx.createGain();
+                    o.type = i % 2 === 0 ? 'square' : 'sawtooth';
+                    o.frequency.value = freq;
+                    o.connect(g);
+                    g.connect(ctx.destination);
+                    g.gain.setValueAtTime(0.08, now + i * 0.06);
+                    g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.25);
+                    o.start(now + i * 0.06);
+                    o.stop(now + i * 0.06 + 0.25);
+                });
+                return;
+            }
+
+            if (type === 'loss' || type === 'bust') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(180, now);
+                osc.frequency.exponentialRampToValueAtTime(60, now + 0.35);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+                osc.start(now);
+                osc.stop(now + 0.35);
+                return;
+            }
+
+            if (type === 'flip' || type === 'tick') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.exponentialRampToValueAtTime(880, now + 0.06);
+                gain.gain.setValueAtTime(0.06, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+                osc.start(now);
+                osc.stop(now + 0.06);
+                return;
+            }
+
+            if (type === 'spin') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(220, now);
+                osc.frequency.linearRampToValueAtTime(360, now + 0.12);
+                gain.gain.setValueAtTime(0.05, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+                osc.start(now);
+                osc.stop(now + 0.12);
+                return;
+            }
+
+            if (type === 'open') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(330, now);
+                osc.frequency.linearRampToValueAtTime(660, now + 0.15);
+                gain.gain.setValueAtTime(0.08, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            }
+        }
+
+        function cameraShake(durationMs = 320) {
+            const target = document.getElementById('arcade') || document.body;
+            target.classList.add('camera-shake');
+            setTimeout(() => target.classList.remove('camera-shake'), durationMs);
+        }
+
+        function pixelParticles(x, y, color = '#e50914', count = 24) {
+            for (let i = 0; i < count; i++) {
+                const p = document.createElement('div');
+                p.className = 'pixel-particle';
+                p.style.left = x + 'px';
+                p.style.top = y + 'px';
+                p.style.background = color;
+                const angle = (Math.PI * 2 * i) / count;
+                const speed = 80 + Math.random() * 120;
+                const tx = Math.cos(angle) * speed;
+                const ty = Math.sin(angle) * speed - 80;
+                const rot = Math.random() * 720 - 360;
+                p.style.transition = 'transform 0.8s ease-out, opacity 0.8s ease-out';
+                document.body.appendChild(p);
+                requestAnimationFrame(() => {
+                    p.style.transform = `translate(${tx}px, ${ty}px) rotate(${rot}deg)`;
+                    p.style.opacity = '0';
+                });
+                setTimeout(() => { try { p.remove(); } catch(e) {} }, 850);
+            }
+        }
+
+        function pixelConfetti() {
+            const colors = ['#e50914', '#4caf50', '#ffd700', '#00d4ff', '#ff00ff'];
+            for (let i = 0; i < 60; i++) {
+                const p = document.createElement('div');
+                p.className = 'pixel-particle';
+                p.style.left = (Math.random() * window.innerWidth) + 'px';
+                p.style.top = '-12px';
+                p.style.background = colors[Math.floor(Math.random() * colors.length)];
+                p.style.transition = `transform ${1.2 + Math.random()}s linear, opacity ${1 + Math.random()}s ease`;
+                document.body.appendChild(p);
+                const tx = (Math.random() - 0.5) * 300;
+                const ty = window.innerHeight + Math.random() * 200;
+                const rot = Math.random() * 720 - 360;
+                requestAnimationFrame(() => {
+                    p.style.transform = `translate(${tx}px, ${ty}px) rotate(${rot}deg)`;
+                    p.style.opacity = '0';
+                });
+                setTimeout(() => { try { p.remove(); } catch(e) {} }, 2400);
+            }
+        }
+
+        function openArcadeGame(tab) {
+            ensureArcadeAudio();
+            const arcade = document.getElementById('arcade');
+            if (arcade) arcade.classList.add('arcade-fullscreen');
+            document.body.style.overflow = 'hidden';
+            playGameSound('open');
+            switchArcadeTab(tab);
+        }
+
+        function exitArcadeGame() {
+            const arcade = document.getElementById('arcade');
+            if (arcade) arcade.classList.remove('arcade-fullscreen');
+            document.body.style.overflow = '';
+            if (crashState && crashState.animInterval) { clearInterval(crashState.animInterval); crashState.animInterval = null; }
+            if (crashState && crashState.active && !crashState.cashedOut && !crashState.crashed) { crashState.active = false; }
+            if (typeof pvpState !== 'undefined' && pvpState.polling) { clearInterval(pvpState.polling); pvpState.polling = null; }
+        }
+
         function switchArcadeTab(tab) {
             // Clean up any active game intervals to prevent memory leaks / freezes
             if (crashState && crashState.animInterval) { clearInterval(crashState.animInterval); crashState.animInterval = null; }
@@ -7083,7 +7370,10 @@
             tabs.forEach(t => {
                 const panel = document.getElementById('arcade-' + t);
                 const btn = document.getElementById('arcadeTab-' + t);
-                if (panel) panel.style.display = t === tab ? 'block' : 'none';
+                if (panel) {
+                    panel.style.display = t === tab ? 'block' : 'none';
+                    panel.classList.toggle('active', t === tab);
+                }
                 if (btn) {
                     btn.classList.remove('active');
                     if (t === tab) btn.classList.add('active');
@@ -7141,6 +7431,7 @@
                 if (!res.ok) { alert(data.error); btn.disabled = false; btn.textContent = 'FLIP COIN'; resultEl.classList.remove('flipping'); return; }
 
                 let flips = 0;
+                playGameSound('flip');
                 const flipAnim = setInterval(() => {
                     const flipIcon = flips % 2 === 0 ? '👑' : '👸';
                     const flipLabel = flips % 2 === 0 ? 'HEADS' : 'TAILS';
@@ -7152,10 +7443,19 @@
                         const finalIcon = data.result === 'heads' ? '👑' : '👸';
                         const finalLabel = data.result === 'heads' ? 'HEADS' : 'TAILS';
                         resultEl.innerHTML = `<div class="arcade-coin-inner"><span>${finalIcon}</span><span class="coin-label">${finalLabel}</span></div>`;
+                        const screen = document.querySelector('#arcade-coinflip .arcade-screen');
                         if (data.won) {
+                            playGameSound('win');
+                            cameraShake(400);
+                            pixelConfetti();
+                            if (screen) screen.classList.add('big-win-glow');
+                            setTimeout(() => { if (screen) screen.classList.remove('big-win-glow'); }, 2000);
                             payoutEl.innerHTML = `🎉 WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
                             showArcadeToast('win', '🎉', 'YOU WON!', `+$${data.payout.toFixed(2)}`);
                         } else {
+                            playGameSound('loss');
+                            cameraShake();
+                            pixelParticles(window.innerWidth / 2, window.innerHeight / 2, '#e50914', 18);
                             payoutEl.innerHTML = `❌ LOST $${data.stake.toFixed(2)}`;
                             showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
                         }
@@ -7177,9 +7477,11 @@
 
             const symbols = ['🍒','🍋','🔔','⭐','💎','7️⃣','🎮','👾'];
             let spins = 0;
+            playGameSound('spin');
             const spinAnim = setInterval(() => {
                 reelsEl.innerHTML = symbols.map(() => `<span>${symbols[Math.floor(Math.random()*symbols.length)]}</span>`).join('');
                 spins++;
+                if (spins % 3 === 0) playGameSound('tick');
                 if (spins > 12) {
                     clearInterval(spinAnim);
                     fetch('/api/arcade/slots', {
@@ -7188,10 +7490,19 @@
                     }).then(res => res.json()).then(data => {
                         if (data.error) { alert(data.error); btn.disabled=false; btn.textContent='SPIN'; return; }
                         reelsEl.innerHTML = data.reels.map(r => `<span${data.result === 'jackpot' ? ' class="jackpot"' : ''}>${r}</span>`).join('');
+                        const screen = document.querySelector('#arcade-slots .arcade-screen');
                         if (data.payout > 0) {
+                            playGameSound(data.result === 'jackpot' ? 'jackpot' : 'win');
+                            cameraShake(data.result === 'jackpot' ? 520 : 320);
+                            pixelConfetti();
+                            if (screen) screen.classList.add('big-win-glow');
+                            setTimeout(() => { if (screen) screen.classList.remove('big-win-glow'); }, 2000);
                             payoutEl.innerHTML = `${data.result === 'jackpot' ? '🎉 JACKPOT! ' : '✅ '}<span style="color:#4caf50;font-weight:700">WON $${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
                             showArcadeToast('win', data.result === 'jackpot' ? '🎉' : '✅', data.result === 'jackpot' ? 'JACKPOT!' : 'YOU WON!', `+$${data.payout.toFixed(2)}`);
                         } else {
+                            playGameSound('loss');
+                            cameraShake();
+                            pixelParticles(window.innerWidth / 2, window.innerHeight / 2, '#e50914', 18);
                             payoutEl.innerHTML = `❌ LOST $${data.stake.toFixed(2)}`;
                             showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
                         }
@@ -7259,6 +7570,9 @@
                         document.getElementById('crashGameArea').classList.remove('crash-shake');
                         cashoutBtn.style.display = 'none';
                         resultEl.innerHTML = `❌ LOST $${crashState.stake.toFixed(2)}`;
+                        playGameSound('loss');
+                        cameraShake();
+                        pixelParticles(window.innerWidth / 2, window.innerHeight / 2, '#e50914', 30);
                         showArcadeToast('loss', '🚨', 'CAUGHT!', `-$${crashState.stake.toFixed(2)}`);
                         fetch('/api/arcade/castle-crash/crash', {
                             method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
@@ -7288,6 +7602,9 @@
                         document.getElementById('crashGap').className = 'chase-gap danger';
                         cashoutBtn.style.display = 'none';
                         resultEl.innerHTML = `❌ LOST $${crashState.stake.toFixed(2)}`;
+                        playGameSound('loss');
+                        cameraShake();
+                        pixelParticles(window.innerWidth / 2, window.innerHeight / 2, '#e50914', 30);
                         showArcadeToast('loss', '🚨', 'CAUGHT!', `-$${crashState.stake.toFixed(2)}`);
                         // Record crash
                         fetch('/api/arcade/castle-crash/crash', {
@@ -7390,6 +7707,9 @@
                 document.getElementById('crashGap').className = 'chase-gap';
                 document.getElementById('crashResult').innerHTML = `🎉 WON <span style="color:#4caf50;font-weight:700">$${(data.payout || 0).toFixed(2)}</span> (${(data.multiplier || 0).toFixed(2)}x)`;
                 document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
+                playGameSound('win');
+                cameraShake(400);
+                pixelConfetti();
                 showArcadeToast('win', '💰', 'ESCAPED!', `+$${(data.payout || 0).toFixed(2)}`);
 
                 setTimeout(() => {
@@ -7482,6 +7802,9 @@
                 if (data.busted) {
                     card.classList.add('revealed', 'bomb');
                     card.textContent = '💣';
+                    playGameSound('loss');
+                    cameraShake();
+                    pixelParticles(window.innerWidth / 2, window.innerHeight / 2, '#e50914', 30);
                     // Show all mines
                     data.minePositions.forEach(pos => {
                         const mc = document.querySelector(`.mine-card[data-index="${pos}"]`);
@@ -7498,6 +7821,7 @@
                     card.classList.add('revealed', 'safe');
                     card.textContent = '✅';
                     card.style.opacity = '';
+                    playGameSound('tick');
                     minesState.revealed = data.revealed;
                     minesState.picking = false;
                     document.getElementById('minesMult').textContent = `${data.currentMult.toFixed(2)}x`;
@@ -7533,6 +7857,12 @@
 
                 minesState.active = false;
                 minesState.cashingOut = false;
+                playGameSound('win');
+                cameraShake(400);
+                pixelConfetti();
+                const screen = document.querySelector('#arcade-mines .arcade-screen');
+                if (screen) screen.classList.add('big-win-glow');
+                setTimeout(() => { if (screen) screen.classList.remove('big-win-glow'); }, 2000);
                 document.getElementById('minesResult').innerHTML = `🎉 WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
                 document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
                 showArcadeToast('win', '💰', 'CASHED OUT!', `+$${data.payout.toFixed(2)}`);
@@ -7689,6 +8019,7 @@
                 die1El.textContent = Math.floor(Math.random() * 6) + 1;
                 if (diceMode !== 'single') die2El.textContent = Math.floor(Math.random() * 6) + 1;
                 spins++;
+                if (spins % 3 === 0) playGameSound('tick');
                 if (spins > 15) {
                     clearInterval(rollAnim);
                     die1El.classList.remove('rolling');
@@ -7701,10 +8032,19 @@
                         die1El.textContent = data.die1;
                         if (data.numDice === 2) die2El.textContent = data.die2;
                         const resultStr = data.numDice === 2 ? `${data.die1}+${data.die2} = ${data.sum}` : `${data.die1}`;
+                        const screen = document.querySelector('#arcade-dice .arcade-screen');
                         if (data.won) {
+                            playGameSound('win');
+                            cameraShake(400);
+                            pixelConfetti();
+                            if (screen) screen.classList.add('big-win-glow');
+                            setTimeout(() => { if (screen) screen.classList.remove('big-win-glow'); }, 2000);
                             resultEl.innerHTML = `🎉 ${resultStr} — WON <span style="color:#4caf50;font-weight:700">$${(data.payout || 0).toFixed(2)}</span> (${(data.multiplier || 0).toFixed(2)}x)`;
                             showArcadeToast('win', '🎲', 'YOU WON!', `+$${(data.payout || 0).toFixed(2)}`);
                         } else {
+                            playGameSound('loss');
+                            cameraShake();
+                            pixelParticles(window.innerWidth / 2, window.innerHeight / 2, '#e50914', 18);
                             resultEl.innerHTML = `❌ ${resultStr} — You predicted ${data.prediction}. Lost $${(data.stake || 0).toFixed(2)}`;
                             showArcadeToast('loss', '❌', 'YOU LOST!', `-$${(data.stake || 0).toFixed(2)}`);
                         }
@@ -7785,7 +8125,9 @@
                 const pegsEl = document.getElementById('plinkoPegs');
                 const rows = pegsEl.children;
                 let step = 0;
+                playGameSound('spin');
                 const ballAnim = setInterval(() => {
+                    playGameSound('tick');
                     if (step >= path.length) {
                         clearInterval(ballAnim);
                         // Highlight the slot
@@ -7795,10 +8137,19 @@
                             slots[data.slotIndex].style.boxShadow = '0 0 20px rgba(0,212,255,0.6)';
                         }
                         ball.style.display = 'none';
+                        const screen = document.querySelector('#arcade-plinko .arcade-screen');
                         if (data.won) {
+                            playGameSound('win');
+                            cameraShake(400);
+                            pixelConfetti();
+                            if (screen) screen.classList.add('big-win-glow');
+                            setTimeout(() => { if (screen) screen.classList.remove('big-win-glow'); }, 2000);
                             resultEl.innerHTML = `🎉 Landed on <span style="color:#00d4ff;font-weight:700">${data.multiplier.toFixed(2)}x</span> — WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span>`;
                             showArcadeToast('win', '🔵', 'YOU WON!', `+$${data.payout.toFixed(2)}`);
                         } else {
+                            playGameSound('loss');
+                            cameraShake();
+                            pixelParticles(window.innerWidth / 2, window.innerHeight / 2, '#e50914', 18);
                             resultEl.innerHTML = `Landed on ${data.multiplier.toFixed(2)}x — Lost $${data.stake.toFixed(2)}`;
                             showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
                         }

@@ -8,6 +8,9 @@ const app = express();
 process.on('unhandledRejection', (err) => {
   console.error('UnhandledRejection:', err && err.stack ? err.stack : err);
 });
+process.on('uncaughtException', (err) => {
+  console.error('UncaughtException:', err && err.stack ? err.stack : err);
+});
 
 const PORT = process.env.PORT || 3000;
 const fs = require('fs');
@@ -29,6 +32,9 @@ const db = new sqlite3.Database(path.join(dataDirectory, 'pixelpulse.db'), (err)
     process.exit(1);
   }
   console.log('Database connected');
+  // Reduce SQLITE_BUSY crashes under concurrent arcade bets
+  db.run('PRAGMA journal_mode = WAL');
+  db.run('PRAGMA busy_timeout = 10000');
 });
 
 // Helper function to run queries synchronously (wrap in promise)
@@ -7605,7 +7611,13 @@ app.post('/api/arcade/claim-deposit', authenticateRequest, async (req, res) => {
     const btcPrice = await getBtcPriceUsd();
     const grossUsd = Math.floor(deposit.btc_amount * btcPrice * 100) / 100;
     const feeUsd = Math.floor(grossUsd * DEPOSIT_FEE_PERCENT * 100) / 100;
-    const usdAmount = grossUsd - feeUsd;
+    let usdAmount = grossUsd - feeUsd;
+
+    // First confirmed deposit bonus: +$5 USD
+    const firstDeposit = await dbGet('SELECT COUNT(*) AS count FROM crypto_deposits WHERE user_id = ? AND status = ?', [req.userId, 'confirmed']);
+    const isFirstDeposit = !firstDeposit || firstDeposit.count === 0;
+    const bonusUsd = isFirstDeposit ? 5.0 : 0.0;
+    if (bonusUsd > 0) usdAmount += bonusUsd;
     
     await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_deposited = total_deposited + ? WHERE user_id = ?', [usdAmount, grossUsd, req.userId]);
     await dbRun('UPDATE crypto_deposits SET user_id = ?, status = ?, usd_credited = ?, credited_at = CURRENT_TIMESTAMP WHERE id = ?', 
@@ -7615,10 +7627,12 @@ app.post('/api/arcade/claim-deposit', authenticateRequest, async (req, res) => {
     await creditHouseRevenue(feeUsd);
     
     const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    const bonusMsg = isFirstDeposit ? ` + $${bonusUsd.toFixed(2)} first-deposit bonus` : '';
     res.json({ 
-      message: `Deposit confirmed! ${deposit.btc_amount} BTC = $${grossUsd} (2% fee: $${feeUsd}). $${usdAmount} credited to your balance.`,
+      message: `Deposit confirmed! ${deposit.btc_amount} BTC = $${grossUsd} (2% fee: $${feeUsd}). $${usdAmount - bonusUsd} credited to your balance${bonusMsg}.`,
       usdAmount,
       feeUsd,
+      bonusUsd,
       newBalance: bal?.usd_balance || 0
     });
   } catch(e) {
