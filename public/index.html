@@ -1561,9 +1561,17 @@
             box-shadow: 0 0 16px rgba(229,9,20,0.5);
         }
         .tradehub-banner-icon {
-            font-size: 30px;
+            width: 40px;
+            height: 40px;
             margin-bottom: 4px;
-            text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+            filter: drop-shadow(0 2px 8px rgba(0,0,0,0.8));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .tradehub-banner-icon svg {
+            width: 100%;
+            height: 100%;
         }
         .tradehub-banner-title {
             font-size: 17px;
@@ -3153,22 +3161,22 @@
         <!-- Sub-tab banner headers -->
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 28px;">
             <div class="tradehub-banner active" id="tabBtn-sendgold" onclick="switchTradeHubTab('sendgold')" style="background-image: linear-gradient(to bottom, rgba(10,10,20,0.25), rgba(10,10,20,0.85)), url('/images/tradehub-sendgold.jpg'), linear-gradient(135deg, #b45309, #78350f, #1c1917);">
-                <div class="tradehub-banner-icon">⚔️</div>
+                <div class="tradehub-banner-icon"><svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Standoff 2 gold"><circle cx="24" cy="24" r="20" fill="#f59e0b" stroke="#fbbf24" stroke-width="2"/><path d="M24 10v28M10 24h28" stroke="#b45309" stroke-width="2" opacity=".4"/><text x="24" y="30" text-anchor="middle" font-size="16" font-weight="bold" fill="#78350f" font-family="sans-serif">Au</text><path d="M34 14l4-4M34 34l4 4M14 14l-4-4M14 34l-4 4" stroke="#fbbf24" stroke-width="2" stroke-linecap="round"/></svg></div>
                 <div class="tradehub-banner-title">Send Gold</div>
                 <div class="tradehub-banner-sub">Standoff2 verified gold transfers</div>
             </div>
             <div class="tradehub-banner" id="tabBtn-tradetokens" onclick="switchTradeHubTab('tradetokens')" style="background-image: linear-gradient(to bottom, rgba(10,10,20,0.25), rgba(10,10,20,0.85)), url('/images/tradehub-swaps.jpg'), linear-gradient(135deg, #1d4ed8, #5b21b6, #0f172a);">
-                <div class="tradehub-banner-icon">🔄</div>
+                <div class="tradehub-banner-icon"><svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Swap game tokens"><circle cx="24" cy="24" r="20" fill="#1e293b" stroke="#334155" stroke-width="2"/><path d="M14 30c0-5.5 4.5-10 10-10s10 10 10 10" stroke="#38bdf8" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M34 18c0 5.5-4.5 10-10 10s-10-10-10-10" stroke="#a78bfa" stroke-width="3" stroke-linecap="round" fill="none"/><circle cx="18" cy="16" r="4" fill="#1d4ed8"/><circle cx="30" cy="32" r="4" fill="#047857"/><circle cx="30" cy="16" r="4" fill="#b91c1c"/><circle cx="18" cy="32" r="4" fill="#ca8a04"/></svg></div>
                 <div class="tradehub-banner-title">Swap Tokens</div>
                 <div class="tradehub-banner-sub">Steam • Standoff2 • Robux • V-Bucks • UC • VP & more</div>
             </div>
             <div class="tradehub-banner" id="tabBtn-listskin" onclick="switchTradeHubTab('listskin')" style="background-image: linear-gradient(to bottom, rgba(10,10,20,0.25), rgba(10,10,20,0.85)), url('/images/tradehub-skins.jpg'), linear-gradient(135deg, #b91c1c, #7f1d1d, #1c1917);">
-                <div class="tradehub-banner-icon">🔫</div>
+                <div class="tradehub-banner-icon"><svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="CS2 skins marketplace"><rect x="8" y="16" width="32" height="24" rx="3" fill="#334155" stroke="#94a3b8" stroke-width="2"/><rect x="14" y="22" width="20" height="4" fill="#0f172a"/><rect x="14" y="30" width="14" height="3" fill="#0f172a"/><path d="M36 16V8h4M40 8v8M38 6h4" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/></svg></div>
                 <div class="tradehub-banner-title">List Skins</div>
                 <div class="tradehub-banner-sub">CS2 & game skins marketplace</div>
             </div>
             <div class="tradehub-banner" id="tabBtn-listp2p" onclick="switchTradeHubTab('listp2p')" style="background-image: linear-gradient(to bottom, rgba(10,10,20,0.25), rgba(10,10,20,0.85)), url('/images/tradehub-giftcards.jpg'), linear-gradient(135deg, #047857, #065f46, #0f172a);">
-                <div class="tradehub-banner-icon">🎁</div>
+                <div class="tradehub-banner-icon"><svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Gift cards and game accounts"><rect x="8" y="14" width="32" height="26" rx="3" fill="#0f766e" stroke="#14b8a6" stroke-width="2"/><rect x="22" y="14" width="4" height="26" fill="#14b8a6"/><path d="M24 14c-3-4-9-3-9 2s4 5 9 0c5 5 9 2 9-2s-6-6-9-2z" fill="#f59e0b"/><rect x="14" y="26" width="8" height="3" rx="1" fill="#ccfbf1" opacity=".9"/><rect x="26" y="30" width="10" height="3" rx="1" fill="#ccfbf1" opacity=".9"/></svg></div>
                 <div class="tradehub-banner-title">Gift Cards / Accounts</div>
                 <div class="tradehub-banner-sub">Steam, PSN, Google Play cards & game accounts</div>
             </div>
