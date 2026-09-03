@@ -1364,18 +1364,29 @@
             top: 0; left: 0; right: 0; bottom: 0;
             width: 100%; height: 100%;
             z-index: 9990;
-            background: radial-gradient(circle at center, #141420 0%, #0d0d14 100%);
+            background: radial-gradient(circle at center, #1a1a2e 0%, #07070a 100%);
             overflow-y: auto;
             padding: 24px;
             display: flex !important;
             flex-direction: column;
             align-items: center;
-            animation: arcadeEnter 0.35s ease-out;
+            animation: arcadeEnter 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        #arcade.arcade-fullscreen::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(0deg, rgba(0,0,0,0.18) 0px, rgba(0,0,0,0.18) 2px, transparent 2px, transparent 4px),
+                        radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.45) 100%);
+            pointer-events: none;
+            z-index: 9991;
+            animation: scanlineMove 6s linear infinite;
         }
         @keyframes arcadeEnter {
-            from { opacity: 0; transform: scale(0.96); }
-            to { opacity: 1; transform: scale(1); }
+            from { opacity: 0; transform: scale(0.92) translateY(20px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
         }
+        @keyframes scanlineMove { from { background-position: 0 0; } to { background-position: 0 8px; } }
         #arcade.arcade-fullscreen .info-banner,
         #arcade.arcade-fullscreen .arcade-game-grid {
             display: none !important;
@@ -1387,28 +1398,28 @@
             align-items: center;
             justify-content: flex-start;
             padding-top: 40px;
+            z-index: 9992;
         }
         #arcade.arcade-fullscreen > div[id^="arcade-"].active {
             display: flex !important;
-            animation: gamePanelEnter 0.35s ease;
+            animation: gamePanelEnter 0.5s cubic-bezier(0.22, 1, 0.36, 1);
         }
         @keyframes gamePanelEnter {
-            from { opacity: 0; transform: translateY(20px) scale(0.98); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
+            from { opacity: 0; transform: translateY(30px) scale(0.96) rotateX(4deg); }
+            to { opacity: 1; transform: translateY(0) scale(1) rotateX(0deg); }
         }
         #arcade.arcade-fullscreen .arcade-game {
             width: 100%;
-            max-width: 760px;
+            max-width: 860px;
             min-height: 70vh;
             display: flex;
             flex-direction: column;
             justify-content: center;
             border-width: 3px;
-            box-shadow: 0 0 50px rgba(229,9,20,0.2), inset 0 0 40px rgba(0,0,0,0.6);
+            box-shadow: 0 0 70px rgba(229,9,20,0.28), inset 0 0 50px rgba(0,0,0,0.7);
+            z-index: 9992;
         }
-        #arcade.arcade-fullscreen .arcade-screen {
-            min-height: 220px;
-        }
+        #arcade.arcade-fullscreen .arcade-screen { min-height: 260px; }
         #arcade.arcade-fullscreen .close-game-btn {
             position: fixed;
             top: 18px; left: 18px;
@@ -1416,8 +1427,8 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            background: rgba(20,20,30,0.9);
-            border: 1px solid #333;
+            background: rgba(20,20,30,0.95);
+            border: 1px solid #444;
             color: #fff;
             padding: 10px 16px;
             border-radius: 8px;
@@ -1425,35 +1436,71 @@
             font-family: 'PressStart2P', monospace;
             font-size: 10px;
             transition: all 0.2s;
+            box-shadow: 0 0 14px rgba(0,0,0,0.6);
         }
-        #arcade.arcade-fullscreen .close-game-btn:hover {
-            border-color: #e50914;
-            color: #e50914;
-        }
+        #arcade.arcade-fullscreen .close-game-btn:hover { border-color: #e50914; color: #e50914; transform: scale(1.05); }
         .close-game-btn { display: none; }
 
         .camera-shake {
-            animation: cameraShake 0.32s steps(8);
+            animation: cameraShakeHard 0.5s steps(10);
         }
-        @keyframes cameraShake {
+        @keyframes cameraShakeHard {
             0%, 100% { transform: translate(0,0) rotate(0deg); }
-            12% { transform: translate(-3px, 2px) rotate(-0.5deg); }
-            25% { transform: translate(3px, -2px) rotate(0.5deg); }
-            37% { transform: translate(-2px, -3px) rotate(-0.3deg); }
-            50% { transform: translate(3px, 3px) rotate(0.3deg); }
-            62% { transform: translate(-3px, 1px) rotate(-0.5deg); }
-            75% { transform: translate(2px, -2px) rotate(0.5deg); }
-            87% { transform: translate(-1px, 3px) rotate(-0.2deg); }
+            10% { transform: translate(-7px, 5px) rotate(-1.2deg); }
+            20% { transform: translate(9px, -7px) rotate(1.4deg); }
+            30% { transform: translate(-6px, -8px) rotate(-0.9deg); }
+            40% { transform: translate(10px, 6px) rotate(1.1deg); }
+            50% { transform: translate(-8px, 3px) rotate(-1.4deg); }
+            60% { transform: translate(6px, -6px) rotate(0.8deg); }
+            70% { transform: translate(-9px, 7px) rotate(-0.6deg); }
+            80% { transform: translate(7px, -4px) rotate(1deg); }
+            90% { transform: translate(-4px, 8px) rotate(-0.4deg); }
+        }
+
+        .screen-flash {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            z-index: 10005;
+            opacity: 0;
+            mix-blend-mode: screen;
+        }
+        .screen-flash.active { animation: flashAnim 0.55s ease-out; }
+        @keyframes flashAnim { 0%{opacity:0.75;} 50%{opacity:0.35;} 100%{opacity:0;} }
+
+        .floating-score {
+            position: fixed;
+            z-index: 10004;
+            font-family: 'PressStart2P', monospace;
+            font-size: 15px;
+            font-weight: 700;
+            pointer-events: none;
+            text-shadow: 2px 2px 0 #000, 0 0 12px currentColor;
+            animation: floatScore 1.3s ease-out forwards;
+        }
+        @keyframes floatScore {
+            0% { opacity: 1; transform: translate(-50%,0) scale(0.7); }
+            20% { transform: translate(-50%,-24px) scale(1.35); }
+            100% { opacity: 0; transform: translate(-50%,-100px) scale(1); }
         }
 
         .big-win-glow {
-            animation: bigWinPulse 0.8s ease-in-out infinite alternate;
-            box-shadow: 0 0 40px rgba(76,175,80,0.6), inset 0 0 30px rgba(76,175,80,0.2);
+            animation: bigWinPulse 0.65s ease-in-out infinite alternate;
+            box-shadow: 0 0 55px rgba(76,175,80,0.85), inset 0 0 45px rgba(76,175,80,0.35) !important;
             border-color: #4caf50 !important;
         }
         @keyframes bigWinPulse {
-            from { box-shadow: 0 0 20px rgba(76,175,80,0.4); }
-            to { box-shadow: 0 0 60px rgba(76,175,80,0.9); }
+            from { box-shadow: 0 0 30px rgba(76,175,80,0.55); border-color: #4caf50; }
+            to { box-shadow: 0 0 90px rgba(76,175,80,1), 0 0 140px rgba(76,175,80,0.55); border-color: #adff2f; }
+        }
+        .loss-glow {
+            animation: lossPulse 0.6s ease-in-out infinite alternate;
+            box-shadow: 0 0 45px rgba(244,67,54,0.75), inset 0 0 35px rgba(244,67,54,0.3) !important;
+            border-color: #f44336 !important;
+        }
+        @keyframes lossPulse {
+            from { box-shadow: 0 0 25px rgba(244,67,54,0.55); }
+            to { box-shadow: 0 0 80px rgba(244,67,54,1), 0 0 120px rgba(244,67,54,0.45); }
         }
 
         .pixel-particle {
@@ -1463,6 +1510,44 @@
             pointer-events: none;
             z-index: 10001;
             image-rendering: pixelated;
+            box-shadow: 0 0 6px currentColor;
+        }
+        .pixel-particle.trail::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: inherit;
+            opacity: 0.45;
+            transform: translate(-4px, -4px) scale(1.6);
+            filter: blur(2px);
+        }
+
+        .coin-blast {
+            animation: coinBlast 0.75s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+        @keyframes coinBlast {
+            0% { transform: scale(0.2) rotateY(0deg); opacity: 0; }
+            35% { transform: scale(1.35) rotateY(360deg); opacity: 1; }
+            60% { transform: scale(1.1) rotateY(720deg); }
+            100% { transform: scale(1) rotateY(720deg); opacity: 1; }
+        }
+        .reel-blur span { filter: blur(1.5px); transform: scale(0.9); opacity: 0.85; }
+        .jackpot-blast { animation: jackpotFlash 0.35s ease-in-out infinite alternate; }
+        @keyframes jackpotFlash {
+            from { text-shadow: 2px 2px 0 #000, 0 0 10px #ffd700; transform: scale(1); }
+            to { text-shadow: 2px 2px 0 #000, 0 0 40px #ffd700, 0 0 70px #ff8c00; transform: scale(1.18); }
+        }
+        .mine-blast { animation: mineBlast 0.55s ease-out; }
+        @keyframes mineBlast {
+            0% { transform: scale(1); filter: brightness(1); }
+            30% { transform: scale(1.55); filter: brightness(4) saturate(2); }
+            100% { transform: scale(1); filter: brightness(1); }
+        }
+        .crash-explode { animation: crashExplode 0.55s ease-out; }
+        @keyframes crashExplode {
+            0% { transform: scale(1); filter: brightness(1); }
+            40% { transform: scale(1.1); filter: brightness(3) contrast(1.6); }
+            100% { transform: scale(1); filter: brightness(1); }
         }
 
         .sound-toggle {
@@ -1472,15 +1557,18 @@
             display: none;
             align-items: center;
             gap: 6px;
-            background: rgba(20,20,30,0.9);
-            border: 1px solid #333;
+            background: rgba(20,20,30,0.95);
+            border: 1px solid #444;
             color: #fff;
             padding: 8px 12px;
             border-radius: 8px;
             cursor: pointer;
             font-size: 11px;
+            transition: all 0.2s;
+            box-shadow: 0 0 14px rgba(0,0,0,0.6);
         }
         #arcade.arcade-fullscreen .sound-toggle { display: flex; }
+        .sound-toggle:hover { border-color: #00d4ff; color: #00d4ff; }
         .sound-toggle.muted { opacity: 0.5; text-decoration: line-through; }
 
         /* ===== TRADE HUB BANNER TABS ===== */
@@ -7223,120 +7311,200 @@
             ensureArcadeAudio();
             if (!arcadeAudioCtx) return;
             const ctx = arcadeAudioCtx;
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.connect(gain);
-            gain.connect(ctx.destination);
             const now = ctx.currentTime;
 
-            if (type === 'win' || type === 'jackpot') {
-                const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51];
-                notes.forEach((freq, i) => {
-                    const o = ctx.createOscillator();
-                    const g = ctx.createGain();
-                    o.type = i % 2 === 0 ? 'square' : 'sawtooth';
-                    o.frequency.value = freq;
-                    o.connect(g);
-                    g.connect(ctx.destination);
-                    g.gain.setValueAtTime(0.08, now + i * 0.06);
-                    g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.25);
-                    o.start(now + i * 0.06);
-                    o.stop(now + i * 0.06 + 0.25);
-                });
-                return;
+            function tone(freq, duration, wave = 'square', startGain = 0.1, slideTo = null, delay = 0) {
+                const osc = ctx.createOscillator();
+                const g = ctx.createGain();
+                osc.type = wave;
+                osc.frequency.setValueAtTime(freq, now + delay);
+                if (slideTo !== null) osc.frequency.exponentialRampToValueAtTime(slideTo, now + delay + duration);
+                g.gain.setValueAtTime(startGain, now + delay);
+                g.gain.exponentialRampToValueAtTime(0.001, now + delay + duration);
+                osc.connect(g);
+                g.connect(ctx.destination);
+                osc.start(now + delay);
+                osc.stop(now + delay + duration);
             }
 
+            if (type === 'win') {
+                [523.25, 659.25, 783.99, 1046.50, 1318.51].forEach((f, i) => tone(f, 0.22, 'square', 0.13, null, i * 0.07));
+                [261.63, 329.63, 392.00, 523.25, 659.25].forEach((f, i) => tone(f, 0.30, 'sawtooth', 0.07, null, i * 0.07 + 0.04));
+                return;
+            }
+            if (type === 'jackpot') {
+                [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98, 2093.00].forEach((f, i) => tone(f, 0.18, 'square', 0.14, null, i * 0.05));
+                [261.63, 392.00, 523.25, 659.25, 783.99, 1046.50, 1318.51].forEach((f, i) => tone(f, 0.24, 'sawtooth', 0.08, null, i * 0.05 + 0.03));
+                tone(880, 0.45, 'sine', 0.09, 1760, 0.35);
+                return;
+            }
             if (type === 'loss' || type === 'bust') {
+                tone(160, 0.55, 'sawtooth', 0.13, 45, 0);
+                tone(120, 0.45, 'square', 0.09, 30, 0.05);
+                playNoise(type === 'bust' ? 0.55 : 0.40, type === 'bust' ? 0.22 : 0.14);
+                return;
+            }
+            if (type === 'flip') {
+                tone(660, 0.08, 'sine', 0.10, 220, 0);
+                tone(880, 0.06, 'triangle', 0.05, 440, 0.02);
+                return;
+            }
+            if (type === 'tick') {
+                tone(1400, 0.04, 'square', 0.07, 2200, 0);
+                return;
+            }
+            if (type === 'spin') {
+                const osc = ctx.createOscillator();
+                const g = ctx.createGain();
                 osc.type = 'sawtooth';
                 osc.frequency.setValueAtTime(180, now);
-                osc.frequency.exponentialRampToValueAtTime(60, now + 0.35);
-                gain.gain.setValueAtTime(0.1, now);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-                osc.start(now);
-                osc.stop(now + 0.35);
+                osc.frequency.linearRampToValueAtTime(560, now + 0.20);
+                g.gain.setValueAtTime(0.09, now);
+                g.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+                osc.connect(g); g.connect(ctx.destination);
+                osc.start(now); osc.stop(now + 0.22);
                 return;
             }
-
-            if (type === 'flip' || type === 'tick') {
-                osc.type = 'square';
-                osc.frequency.setValueAtTime(440, now);
-                osc.frequency.exponentialRampToValueAtTime(880, now + 0.06);
-                gain.gain.setValueAtTime(0.06, now);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
-                osc.start(now);
-                osc.stop(now + 0.06);
-                return;
-            }
-
-            if (type === 'spin') {
-                osc.type = 'square';
-                osc.frequency.setValueAtTime(220, now);
-                osc.frequency.linearRampToValueAtTime(360, now + 0.12);
-                gain.gain.setValueAtTime(0.05, now);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-                osc.start(now);
-                osc.stop(now + 0.12);
-                return;
-            }
-
             if (type === 'open') {
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(330, now);
-                osc.frequency.linearRampToValueAtTime(660, now + 0.15);
-                gain.gain.setValueAtTime(0.08, now);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
-                osc.start(now);
-                osc.stop(now + 0.25);
+                tone(261.63, 0.20, 'sine', 0.10, 523.25, 0);
+                tone(329.63, 0.25, 'sine', 0.08, 659.25, 0.10);
+                tone(392.00, 0.30, 'sine', 0.08, 783.99, 0.20);
+                return;
+            }
+            if (type === 'coin') {
+                tone(1200, 0.08, 'square', 0.08, 2400, 0);
+                tone(1800, 0.06, 'triangle', 0.05, 3600, 0.02);
+                return;
+            }
+            if (type === 'mine') {
+                tone(300, 0.04, 'square', 0.07, 600, 0);
             }
         }
 
-        function cameraShake(durationMs = 320) {
+        function playNoise(duration, volume = 0.12) {
+            if (!arcadeAudioCtx) return;
+            const ctx = arcadeAudioCtx;
+            const size = ctx.sampleRate * duration;
+            const buffer = ctx.createBuffer(1, size, ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < size; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / size);
+            const src = ctx.createBufferSource();
+            const g = ctx.createGain();
+            src.buffer = buffer;
+            g.gain.setValueAtTime(volume, ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+            src.connect(g); g.connect(ctx.destination);
+            src.start(); src.stop(ctx.currentTime + duration);
+        }
+
+        function cameraShake(durationMs = 420) {
             const target = document.getElementById('arcade') || document.body;
             target.classList.add('camera-shake');
-            setTimeout(() => target.classList.remove('camera-shake'), durationMs);
+            target.style.animationDuration = `${durationMs}ms`;
+            setTimeout(() => { target.classList.remove('camera-shake'); target.style.animationDuration = ''; }, durationMs);
         }
 
-        function pixelParticles(x, y, color = '#e50914', count = 24) {
+        function pixelParticles(x, y, color = '#e50914', count = 36) {
             for (let i = 0; i < count; i++) {
                 const p = document.createElement('div');
-                p.className = 'pixel-particle';
+                p.className = 'pixel-particle' + (Math.random() < 0.35 ? ' trail' : '');
                 p.style.left = x + 'px';
                 p.style.top = y + 'px';
                 p.style.background = color;
-                const angle = (Math.PI * 2 * i) / count;
-                const speed = 80 + Math.random() * 120;
+                const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.5;
+                const speed = 90 + Math.random() * 180;
                 const tx = Math.cos(angle) * speed;
-                const ty = Math.sin(angle) * speed - 80;
-                const rot = Math.random() * 720 - 360;
-                p.style.transition = 'transform 0.8s ease-out, opacity 0.8s ease-out';
+                const ty = Math.sin(angle) * speed + 120 + Math.random() * 80;
+                const rot = Math.random() * 1080 - 540;
+                const scale = 0.6 + Math.random() * 1.2;
+                const duration = 0.8 + Math.random() * 0.5;
+                p.style.width = (6 + Math.random() * 6) + 'px';
+                p.style.height = p.style.width;
+                p.style.transition = `transform ${duration}s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity ${duration}s ease`;
+                p.style.boxShadow = `0 0 ${6 + Math.random() * 8}px ${color}`;
                 document.body.appendChild(p);
                 requestAnimationFrame(() => {
-                    p.style.transform = `translate(${tx}px, ${ty}px) rotate(${rot}deg)`;
+                    p.style.transform = `translate(${tx}px, ${ty}px) rotate(${rot}deg) scale(${scale})`;
                     p.style.opacity = '0';
                 });
-                setTimeout(() => { try { p.remove(); } catch(e) {} }, 850);
+                setTimeout(() => { try { p.remove(); } catch(e) {} }, duration * 1000 + 50);
             }
         }
 
         function pixelConfetti() {
-            const colors = ['#e50914', '#4caf50', '#ffd700', '#00d4ff', '#ff00ff'];
-            for (let i = 0; i < 60; i++) {
+            const colors = ['#e50914', '#4caf50', '#ffd700', '#00d4ff', '#ff00ff', '#ff5722', '#00e676'];
+            const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+            for (let i = 0; i < 120; i++) {
                 const p = document.createElement('div');
-                p.className = 'pixel-particle';
-                p.style.left = (Math.random() * window.innerWidth) + 'px';
-                p.style.top = '-12px';
-                p.style.background = colors[Math.floor(Math.random() * colors.length)];
-                p.style.transition = `transform ${1.2 + Math.random()}s linear, opacity ${1 + Math.random()}s ease`;
+                p.className = 'pixel-particle' + (Math.random() < 0.3 ? ' trail' : '');
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                p.style.background = color;
+                p.style.left = cx + 'px';
+                p.style.top = cy + 'px';
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 80 + Math.random() * 420;
+                const tx = Math.cos(angle) * speed;
+                const ty = Math.sin(angle) * speed + 160 + Math.random() * 120;
+                const rot = Math.random() * 1080 - 540;
+                const scale = 0.7 + Math.random() * 1.4;
+                const duration = 1.1 + Math.random() * 0.8;
+                p.style.width = (5 + Math.random() * 7) + 'px';
+                p.style.height = p.style.width;
+                p.style.transition = `transform ${duration}s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity ${duration}s ease`;
+                p.style.boxShadow = `0 0 ${6 + Math.random() * 10}px ${color}`;
                 document.body.appendChild(p);
-                const tx = (Math.random() - 0.5) * 300;
-                const ty = window.innerHeight + Math.random() * 200;
-                const rot = Math.random() * 720 - 360;
                 requestAnimationFrame(() => {
-                    p.style.transform = `translate(${tx}px, ${ty}px) rotate(${rot}deg)`;
+                    p.style.transform = `translate(${tx}px, ${ty}px) rotate(${rot}deg) scale(${scale})`;
                     p.style.opacity = '0';
                 });
-                setTimeout(() => { try { p.remove(); } catch(e) {} }, 2400);
+                setTimeout(() => { try { p.remove(); } catch(e) {} }, duration * 1000 + 50);
             }
+        }
+
+        function screenFlash(color = 'rgba(255,255,255,0.25)') {
+            let flash = document.getElementById('arcadeScreenFlash');
+            if (!flash) {
+                flash = document.createElement('div');
+                flash.id = 'arcadeScreenFlash';
+                flash.className = 'screen-flash';
+                document.body.appendChild(flash);
+            }
+            flash.style.background = color;
+            flash.classList.remove('active');
+            void flash.offsetWidth;
+            flash.classList.add('active');
+            setTimeout(() => flash.classList.remove('active'), 600);
+        }
+
+        function floatingScore(text, x, y, color = '#4caf50') {
+            const el = document.createElement('div');
+            el.className = 'floating-score';
+            el.textContent = text;
+            el.style.color = color;
+            el.style.left = x + 'px';
+            el.style.top = y + 'px';
+            document.body.appendChild(el);
+            setTimeout(() => { try { el.remove(); } catch(e) {} }, 1300);
+        }
+
+        function dramaticWin(screenSelector, amount, isJackpot = false) {
+            playGameSound(isJackpot ? 'jackpot' : 'win');
+            cameraShake(isJackpot ? 720 : 480);
+            pixelConfetti();
+            screenFlash(isJackpot ? 'rgba(255,215,0,0.30)' : 'rgba(76,175,80,0.28)');
+            const screen = document.querySelector(screenSelector);
+            if (screen) { screen.classList.add('big-win-glow'); setTimeout(() => screen.classList.remove('big-win-glow'), 2200); }
+            floatingScore('+ $' + amount.toFixed(2), window.innerWidth / 2, window.innerHeight / 2 - 80, isJackpot ? '#ffd700' : '#4caf50');
+        }
+
+        function dramaticLoss(screenSelector, amount) {
+            playGameSound('loss');
+            cameraShake(520);
+            pixelParticles(window.innerWidth / 2, window.innerHeight / 2, '#e50914', 48);
+            screenFlash('rgba(244,67,54,0.30)');
+            const screen = document.querySelector(screenSelector);
+            if (screen) { screen.classList.add('loss-glow'); setTimeout(() => screen.classList.remove('loss-glow'), 1800); }
+            floatingScore('- $' + amount.toFixed(2), window.innerWidth / 2, window.innerHeight / 2 - 80, '#f44336');
         }
 
         function openArcadeGame(tab) {
@@ -7442,20 +7610,14 @@
                         resultEl.classList.remove('flipping');
                         const finalIcon = data.result === 'heads' ? '👑' : '👸';
                         const finalLabel = data.result === 'heads' ? 'HEADS' : 'TAILS';
-                        resultEl.innerHTML = `<div class="arcade-coin-inner"><span>${finalIcon}</span><span class="coin-label">${finalLabel}</span></div>`;
-                        const screen = document.querySelector('#arcade-coinflip .arcade-screen');
+                        resultEl.innerHTML = `<div class="arcade-coin-inner coin-blast"><span>${finalIcon}</span><span class="coin-label">${finalLabel}</span></div>`;
+                        setTimeout(() => { resultEl.querySelector('.coin-blast')?.classList.remove('coin-blast'); }, 800);
                         if (data.won) {
-                            playGameSound('win');
-                            cameraShake(400);
-                            pixelConfetti();
-                            if (screen) screen.classList.add('big-win-glow');
-                            setTimeout(() => { if (screen) screen.classList.remove('big-win-glow'); }, 2000);
+                            dramaticWin('#arcade-coinflip .arcade-screen', data.payout, false);
                             payoutEl.innerHTML = `🎉 WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
                             showArcadeToast('win', '🎉', 'YOU WON!', `+$${data.payout.toFixed(2)}`);
                         } else {
-                            playGameSound('loss');
-                            cameraShake();
-                            pixelParticles(window.innerWidth / 2, window.innerHeight / 2, '#e50914', 18);
+                            dramaticLoss('#arcade-coinflip .arcade-screen', data.stake);
                             payoutEl.innerHTML = `❌ LOST $${data.stake.toFixed(2)}`;
                             showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
                         }
@@ -7477,6 +7639,7 @@
 
             const symbols = ['🍒','🍋','🔔','⭐','💎','7️⃣','🎮','👾'];
             let spins = 0;
+            reelsEl.classList.add('reel-blur');
             playGameSound('spin');
             const spinAnim = setInterval(() => {
                 reelsEl.innerHTML = symbols.map(() => `<span>${symbols[Math.floor(Math.random()*symbols.length)]}</span>`).join('');
@@ -7484,25 +7647,23 @@
                 if (spins % 3 === 0) playGameSound('tick');
                 if (spins > 12) {
                     clearInterval(spinAnim);
+                    reelsEl.classList.remove('reel-blur');
                     fetch('/api/arcade/slots', {
                         method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
                         body: JSON.stringify({ stake })
                     }).then(res => res.json()).then(data => {
                         if (data.error) { alert(data.error); btn.disabled=false; btn.textContent='SPIN'; return; }
                         reelsEl.innerHTML = data.reels.map(r => `<span${data.result === 'jackpot' ? ' class="jackpot"' : ''}>${r}</span>`).join('');
-                        const screen = document.querySelector('#arcade-slots .arcade-screen');
                         if (data.payout > 0) {
-                            playGameSound(data.result === 'jackpot' ? 'jackpot' : 'win');
-                            cameraShake(data.result === 'jackpot' ? 520 : 320);
-                            pixelConfetti();
-                            if (screen) screen.classList.add('big-win-glow');
-                            setTimeout(() => { if (screen) screen.classList.remove('big-win-glow'); }, 2000);
+                            if (data.result === 'jackpot') {
+                                reelsEl.classList.add('jackpot-blast');
+                                setTimeout(() => reelsEl.classList.remove('jackpot-blast'), 2200);
+                            }
+                            dramaticWin('#arcade-slots .arcade-screen', data.payout, data.result === 'jackpot');
                             payoutEl.innerHTML = `${data.result === 'jackpot' ? '🎉 JACKPOT! ' : '✅ '}<span style="color:#4caf50;font-weight:700">WON $${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
                             showArcadeToast('win', data.result === 'jackpot' ? '🎉' : '✅', data.result === 'jackpot' ? 'JACKPOT!' : 'YOU WON!', `+$${data.payout.toFixed(2)}`);
                         } else {
-                            playGameSound('loss');
-                            cameraShake();
-                            pixelParticles(window.innerWidth / 2, window.innerHeight / 2, '#e50914', 18);
+                            dramaticLoss('#arcade-slots .arcade-screen', data.stake);
                             payoutEl.innerHTML = `❌ LOST $${data.stake.toFixed(2)}`;
                             showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
                         }
@@ -7570,9 +7731,9 @@
                         document.getElementById('crashGameArea').classList.remove('crash-shake');
                         cashoutBtn.style.display = 'none';
                         resultEl.innerHTML = `❌ LOST $${crashState.stake.toFixed(2)}`;
-                        playGameSound('loss');
-                        cameraShake();
-                        pixelParticles(window.innerWidth / 2, window.innerHeight / 2, '#e50914', 30);
+                        document.getElementById('crashGameArea').classList.add('crash-explode');
+                        dramaticLoss('#arcade-crash .arcade-screen', crashState.stake);
+                        setTimeout(() => document.getElementById('crashGameArea').classList.remove('crash-explode'), 1800);
                         showArcadeToast('loss', '🚨', 'CAUGHT!', `-$${crashState.stake.toFixed(2)}`);
                         fetch('/api/arcade/castle-crash/crash', {
                             method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
@@ -7602,9 +7763,9 @@
                         document.getElementById('crashGap').className = 'chase-gap danger';
                         cashoutBtn.style.display = 'none';
                         resultEl.innerHTML = `❌ LOST $${crashState.stake.toFixed(2)}`;
-                        playGameSound('loss');
-                        cameraShake();
-                        pixelParticles(window.innerWidth / 2, window.innerHeight / 2, '#e50914', 30);
+                        document.getElementById('crashGameArea').classList.add('crash-explode');
+                        dramaticLoss('#arcade-crash .arcade-screen', crashState.stake);
+                        setTimeout(() => document.getElementById('crashGameArea').classList.remove('crash-explode'), 1800);
                         showArcadeToast('loss', '🚨', 'CAUGHT!', `-$${crashState.stake.toFixed(2)}`);
                         // Record crash
                         fetch('/api/arcade/castle-crash/crash', {
@@ -7707,9 +7868,7 @@
                 document.getElementById('crashGap').className = 'chase-gap';
                 document.getElementById('crashResult').innerHTML = `🎉 WON <span style="color:#4caf50;font-weight:700">$${(data.payout || 0).toFixed(2)}</span> (${(data.multiplier || 0).toFixed(2)}x)`;
                 document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
-                playGameSound('win');
-                cameraShake(400);
-                pixelConfetti();
+                dramaticWin('#arcade-crash .arcade-screen', data.payout || 0, false);
                 showArcadeToast('win', '💰', 'ESCAPED!', `+$${(data.payout || 0).toFixed(2)}`);
 
                 setTimeout(() => {
@@ -7800,16 +7959,14 @@
                 }
 
                 if (data.busted) {
-                    card.classList.add('revealed', 'bomb');
+                    card.classList.add('revealed', 'bomb', 'mine-blast');
                     card.textContent = '💣';
-                    playGameSound('loss');
-                    cameraShake();
-                    pixelParticles(window.innerWidth / 2, window.innerHeight / 2, '#e50914', 30);
                     // Show all mines
                     data.minePositions.forEach(pos => {
                         const mc = document.querySelector(`.mine-card[data-index="${pos}"]`);
                         if (mc && !mc.classList.contains('safe')) { mc.classList.add('revealed', 'bomb'); mc.textContent = '💣'; }
                     });
+                    dramaticLoss('#arcade-mines .arcade-screen', minesState.stake || 0);
                     document.getElementById('minesResult').innerHTML = `💥 HIT A MINE! Lost $${(minesState.stake || 0).toFixed(2)}`;
                     showArcadeToast('loss', '💣', 'BUSTED!', `-$${(minesState.stake || 0).toFixed(2)}`);
                     document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
@@ -7857,12 +8014,7 @@
 
                 minesState.active = false;
                 minesState.cashingOut = false;
-                playGameSound('win');
-                cameraShake(400);
-                pixelConfetti();
-                const screen = document.querySelector('#arcade-mines .arcade-screen');
-                if (screen) screen.classList.add('big-win-glow');
-                setTimeout(() => { if (screen) screen.classList.remove('big-win-glow'); }, 2000);
+                dramaticWin('#arcade-mines .arcade-screen', data.payout || 0, false);
                 document.getElementById('minesResult').innerHTML = `🎉 WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
                 document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
                 showArcadeToast('win', '💰', 'CASHED OUT!', `+$${data.payout.toFixed(2)}`);
@@ -8015,6 +8167,7 @@
             if (diceMode !== 'single') die2El.classList.add('rolling');
 
             let spins = 0;
+            playGameSound('spin');
             const rollAnim = setInterval(() => {
                 die1El.textContent = Math.floor(Math.random() * 6) + 1;
                 if (diceMode !== 'single') die2El.textContent = Math.floor(Math.random() * 6) + 1;
@@ -8032,19 +8185,12 @@
                         die1El.textContent = data.die1;
                         if (data.numDice === 2) die2El.textContent = data.die2;
                         const resultStr = data.numDice === 2 ? `${data.die1}+${data.die2} = ${data.sum}` : `${data.die1}`;
-                        const screen = document.querySelector('#arcade-dice .arcade-screen');
                         if (data.won) {
-                            playGameSound('win');
-                            cameraShake(400);
-                            pixelConfetti();
-                            if (screen) screen.classList.add('big-win-glow');
-                            setTimeout(() => { if (screen) screen.classList.remove('big-win-glow'); }, 2000);
+                            dramaticWin('#arcade-dice .arcade-screen', data.payout || 0, false);
                             resultEl.innerHTML = `🎉 ${resultStr} — WON <span style="color:#4caf50;font-weight:700">$${(data.payout || 0).toFixed(2)}</span> (${(data.multiplier || 0).toFixed(2)}x)`;
                             showArcadeToast('win', '🎲', 'YOU WON!', `+$${(data.payout || 0).toFixed(2)}`);
                         } else {
-                            playGameSound('loss');
-                            cameraShake();
-                            pixelParticles(window.innerWidth / 2, window.innerHeight / 2, '#e50914', 18);
+                            dramaticLoss('#arcade-dice .arcade-screen', data.stake || 0);
                             resultEl.innerHTML = `❌ ${resultStr} — You predicted ${data.prediction}. Lost $${(data.stake || 0).toFixed(2)}`;
                             showArcadeToast('loss', '❌', 'YOU LOST!', `-$${(data.stake || 0).toFixed(2)}`);
                         }
@@ -8133,23 +8279,16 @@
                         // Highlight the slot
                         const slots = document.getElementById('plinkoSlots').children;
                         if (slots[data.slotIndex]) {
-                            slots[data.slotIndex].style.transform = 'scale(1.3)';
-                            slots[data.slotIndex].style.boxShadow = '0 0 20px rgba(0,212,255,0.6)';
+                            slots[data.slotIndex].style.transform = 'scale(1.45)';
+                            slots[data.slotIndex].style.boxShadow = `0 0 35px ${data.won ? '#4caf50' : '#e50914'}, 0 0 60px ${data.won ? '#4caf50' : '#e50914'}40`;
                         }
                         ball.style.display = 'none';
-                        const screen = document.querySelector('#arcade-plinko .arcade-screen');
                         if (data.won) {
-                            playGameSound('win');
-                            cameraShake(400);
-                            pixelConfetti();
-                            if (screen) screen.classList.add('big-win-glow');
-                            setTimeout(() => { if (screen) screen.classList.remove('big-win-glow'); }, 2000);
+                            dramaticWin('#arcade-plinko .arcade-screen', data.payout || 0, false);
                             resultEl.innerHTML = `🎉 Landed on <span style="color:#00d4ff;font-weight:700">${data.multiplier.toFixed(2)}x</span> — WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span>`;
                             showArcadeToast('win', '🔵', 'YOU WON!', `+$${data.payout.toFixed(2)}`);
                         } else {
-                            playGameSound('loss');
-                            cameraShake();
-                            pixelParticles(window.innerWidth / 2, window.innerHeight / 2, '#e50914', 18);
+                            dramaticLoss('#arcade-plinko .arcade-screen', data.stake || 0);
                             resultEl.innerHTML = `Landed on ${data.multiplier.toFixed(2)}x — Lost $${data.stake.toFixed(2)}`;
                             showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
                         }
