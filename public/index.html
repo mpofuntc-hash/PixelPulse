@@ -27,140 +27,13 @@
         }
 
         /* ===== THEME SYSTEM: DAY / NIGHT ===== */
-        :root {
-            --bg-primary: #0d0d14;
-            --bg-secondary: #12121c;
-            --bg-card: #161616;
-            --bg-input: #2f2f2f;
-            --text-primary: #fff;
-            --text-secondary: #aaa;
-            --text-muted: #888;
-            --border-color: #333;
-            --accent: #e50914;
-        }
-
-        body.light-mode {
-            --bg-primary: #f2f4f7;
-            --bg-secondary: #ffffff;
-            --bg-card: #ffffff;
-            --bg-input: #f5f5f5;
-            --text-primary: #1a1a2e;
-            --text-secondary: #4a4a5a;
-            --text-muted: #6b6b7b;
-            --border-color: #d0d0e0;
-            --accent: #e50914;
-        }
-
-        body.light-mode {
+        /* Default = night background. .day-mode only swaps the background image. */
+        body.day-mode {
             background:
-                linear-gradient(180deg, rgba(220,230,245,0.92) 0%, rgba(235,240,250,0.9) 40%, rgba(240,245,255,0.88) 100%),
-                url('/images/pixel-kingdom-bg.svg') center top / cover no-repeat fixed,
-                linear-gradient(180deg, #dbe4f0 0%, #e8eef8 40%, #f0f4fa 100%);
-            color: var(--text-primary);
+                linear-gradient(180deg, rgba(20,45,75,0.45) 0%, rgba(30,60,95,0.4) 40%, rgba(40,80,115,0.35) 100%),
+                url('/images/pixel-kingdom-bg-day.svg') center top / cover no-repeat,
+                linear-gradient(180deg, #87CEEB 0%, #B0E0E6 40%, #E0F8F7 100%);
             background-attachment: fixed;
-        }
-
-        body.light-mode .navbar {
-            background: rgba(255, 255, 255, 0.94);
-            border-bottom: 1px solid rgba(229, 9, 20, 0.15);
-        }
-
-        body.light-mode .nav-links a,
-        body.light-mode .footer-link,
-        body.light-mode a {
-            color: #1a1a2e;
-        }
-
-        body.light-mode .nav-links a:hover,
-        body.light-mode .footer-link:hover {
-            color: var(--accent);
-        }
-
-        body.light-mode .search-container,
-        body.light-mode .search-input,
-        body.light-mode input,
-        body.light-mode select,
-        body.light-mode textarea {
-            background: #f5f5f5;
-            border-color: #d0d0e0;
-            color: #1a1a2e;
-        }
-
-        body.light-mode .search-input::placeholder {
-            color: #6b6b7b;
-        }
-
-        body.light-mode .market-option,
-        body.light-mode .anime-card,
-        body.light-mode .your-bets,
-        body.light-mode .bet-item,
-        body.light-mode .modal-content,
-        body.light-mode .info-banner,
-        body.light-mode .footer-badge,
-        body.light-mode .arcade-game,
-        body.light-mode .arcade-info,
-        body.light-mode .arcade-input,
-        body.light-mode .dice-pred-btn,
-        body.light-mode .dice-single-btn,
-        body.light-mode .dice-combo-btn,
-        body.light-mode .coinflip-history,
-        body.light-mode .stats-card,
-        body.light-mode .skin-card,
-        body.light-mode .trade-card,
-        body.light-mode .leaderboard-row,
-        body.light-mode .wallet-card,
-        body.light-mode .transaction-item,
-        body.light-mode .notif-item,
-        body.light-mode .chat-bubble {
-            background: var(--bg-card);
-            border-color: var(--border-color);
-            color: var(--text-primary);
-        }
-
-        body.light-mode .market-description,
-        body.light-mode .footer-col,
-        body.light-mode .footer-bottom,
-        body.light-mode .stat-label,
-        body.light-mode .info-banner,
-        body.light-mode .market-options,
-        body.light-mode .arcade-info,
-        body.light-mode .dice-pred-btn .payout-info,
-        body.light-mode .section-subtitle,
-        body.light-mode .muted-text {
-            color: var(--text-secondary);
-        }
-
-        body.light-mode .hero {
-            background: transparent;
-        }
-
-        body.light-mode .hero-title,
-        body.light-mode .hero-subtitle,
-        body.light-mode .section-title,
-        body.light-mode h1,
-        body.light-mode h2,
-        body.light-mode h3,
-        body.light-mode h4,
-        body.light-mode h5,
-        body.light-mode h6 {
-            color: var(--text-primary);
-        }
-
-        body.light-mode .modal {
-            background: rgba(255, 255, 255, 0.8);
-        }
-
-        body.light-mode .modal-content {
-            background: #fff;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
-        }
-
-        body.light-mode .modal-title {
-            color: #1a1a2e;
-        }
-
-        body.light-mode .close-btn {
-            color: #666;
         }
 
         /* Theme Toggle Button */
@@ -172,9 +45,9 @@
             width: 44px;
             height: 44px;
             border-radius: 50%;
-            border: 1px solid var(--border-color);
+            border: 1px solid #333;
             background: rgba(20, 20, 30, 0.95);
-            color: var(--text-primary);
+            color: #fff;
             font-size: 20px;
             cursor: pointer;
             display: flex;
@@ -184,60 +57,9 @@
             transition: all 0.3s;
         }
 
-        body.light-mode .theme-toggle {
-            background: rgba(255, 255, 255, 0.95);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-
         .theme-toggle:hover {
             transform: scale(1.1);
-            border-color: var(--accent);
-        }
-
-        .theme-toggle-menu {
-            position: absolute;
-            top: 52px;
-            right: 0;
-            background: rgba(20, 20, 30, 0.98);
-            border: 1px solid #333;
-            border-radius: 8px;
-            padding: 8px 0;
-            min-width: 130px;
-            display: none;
-            flex-direction: column;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-        }
-
-        body.light-mode .theme-toggle-menu {
-            background: rgba(255, 255, 255, 0.98);
-            border-color: #d0d0e0;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
-        }
-
-        .theme-toggle-menu.show {
-            display: flex;
-        }
-
-        .theme-option {
-            padding: 10px 16px;
-            font-size: 13px;
-            text-align: left;
-            background: none;
-            border: none;
-            color: var(--text-primary);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .theme-option:hover {
-            background: rgba(229, 9, 20, 0.1);
-        }
-
-        .theme-option.active {
-            color: var(--accent);
-            font-weight: 600;
+            border-color: #e50914;
         }
 
         .navbar {
@@ -1940,9 +1762,9 @@
             }
 
             function applyTheme() {
-                document.body.classList.remove('light-mode');
+                document.body.classList.remove('day-mode');
                 if (mode === 'day' || (mode === 'auto' && isDaytime())) {
-                    document.body.classList.add('light-mode');
+                    document.body.classList.add('day-mode');
                 }
             }
 
@@ -1960,21 +1782,11 @@
                 setThemeMode(next[mode] || 'auto');
             };
 
-            window.toggleThemeMenu = function() {
-                const menu = document.getElementById('themeToggleMenu');
-                if (menu) menu.classList.toggle('show');
-            };
-
-            window.selectThemeMode = function(selectedMode) {
-                setThemeMode(selectedMode);
-                toggleThemeMenu();
-            };
-
             window.updateThemeToggleIcon = function() {
                 const btn = document.getElementById('themeToggleBtn');
                 if (!btn) return;
-                const isLight = mode === 'day' || (mode === 'auto' && isDaytime());
-                btn.textContent = isLight ? '☀️' : '🌙';
+                const isDay = mode === 'day' || (mode === 'auto' && isDaytime());
+                btn.textContent = isDay ? '☀️' : '🌙';
                 btn.title = `Theme: ${mode} (click to change)`;
             };
 
