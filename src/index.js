@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
 const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, REST, Routes, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, PermissionFlagsBits } = require('discord.js');
+const fb = require('./facebook-bot');
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const app = express();
@@ -10279,6 +10280,8 @@ async function postDiscussionPrompt() {
 
     await dbRun('INSERT INTO community_posts (post_type, title, content) VALUES (?, ?, ?)',
       ['discussion', 'Daily Discussion', prompt]);
+
+    await fb.postDiscussionToPage('Daily Discussion 💬', prompt, 'https://pixelpulse.zentriva-clubsync.online');
   } catch (err) {
     console.error('Error posting discussion prompt:', err);
   }
@@ -10365,30 +10368,36 @@ const dailyPolls = [
 
 async function postDailyPoll() {
   try {
-    if (!TELEGRAM_CHANNEL_ID || !bot?.telegram) return;
     const poll = dailyPolls[Math.floor(Math.random() * dailyPolls.length)];
 
     // Save poll to database
     const pollResult = await dbRun('INSERT INTO community_posts (post_type, title, content, poll_options, follow_up) VALUES (?, ?, ?, ?, ?)',
       ['poll', poll.question, poll.question, JSON.stringify(poll.options), poll.followUp]);
 
-    // Send the poll
-    await bot.telegram.sendPoll(
-      TELEGRAM_CHANNEL_ID,
-      poll.question,
-      poll.options,
-      { is_anonymous: false }
-    );
+    // Send the poll to Telegram if configured
+    if (TELEGRAM_CHANNEL_ID && bot?.telegram) {
+      await bot.telegram.sendPoll(
+        TELEGRAM_CHANNEL_ID,
+        poll.question,
+        poll.options,
+        { is_anonymous: false }
+      );
+    }
+
+    // Post the same poll to the Facebook Page (Facebook does not support native page polls via Graph API, so we use a text poll)
+    await fb.postPollToPage(poll.question, poll.options);
 
     // Send follow-up discussion message 2 seconds later
-    setTimeout(async () => {
-      try {
-        const msg = `💬 Tell us more!\n\n${poll.followUp}\n\n👇 Reply below — we read everything!\n🎮 https://pixelpulse.zentriva-clubsync.online`;
-        await bot.telegram.sendMessage(TELEGRAM_CHANNEL_ID, msg);
-      } catch (e) {
-        console.error('Error posting poll follow-up:', e.message);
-      }
-    }, 2000);
+    if (TELEGRAM_CHANNEL_ID && bot?.telegram) {
+      setTimeout(async () => {
+        try {
+          const msg = `💬 Tell us more!\n\n${poll.followUp}\n\n👇 Reply below — we read everything!\n🎮 https://pixelpulse.zentriva-clubsync.online`;
+          await bot.telegram.sendMessage(TELEGRAM_CHANNEL_ID, msg);
+        } catch (e) {
+          console.error('Error posting poll follow-up:', e.message);
+        }
+      }, 2000);
+    }
 
     console.log('Daily poll posted to Telegram');
   } catch (err) {
