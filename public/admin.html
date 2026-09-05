@@ -472,6 +472,9 @@
             <div class="nav-item" onclick="showSection('referrals')">
                 <span>🔗</span> Referrals
             </div>
+            <div class="nav-item" onclick="showSection('ads')">
+                <span>📢</span> Ads
+            </div>
             <div class="nav-item" onclick="showSection('settings')">
                 <span>⚙️</span> Settings
             </div>
@@ -646,6 +649,60 @@
                 </div>
             </div>
 
+            <!-- Ads Section -->
+            <div id="ads" class="section">
+                <div class="chart-container">
+                    <h3>Create New Ad</h3>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label>Slot</label>
+                        <select id="adSlot" style="width: 100%; padding: 10px; background: #1a1a1a; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                            <option value="top_banner">Top Banner (below navbar)</option>
+                            <option value="mid_banner">Mid Banner (above footer)</option>
+                            <option value="footer">Footer (above footer)</option>
+                            <option value="sidebar">Sidebar (reserved)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label>Ad Type</label>
+                        <select id="adType" onchange="toggleAdTypeFields()" style="width: 100%; padding: 10px; background: #1a1a1a; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                            <option value="image">Image + Link (partner/banner ad)</option>
+                            <option value="html">HTML Code (custom ad / Google AdSense)</option>
+                            <option value="script">Script Tag (ad network code)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label>Title (optional)</label>
+                        <input type="text" id="adTitle" placeholder="e.g. Partner Casino Ad" style="width: 100%; padding: 10px; background: #1a1a1a; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                    </div>
+                    <div id="adImageFields">
+                        <div class="form-group" style="margin-top: 15px;">
+                            <label>Image URL</label>
+                            <input type="text" id="adImageUrl" placeholder="https://example.com/banner.png" style="width: 100%; padding: 10px; background: #1a1a1a; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                        </div>
+                        <div class="form-group" style="margin-top: 15px;">
+                            <label>Link URL (where the ad clicks through to)</label>
+                            <input type="text" id="adLinkUrl" placeholder="https://partner-site.com" style="width: 100%; padding: 10px; background: #1a1a1a; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                        </div>
+                    </div>
+                    <div id="adCodeField" style="display: none;">
+                        <div class="form-group" style="margin-top: 15px;">
+                            <label>HTML / Script Code</label>
+                            <textarea id="adHtmlCode" rows="5" placeholder="Paste ad network code here (e.g. Google AdSense snippet or partner HTML)" style="width: 100%; padding: 10px; background: #1a1a1a; border: 1px solid #333; color: #fff; border-radius: 4px; font-family: monospace; font-size: 12px;"></textarea>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="createAd()" style="margin-top: 15px;">Publish Ad</button>
+                </div>
+                <div class="tickets-section" style="margin-top: 20px;">
+                    <div class="tickets-header">
+                        <h3>Active &amp; Inactive Ads</h3>
+                        <button class="btn btn-secondary" onclick="loadAdminAds()">🔄 Refresh</button>
+                    </div>
+                    <div class="ticket-list" id="adsList">
+                        <div class="loading">Loading ads...</div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Settings Section -->
             <div id="settings" class="section">
                 <div class="chart-container">
@@ -745,6 +802,7 @@
             
             if (sectionId === 'analytics') loadAnalyticsCharts();
             if (sectionId === 'revenue') loadRevenueChart();
+            if (sectionId === 'ads') loadAdminAds();
             if (sectionId === 'referrals') loadReferralData();
         }
 
@@ -1485,6 +1543,91 @@
             } catch (e) {
                 alert('Failed to load agent details');
             }
+        }
+
+        // ===== ADS MANAGEMENT =====
+        function toggleAdTypeFields() {
+            const type = document.getElementById('adType').value;
+            document.getElementById('adImageFields').style.display = type === 'image' ? 'block' : 'none';
+            document.getElementById('adCodeField').style.display = (type === 'html' || type === 'script') ? 'block' : 'none';
+        }
+
+        async function loadAdminAds() {
+            try {
+                const res = await fetch('/api/admin/ads');
+                const data = await res.json();
+                const ads = data.ads || [];
+                const list = document.getElementById('adsList');
+
+                if (!ads.length) {
+                    list.innerHTML = '<div style="color: #999; padding: 20px;">No ads placed yet. Create one above — ad slots on the site stay hidden until an ad is active.</div>';
+                    return;
+                }
+
+                const slotNames = { top_banner: 'Top Banner', mid_banner: 'Mid Banner', footer: 'Footer', sidebar: 'Sidebar' };
+                list.innerHTML = ads.map(ad => `
+                    <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 14px; margin-bottom: 10px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong>${ad.title || '(untitled)'}</strong>
+                                <span style="margin-left: 10px; font-size: 11px; padding: 2px 8px; border-radius: 10px; background: ${ad.active ? '#1b5e20' : '#4a1a1a'}; color: ${ad.active ? '#4caf50' : '#e50914'};">${ad.active ? 'ACTIVE' : 'INACTIVE'}</span>
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <button onclick="toggleAd(${ad.id})" style="padding: 5px 12px; font-size: 12px; background: #333; border: none; color: #fff; border-radius: 4px; cursor: pointer;">${ad.active ? 'Deactivate' : 'Activate'}</button>
+                                <button onclick="deleteAd(${ad.id})" style="padding: 5px 12px; font-size: 12px; background: #e50914; border: none; color: #fff; border-radius: 4px; cursor: pointer;">Delete</button>
+                            </div>
+                        </div>
+                        <div style="font-size: 12px; color: #999; margin-top: 8px;">
+                            Slot: <strong>${slotNames[ad.slot] || ad.slot}</strong> · Type: <strong>${ad.ad_type}</strong> · Created: ${ad.created_at}
+                            ${ad.image_url ? `<br>Image: <a href="${ad.image_url}" target="_blank" style="color: #00d4ff;">${ad.image_url}</a>` : ''}
+                            ${ad.link_url ? `<br>Link: <a href="${ad.link_url}" target="_blank" style="color: #00d4ff;">${ad.link_url}</a>` : ''}
+                            ${ad.html_code ? `<br>Code: <code style="font-size: 10px; color: #888;">${ad.html_code.substring(0, 120).replace(/</g, '&lt;')}${ad.html_code.length > 120 ? '…' : ''}</code>` : ''}
+                        </div>
+                    </div>`).join('');
+            } catch (e) {
+                document.getElementById('adsList').innerHTML = '<div style="color: #e50914; padding: 20px;">Failed to load ads</div>';
+            }
+        }
+
+        async function createAd() {
+            const slot = document.getElementById('adSlot').value;
+            const ad_type = document.getElementById('adType').value;
+            const title = document.getElementById('adTitle').value.trim();
+            const image_url = document.getElementById('adImageUrl').value.trim();
+            const link_url = document.getElementById('adLinkUrl').value.trim();
+            const html_code = document.getElementById('adHtmlCode').value.trim();
+
+            if (ad_type === 'image' && !image_url) { alert('Image URL is required for image ads'); return; }
+            if ((ad_type === 'html' || ad_type === 'script') && !html_code) { alert('HTML/Script code is required'); return; }
+
+            const res = await fetch('/api/admin/ads', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slot, ad_type, title, image_url, link_url, html_code })
+            });
+            const data = await res.json();
+            if (data.error) { alert(data.error); return; }
+            alert('Ad published! It is now live on the site.');
+            document.getElementById('adTitle').value = '';
+            document.getElementById('adImageUrl').value = '';
+            document.getElementById('adLinkUrl').value = '';
+            document.getElementById('adHtmlCode').value = '';
+            loadAdminAds();
+        }
+
+        async function toggleAd(id) {
+            const res = await fetch(`/api/admin/ads/${id}/toggle`, { method: 'POST' });
+            const data = await res.json();
+            if (data.error) { alert(data.error); return; }
+            loadAdminAds();
+        }
+
+        async function deleteAd(id) {
+            if (!confirm('Delete this ad permanently?')) return;
+            const res = await fetch(`/api/admin/ads/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.error) { alert(data.error); return; }
+            loadAdminAds();
         }
     </script>
 </body>

@@ -1993,7 +1993,35 @@
             margin-bottom: 12px;
         }
         @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        /* ===== AD SLOTS (hidden until populated) ===== */
+        .ad-slot {
+            display: none;
+            margin: 16px auto;
+            max-width: 1200px;
+            padding: 0 16px;
+            text-align: center;
+        }
+        .ad-slot.has-ad { display: block; }
+        .ad-slot-label {
+            font-size: 9px;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 4px;
+        }
+        .ad-slot-inner {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid #2a2a2a;
+            border-radius: 10px;
+            padding: 10px;
+            overflow: hidden;
+        }
+        .ad-slot-inner img { max-width: 100%; height: auto; border-radius: 6px; display: block; margin: 0 auto; }
+        .ad-slot-inner a { display: inline-block; }
+        .ad-slot-title { font-size: 11px; color: #888; margin-top: 6px; }
     </style>
+    <script src="https://richinfo.co/richpartners/pops/js/richads-pu-ob.js" data-pubid="1021968" data-siteid="406305" async data-cfasync="false"></script>
 </head>
 <body>
     <script>
@@ -2069,6 +2097,9 @@
             <input type="text" class="search-input" placeholder="Search clips..." id="searchInput">
         </div>
     </nav>
+
+    <!-- Ad Slot: Top Banner (hidden until an ad is placed via admin) -->
+    <div class="ad-slot" id="adSlot-top_banner" data-slot="top_banner"></div>
 
     <!-- Theme Toggle -->
     <div style="position: relative;">
@@ -3499,6 +3530,12 @@
             </div>
         </div>
     </section>
+
+    <!-- Ad Slot: Mid Banner (hidden until an ad is placed via admin) -->
+    <div class="ad-slot" id="adSlot-mid_banner" data-slot="mid_banner"></div>
+
+    <!-- Ad Slot: Footer (hidden until an ad is placed via admin) -->
+    <div class="ad-slot" id="adSlot-footer" data-slot="footer"></div>
 
     <footer class="site-footer">
         <div class="footer-grid">
@@ -8804,6 +8841,59 @@
                 alert('Network error sending reply');
             }
         }
+
+        // ===== SITE ADS =====
+        // Fetches active ads from the server and renders them into slots.
+        // Slots stay hidden when there are no ads — no empty blocks.
+        async function loadAds() {
+            try {
+                const res = await fetch('/api/ads');
+                const data = await res.json();
+                const ads = data.ads || [];
+                if (!ads.length) return;
+
+                const slots = {};
+                ads.forEach(ad => {
+                    if (!slots[ad.slot]) slots[ad.slot] = [];
+                    slots[ad.slot].push(ad);
+                });
+
+                Object.keys(slots).forEach(slotName => {
+                    const container = document.getElementById('adSlot-' + slotName);
+                    if (!container) return;
+
+                    let html = '<div class="ad-slot-label">Advertisement</div><div class="ad-slot-inner">';
+                    slots[slotName].forEach(ad => {
+                        if (ad.ad_type === 'image' && ad.image_url) {
+                            const img = `<img src="${ad.image_url}" alt="${(ad.title || 'Advertisement').replace(/"/g, '&quot;')}" loading="lazy">`;
+                            html += ad.link_url
+                                ? `<a href="${ad.link_url}" target="_blank" rel="noopener sponsored">${img}</a>`
+                                : img;
+                            if (ad.title) html += `<div class="ad-slot-title">${ad.title}</div>`;
+                        } else if (ad.ad_type === 'html' && ad.html_code) {
+                            html += ad.html_code;
+                        } else if (ad.ad_type === 'script' && ad.html_code) {
+                            html += ad.html_code;
+                        }
+                    });
+                    html += '</div>';
+
+                    container.innerHTML = html;
+                    container.classList.add('has-ad');
+
+                    // Execute any <script> tags injected via html/script ads
+                    container.querySelectorAll('script').forEach(oldScript => {
+                        const s = document.createElement('script');
+                        Array.from(oldScript.attributes).forEach(a => s.setAttribute(a.name, a.value));
+                        s.textContent = oldScript.textContent;
+                        oldScript.parentNode.replaceChild(s, oldScript);
+                    });
+                });
+            } catch (e) {
+                // Ads are non-critical — fail silently
+            }
+        }
+        document.addEventListener('DOMContentLoaded', loadAds);
 
     </script>
 </body>

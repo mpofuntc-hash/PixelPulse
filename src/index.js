@@ -1757,6 +1757,19 @@ async function initSchema() {
       last_updated TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS site_ads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slot TEXT NOT NULL,
+      ad_type TEXT NOT NULL DEFAULT 'image',
+      title TEXT,
+      image_url TEXT,
+      link_url TEXT,
+      html_code TEXT,
+      active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
 }
 async function initDatabaseAndSchema() {
   await ensureLegacySchema();
@@ -8784,6 +8797,66 @@ app.post('/api/admin/prediction-market/:id/resolve', authenticateRequest, async 
 
   logSystemEvent('info', `Prediction market resolved`, `Market: ${market.title}, Winner: ${resolved_option}`);
   res.json({ message: 'Market resolved', winners: winningBets.length, losers: losingBets.length });
+});
+
+// ============================================================
+// SITE ADS SYSTEM
+// ============================================================
+
+// Public: get active ads (grouped by slot)
+app.get('/api/ads', async (req, res) => {
+  try {
+    const ads = await dbAll('SELECT id, slot, ad_type, title, image_url, link_url, html_code FROM site_ads WHERE active = 1 ORDER BY created_at DESC');
+    res.json({ ads });
+  } catch (err) {
+    res.json({ ads: [] });
+  }
+});
+
+// Admin: list all ads
+app.get('/api/admin/ads', checkAdminSession, async (req, res) => {
+  const ads = await dbAll('SELECT * FROM site_ads ORDER BY created_at DESC');
+  res.json({ ads });
+});
+
+// Admin: create ad
+app.post('/api/admin/ads', checkAdminSession, async (req, res) => {
+  const { slot, ad_type, title, image_url, link_url, html_code } = req.body;
+  if (!slot || !['top_banner', 'mid_banner', 'sidebar', 'footer'].includes(slot)) {
+    return res.status(400).json({ error: 'Valid slot required: top_banner, mid_banner, sidebar, footer' });
+  }
+  if (!ad_type || !['image', 'html', 'script'].includes(ad_type)) {
+    return res.status(400).json({ error: 'Valid ad_type required: image, html, script' });
+  }
+  if (ad_type === 'image' && !image_url) {
+    return res.status(400).json({ error: 'image_url required for image ads' });
+  }
+  if ((ad_type === 'html' || ad_type === 'script') && !html_code) {
+    return res.status(400).json({ error: 'html_code required for html/script ads' });
+  }
+  const result = await dbRun(
+    'INSERT INTO site_ads (slot, ad_type, title, image_url, link_url, html_code) VALUES (?, ?, ?, ?, ?, ?)',
+    [slot, ad_type, title || '', image_url || '', link_url || '', html_code || '']
+  );
+  logSystemEvent('info', 'Site ad created', `Slot: ${slot}, Type: ${ad_type}, Title: ${title || 'n/a'}`);
+  res.json({ message: 'Ad created', id: result.lastID });
+});
+
+// Admin: toggle ad active/inactive
+app.post('/api/admin/ads/:id/toggle', checkAdminSession, async (req, res) => {
+  const ad = await dbGet('SELECT * FROM site_ads WHERE id = ?', [req.params.id]);
+  if (!ad) return res.status(404).json({ error: 'Ad not found' });
+  await dbRun('UPDATE site_ads SET active = ? WHERE id = ?', [ad.active ? 0 : 1, ad.id]);
+  res.json({ message: ad.active ? 'Ad deactivated' : 'Ad activated', active: ad.active ? 0 : 1 });
+});
+
+// Admin: delete ad
+app.delete('/api/admin/ads/:id', checkAdminSession, async (req, res) => {
+  const ad = await dbGet('SELECT * FROM site_ads WHERE id = ?', [req.params.id]);
+  if (!ad) return res.status(404).json({ error: 'Ad not found' });
+  await dbRun('DELETE FROM site_ads WHERE id = ?', [ad.id]);
+  logSystemEvent('info', 'Site ad deleted', `ID: ${ad.id}, Slot: ${ad.slot}`);
+  res.json({ message: 'Ad deleted' });
 });
 
 // ============================================================
