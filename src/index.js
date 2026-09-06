@@ -4625,48 +4625,56 @@ app.post('/api/skins', authenticateRequest, async (req, res) => {
 
 // CHAT API ENDPOINTS
 
-// API: Get community chat messages
+// API: List public thread starters (top-level community messages), sorted by latest activity
 app.get('/api/chat/community', async (req, res) => {
   const messages = await dbAll(`
-    SELECT cm.*, u.username, ru.username as reply_to_username, rm.message as reply_to_message
-    FROM chat_messages cm 
-    JOIN users u ON cm.user_id = u.id 
-    LEFT JOIN chat_messages rm ON cm.reply_to_id = rm.id
-    LEFT JOIN users ru ON rm.user_id = ru.id
-    WHERE cm.message_type = 'community'
-    ORDER BY cm.created_at DESC 
+    SELECT cm.*, u.username,
+      (SELECT COUNT(*) FROM chat_messages r WHERE r.reply_to_id = cm.id AND r.message_type = 'community') as reply_count,
+      (SELECT MAX(r.created_at) FROM chat_messages r WHERE r.reply_to_id = cm.id AND r.message_type = 'community') as last_reply_at
+    FROM chat_messages cm
+    JOIN users u ON cm.user_id = u.id
+    WHERE cm.message_type = 'community' AND cm.reply_to_id IS NULL
+    ORDER BY COALESCE((SELECT MAX(r.created_at) FROM chat_messages r WHERE r.reply_to_id = cm.id AND r.message_type = 'community'), cm.created_at) DESC
     LIMIT 50
   `);
-  
-  res.json(messages.reverse());
-});
-
-// API: Get DM messages
-app.get('/api/chat/dm/:userId', authenticateRequest, async (req, res) => {
-  const otherUserId = parseInt(req.params.userId);
-  
-  const messages = await dbAll(`
-    SELECT cm.*, u.username 
-    FROM chat_messages cm 
-    JOIN users u ON cm.user_id = u.id 
-    WHERE cm.message_type = 'dm' 
-      AND ((cm.user_id = ? AND cm.recipient_id = ?) OR (cm.user_id = ? AND cm.recipient_id = ?))
-    ORDER BY cm.created_at ASC
-  `, [req.userId, otherUserId, otherUserId, req.userId]);
-  
   res.json(messages);
 });
 
-// API: Send community message
+// API: Get a thread (top-level message + all nested replies)
+app.get('/api/chat/thread/:messageId', async (req, res) => {
+  const rootId = parseInt(req.params.messageId);
+  if (!Number.isInteger(rootId)) return res.status(400).json({ error: 'Invalid thread id.' });
+
+  const messages = await dbAll(`
+    WITH RECURSIVE thread_tree(id, user_id, message, message_type, reply_to_id, recipient_id, created_at, depth, path) AS (
+      SELECT cm.id, cm.user_id, cm.message, cm.message_type, cm.reply_to_id, cm.recipient_id, cm.created_at, 0, CAST(cm.id AS TEXT)
+      FROM chat_messages cm
+      WHERE cm.id = ? AND cm.message_type = 'community' AND cm.reply_to_id IS NULL
+      UNION ALL
+      SELECT cm.id, cm.user_id, cm.message, cm.message_type, cm.reply_to_id, cm.recipient_id, cm.created_at, t.depth + 1, t.path || ',' || CAST(cm.id AS TEXT)
+      FROM chat_messages cm
+      JOIN thread_tree t ON cm.reply_to_id = t.id
+      WHERE cm.message_type = 'community'
+    )
+    SELECT t.*, u.username
+    FROM thread_tree t
+    JOIN users u ON t.user_id = u.id
+    ORDER BY t.path
+  `, [rootId]);
+
+  if (messages.length === 0) return res.status(404).json({ error: 'Thread not found.' });
+  res.json(messages);
+});
+
+// API: Send community message / start a new thread (replyToId is ignored here; replies use /thread/:id/reply)
 app.post('/api/chat/community', authenticateRequest, rateLimit({ windowMs: 60 * 1000, max: 20, key: req => `community-chat:${req.userId || req.ip}` }), async (req, res) => {
-  const { message, replyToId } = req.body;
+  const { message } = req.body;
 
   if (!validateText(message, { maxLength: 500, required: true })) {
     return res.status(400).json({ error: 'Message must be 1-500 characters.' });
   }
 
-  const replyId = replyToId ? parseInt(replyToId) : null;
-  await dbRun('INSERT INTO chat_messages (user_id, message, message_type, reply_to_id) VALUES (?, ?, ?, ?)', [req.userId, String(message).trim(), 'community', replyId]);
+  await dbRun('INSERT INTO chat_messages (user_id, message, message_type) VALUES (?, ?, ?)', [req.userId, String(message).trim(), 'community']);
 
   // Bridge to Discord: send webapp community messages to Discord channel
   const user = await dbGet('SELECT username FROM users WHERE id = ?', [req.userId]);
@@ -4674,13 +4682,56 @@ app.post('/api/chat/community', authenticateRequest, rateLimit({ windowMs: 60 * 
     broadcastToDiscord('💬 Community Chat', `**${user.username}:** ${String(message).trim()}`, 0x5865f2).catch(() => {});
   }
 
-  res.json({ message: 'Message sent' });
+  res.json({ message: 'Thread started' });
+});
+
+// API: Reply inside a thread
+app.post('/api/chat/thread/:messageId/reply', authenticateRequest, rateLimit({ windowMs: 60 * 1000, max: 20, key: req => `thread-reply:${req.userId || req.ip}` }), async (req, res) => {
+  const rootId = parseInt(req.params.messageId);
+  const { message } = req.body;
+
+  if (!Number.isInteger(rootId)) return res.status(400).json({ error: 'Invalid thread id.' });
+  if (!validateText(message, { maxLength: 500, required: true })) {
+    return res.status(400).json({ error: 'Message must be 1-500 characters.' });
+  }
+
+  const root = await dbGet("SELECT * FROM chat_messages WHERE id = ? AND message_type = 'community'", [rootId]);
+  if (!root) return res.status(404).json({ error: 'Thread not found.' });
+
+  await dbRun('INSERT INTO chat_messages (user_id, message, message_type, reply_to_id) VALUES (?, ?, ?, ?)', [req.userId, String(message).trim(), 'community', rootId]);
+
+  // Discord bridge with thread context
+  const user = await dbGet('SELECT username FROM users WHERE id = ?', [req.userId]);
+  if (user) {
+    const rootText = (root.message || '').substring(0, 40) + ((root.message || '').length > 40 ? '...' : '');
+    broadcastToDiscord('💬 Thread Reply', `**${user.username}** in thread "${rootText}":\n${String(message).trim()}`, 0x5865f2).catch(() => {});
+  }
+
+  res.json({ message: 'Reply sent' });
+});
+
+// API: Get DM messages
+app.get('/api/chat/dm/:userId', authenticateRequest, async (req, res) => {
+  const otherUserId = parseInt(req.params.userId);
+
+  const messages = await dbAll(`
+    SELECT cm.*, u.username, ru.username as reply_to_username, rm.message as reply_to_message
+    FROM chat_messages cm
+    JOIN users u ON cm.user_id = u.id
+    LEFT JOIN chat_messages rm ON cm.reply_to_id = rm.id
+    LEFT JOIN users ru ON rm.user_id = ru.id
+    WHERE cm.message_type = 'dm'
+      AND ((cm.user_id = ? AND cm.recipient_id = ?) OR (cm.user_id = ? AND cm.recipient_id = ?))
+    ORDER BY cm.created_at ASC
+  `, [req.userId, otherUserId, otherUserId, req.userId]);
+
+  res.json(messages);
 });
 
 // API: Send DM
 app.post('/api/chat/dm/:userId', authenticateRequest, rateLimit({ windowMs: 60 * 1000, max: 20, key: req => `dm-chat:${req.userId}:${req.params.userId}` }), async (req, res) => {
   const otherUserId = parseInt(req.params.userId);
-  const { message } = req.body;
+  const { message, replyToId } = req.body;
 
   if (!Number.isInteger(otherUserId) || otherUserId === req.userId) {
     return res.status(400).json({ error: 'Invalid conversation target.' });
@@ -4690,7 +4741,8 @@ app.post('/api/chat/dm/:userId', authenticateRequest, rateLimit({ windowMs: 60 *
     return res.status(400).json({ error: 'Message must be 1-500 characters.' });
   }
 
-  await dbRun('INSERT INTO chat_messages (user_id, recipient_id, message, message_type) VALUES (?, ?, ?, ?)', [req.userId, otherUserId, String(message).trim(), 'dm']);
+  const replyId = replyToId ? parseInt(replyToId) : null;
+  await dbRun('INSERT INTO chat_messages (user_id, recipient_id, message, message_type, reply_to_id) VALUES (?, ?, ?, ?, ?)', [req.userId, otherUserId, String(message).trim(), 'dm', replyId]);
 
   res.json({ message: 'DM sent' });
 });

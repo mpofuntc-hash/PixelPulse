@@ -2022,6 +2022,36 @@
         .ad-slot-title { font-size: 11px; color: #888; margin-top: 6px; }
     </style>
     <script src="https://richinfo.co/richpartners/pops/js/richads-pu-ob.js" data-pubid="1021968" data-siteid="406305" async data-cfasync="false"></script>
+    <style>
+    .chat-layout { display: grid; grid-template-columns: 260px 1fr; gap: 0; height: calc(100vh - 220px); min-height: 500px; background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 8px; overflow: hidden; }
+    .chat-sidebar { background: #12121e; border-right: 1px solid #2a2a3e; display: flex; flex-direction: column; padding: 12px; overflow-y: auto; }
+    .chat-main { display: flex; flex-direction: column; min-width: 0; }
+    .chat-header { padding: 12px 16px; border-bottom: 1px solid #2a2a3e; background: #161626; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .chat-composer { padding: 12px 16px; border-top: 1px solid #2a2a3e; background: #161626; display: flex; flex-direction: column; gap: 8px; }
+    .chat-composer-row { display: flex; gap: 10px; align-items: center; }
+    .chat-input { flex: 1; padding: 10px 12px; background: #0f0f18; border: 1px solid #333; color: #fff; border-radius: 8px; outline: none; }
+    .chat-input:focus { border-color: #e50914; }
+    .chat-bubble { padding: 10px 14px; border-radius: 14px; max-width: 80%; word-wrap: break-word; line-height: 1.35; font-size: 14px; }
+    .chat-bubble-self { background: #e50914; color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+    .chat-bubble-other { background: #2a2a4e; color: #eee; align-self: flex-start; border-bottom-left-radius: 4px; }
+    .chat-message-row { display: flex; gap: 10px; align-items: flex-end; }
+    .chat-message-row.self { flex-direction: row-reverse; }
+    .chat-meta { font-size: 11px; color: #888; margin-top: 3px; }
+    .chat-avatar { width: 36px; height: 36px; border-radius: 6px; overflow: hidden; flex-shrink: 0; background: #0f0f18; }
+    .chat-thread-card { padding: 12px; border-radius: 10px; background: #1a1a2e; margin-bottom: 8px; cursor: pointer; transition: 0.2s; border: 1px solid transparent; }
+    .chat-thread-card:hover, .chat-thread-card.active { background: #222244; border-color: #e50914; }
+    .chat-thread-card-title { font-weight: 600; color: #fff; margin-bottom: 4px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .chat-thread-card-meta { font-size: 12px; color: #888; }
+    .chat-convo-card { padding: 10px 12px; border-radius: 10px; background: #1a1a2e; margin-bottom: 6px; cursor: pointer; transition: 0.2s; border: 1px solid transparent; display: flex; align-items: center; gap: 10px; }
+    .chat-convo-card:hover, .chat-convo-card.active { background: #222244; border-color: #e50914; }
+    .chat-reply-snippet { background: #0f0f18; border-left: 3px solid #e50914; padding: 6px 10px; border-radius: 6px; font-size: 12px; color: #aaa; }
+    .chat-tab { background: transparent; border: 1px solid #333; color: #aaa; padding: 8px 16px; border-radius: 6px; cursor: pointer; transition: .2s; font-weight: 600; }
+    .chat-tab.active, .chat-tab:hover { background: #e50914; color: #fff; border-color: #e50914; }
+    .highlight-pulse { animation: highlightPulse 1.2s ease-out; }
+    @keyframes highlightPulse { 0% { background: rgba(229,9,20,0.4); } 100% { background: transparent; } }
+    @media (max-width: 768px) { .chat-layout { grid-template-columns: 1fr; } }
+    </style>
 </head>
 <body>
     <script>
@@ -2936,52 +2966,74 @@
     </div>
 
     <div class="section" id="chat" style="display: none;">
-        <div class="info-banner"><strong>Community Chat</strong> — Talk to other players in real time. Reply to messages, DM online users, and make friends in the PixelPulse community.</div>
-        <h2 class="section-title">Community Chat</h2>
-        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-            <button class="arcade-tab active" id="chatTab-community" onclick="switchChatTab('community')">💬 Community</button>
-            <button class="arcade-tab" id="chatTab-dms" onclick="switchChatTab('dms')">📨 Direct Messages</button>
+        <div class="info-banner"><strong>Pulse Chat</strong> — Hang out in public threads or slide into DMs. Start a topic and keep the conversation going.</div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <h2 class="section-title" style="margin: 0;">Chat</h2>
+            <div style="display: flex; gap: 8px;">
+                <button class="chat-tab active" id="chatTab-community" onclick="switchChatTab('community')">Threads</button>
+                <button class="chat-tab" id="chatTab-dms" onclick="switchChatTab('dms')">Direct</button>
+            </div>
         </div>
-        <div id="chat-community-view" style="display: block;">
-            <div style="display: grid; grid-template-columns: 1fr 280px; gap: 20px;">
-                <div style="background: #1a1a2e; padding: 20px; border-radius: 8px; border: 1px solid #333; height: 500px; overflow-y: auto;" id="chatMessages">
-                    <div class="loading">Loading messages...</div>
+        <div id="chat-community-view" class="chat-layout">
+            <div class="chat-sidebar">
+                <button class="btn btn-primary" style="margin-bottom: 12px; width: 100%;" onclick="openNewThreadModal()">+ New Thread</button>
+                <h3 style="font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Public Threads</h3>
+                <div id="communityThreadList" style="flex: 1; overflow-y: auto;">
+                    <div style="color: #888; padding: 12px;">Loading threads...</div>
                 </div>
-                <div style="background: #1a1a2e; padding: 20px; border-radius: 8px; border: 1px solid #333;">
-                    <h3 style="margin-bottom: 15px; color: #e50914;">🟢 Online Users</h3>
-                    <div id="onlineUsers">
-                        <div style="color: #999;">No users online</div>
+            </div>
+            <div class="chat-main">
+                <div id="communityThreadHeader" class="chat-header">Select a thread to join the conversation</div>
+                <div id="communityThreadMessages" class="chat-messages">
+                    <div style="color: #888; text-align: center; padding-top: 80px;">Pick a thread on the left or start a new one.</div>
+                </div>
+                <div id="communityThreadComposer" class="chat-composer" style="display: none;">
+                    <div class="chat-composer-row">
+                        <input type="text" id="threadInput" class="chat-input" placeholder="Reply in thread..." onkeydown="if(event.key==='Enter') sendThreadReply()">
+                        <button class="btn btn-primary" onclick="sendThreadReply()">Send</button>
                     </div>
                 </div>
             </div>
-            <div style="margin-top: 20px; display: flex; gap: 10px; align-items: center;">
-                <div id="replyPreview" style="display: none; background: #2a2a4e; padding: 8px 12px; border-radius: 4px; border-left: 3px solid #e50914; font-size: 13px; margin-right: 5px; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                    <span id="replyPreviewText"></span>
-                    <span style="color: #e50914; cursor: pointer; margin-left: 8px;" onclick="cancelReply()">✕</span>
-                </div>
-                <input type="text" id="chatInput" placeholder="Type a message..." style="flex: 1; padding: 12px; background: #2a2a2a; border: 1px solid #333; color: #fff; border-radius: 4px;" onkeydown="if(event.key==='Enter') sendMessage()">
-                <button class="btn btn-primary" onclick="sendMessage()">Send</button>
-            </div>
         </div>
-        <div id="chat-dms-view" style="display: none;">
-            <div style="display: grid; grid-template-columns: 280px 1fr; gap: 20px;">
-                <div style="background: #1a1a2e; padding: 20px; border-radius: 8px; border: 1px solid #333; height: 500px; overflow-y: auto;">
-                    <h3 style="margin-bottom: 15px; color: #e50914;">Conversations</h3>
-                    <div id="dmConversations">
-                        <div style="color: #999;">No conversations yet</div>
-                    </div>
+        <div id="chat-dms-view" class="chat-layout" style="display: none;">
+            <div class="chat-sidebar">
+                <h3 style="font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Conversations</h3>
+                <div id="dmConversations" style="flex: 1; overflow-y: auto;">
+                    <div style="color: #888; padding: 12px;">No conversations yet</div>
                 </div>
-                <div style="background: #1a1a2e; padding: 20px; border-radius: 8px; border: 1px solid #333; height: 500px; display: flex; flex-direction: column;">
-                    <div id="dmHeader" style="margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #333; display: none;">
-                        <h3 id="dmUsername" style="color: #e50914;"></h3>
+                <h3 style="font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 8px;">Online</h3>
+                <div id="onlineUsers" style="overflow-y: auto; max-height: 180px;">
+                    <div style="color: #888; padding: 12px;">No users online</div>
+                </div>
+            </div>
+            <div class="chat-main">
+                <div id="dmHeader" class="chat-header" style="display: none;">
+                    <span id="dmUsername" style="color: #e50914; font-weight: 700;"></span>
+                </div>
+                <div id="dmMessages" class="chat-messages">
+                    <div style="color: #888; text-align: center; padding-top: 80px;">Select a conversation or click an online user to message</div>
+                </div>
+                <div id="dmInputArea" class="chat-composer" style="display: none;">
+                    <div id="dmReplyPreview" class="chat-reply-snippet" style="display: none;">
+                        <span id="dmReplyPreviewText"></span>
+                        <span style="color: #e50914; cursor: pointer; margin-left: 8px;" onclick="cancelDMReply()">✕</span>
                     </div>
-                    <div id="dmMessages" style="flex: 1; overflow-y: auto; margin-bottom: 15px;">
-                        <div style="color: #999; text-align: center; padding-top: 100px;">Select a conversation or start a new DM from the online users list</div>
-                    </div>
-                    <div id="dmInputArea" style="display: none; gap: 10px;">
-                        <input type="text" id="dmInput" placeholder="Type a DM..." style="flex: 1; padding: 12px; background: #2a2a2a; border: 1px solid #333; color: #fff; border-radius: 4px;" onkeydown="if(event.key==='Enter') sendDM()">
+                    <div class="chat-composer-row">
+                        <input type="text" id="dmInput" class="chat-input" placeholder="Message..." onkeydown="if(event.key==='Enter') sendDM()">
                         <button class="btn btn-primary" onclick="sendDM()">Send</button>
                     </div>
+                </div>
+            </div>
+        </div>
+        <!-- New Thread Modal -->
+        <div id="newThreadModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; justify-content: center; align-items: center;">
+            <div style="background: #1a1a2e; padding: 28px; border-radius: 12px; border: 1px solid #444; max-width: 450px; width: 90%;">
+                <h3 style="color: #e50914; margin-bottom: 10px;">Start a New Thread</h3>
+                <p style="margin-bottom: 15px; color: #aaa;">Create a public topic for everyone to discuss.</p>
+                <textarea id="newThreadText" placeholder="What's the topic?" style="width: 100%; padding: 12px; background: #0f0f18; border: 1px solid #333; color: #fff; border-radius: 8px; min-height: 90px; margin-bottom: 15px; resize: vertical;"></textarea>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button class="btn btn-secondary" onclick="closeNewThreadModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="createThread()">Post Thread</button>
                 </div>
             </div>
         </div>
@@ -4405,6 +4457,7 @@
 
         function showSection(section) {
             // Hide all sections
+            if (section !== 'chat' && typeof stopChatPolling === 'function') stopChatPolling();
             document.getElementById('clips').style.display = 'none';
             document.getElementById('community').style.display = 'none';
             document.getElementById('betting').style.display = 'none';
@@ -4466,8 +4519,7 @@
                 loadGoldTransferWorkspace();
                 switchTradeHubTab('sendgold');
             } else if (section === 'chat') {
-                loadChatMessages();
-                loadOnlineUsers();
+                switchChatTab('community');
             } else if (section === 'leaderboard') {
                 loadLeaderboard();
             } else if (section === 'wallet') {
@@ -9031,5 +9083,6 @@
         document.addEventListener('DOMContentLoaded', loadAds);
 
     </script>
+    <script src="chat.js"></script>
 </body>
 </html>
