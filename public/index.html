@@ -7359,6 +7359,103 @@
         // ARCADE — GAMES & PREDICTIONS
         // ============================================================
 
+        // Centralized session manager — keeps one active game, disposes audio,
+        // timers, particles and pending fetches when switching tabs or starting
+        // a new round. This prevents the crashes that happen after long sessions.
+        const ArcadeSession = {
+            currentGame: null,
+            busy: {},
+            timers: [],
+            audioCtx: null,
+            activeSources: 0,
+            maxSources: 64,
+            pendingFetches: new Set(),
+            particleContainer: null,
+            particleCount: 0,
+            maxParticles: 150,
+
+            // --- timer lifecycle ---
+            setTimeout(fn, delay) {
+                const id = setTimeout(() => { this.clearTimer(id); fn(); }, delay);
+                this.timers.push({ id, type: 'timeout' });
+                return id;
+            },
+            setInterval(fn, delay) {
+                const id = setInterval(fn, delay);
+                this.timers.push({ id, type: 'interval' });
+                return id;
+            },
+            clearTimer(id) {
+                this.timers = this.timers.filter(t => t.id !== id);
+            },
+            clearAllTimers() {
+                this.timers.forEach(t => {
+                    if (t.type === 'interval') clearInterval(t.id);
+                    else clearTimeout(t.id);
+                });
+                this.timers = [];
+            },
+
+            // --- audio lifecycle ---
+            ensureAudio() {
+                if (this.audioCtx && this.audioCtx.state !== 'closed' && this.audioCtx.state !== 'suspended') return this.audioCtx;
+                if (this.audioCtx && this.audioCtx.state === 'suspended') { this.audioCtx.resume(); return this.audioCtx; }
+                if (typeof AudioContext !== 'undefined') this.audioCtx = new AudioContext();
+                else if (typeof webkitAudioContext !== 'undefined') this.audioCtx = new webkitAudioContext();
+                return this.audioCtx;
+            },
+            resetAudio() {
+                if (this.audioCtx) { try { this.audioCtx.close(); } catch(e) {} }
+                this.audioCtx = null;
+                this.activeSources = 0;
+            },
+
+            // --- game lock ---
+            isBusy(game) { return !!this.busy[game]; },
+            lock(game) { this.busy[game] = true; this.currentGame = game; },
+            unlock(game) { delete this.busy[game]; if (this.currentGame === game) this.currentGame = null; },
+
+            // --- fetch lifecycle ---
+            trackFetch(promise) {
+                this.pendingFetches.add(promise);
+                promise.finally(() => this.pendingFetches.delete(promise));
+            },
+            abortPending() { this.pendingFetches.forEach(p => { try { p.abort && p.abort(); } catch(e) {} }); this.pendingFetches.clear(); },
+
+            // --- particle lifecycle ---
+            getParticleContainer() {
+                if (!this.particleContainer) {
+                    this.particleContainer = document.createElement('div');
+                    this.particleContainer.id = 'arcade-particles';
+                    this.particleContainer.style.position = 'fixed';
+                    this.particleContainer.style.top = '0';
+                    this.particleContainer.style.left = '0';
+                    this.particleContainer.style.width = '0';
+                    this.particleContainer.style.height = '0';
+                    this.particleContainer.style.overflow = 'visible';
+                    this.particleContainer.style.pointerEvents = 'none';
+                    this.particleContainer.style.zIndex = '9999';
+                    document.body.appendChild(this.particleContainer);
+                }
+                return this.particleContainer;
+            },
+            clearParticles() {
+                if (this.particleContainer) this.particleContainer.innerHTML = '';
+                this.particleCount = 0;
+            },
+
+            // --- full reset when switching tab or game ---
+            reset() {
+                this.clearAllTimers();
+                this.clearParticles();
+                this.abortPending();
+                this.busy = {};
+                this.currentGame = null;
+                // Keep audio context open but cap its node load by resetting source counter
+                this.activeSources = 0;
+            }
+        };
+
         let coinflipChoice = null;
         let crashState = { active: false, sessionId: null, stake: 0, crashPoint: 0, currentMult: 1.0, cashedOut: false, crashed: false, animInterval: null };
 
@@ -7368,17 +7465,12 @@
             toast.className = 'arcade-toast ' + (type === 'win' ? 'win' : 'loss');
             toast.innerHTML = `<span class="toast-icon">${icon}</span>${title}<div class="toast-amount">${amount}</div>`;
             toast.classList.add('show');
-            setTimeout(() => toast.classList.remove('show'), 2000);
+            ArcadeSession.setTimeout(() => toast.classList.remove('show'), 2000);
         }
 
         let arcadeSoundEnabled = true;
-        let arcadeAudioCtx = null;
 
-        function ensureArcadeAudio() {
-            if (!arcadeAudioCtx && typeof AudioContext !== 'undefined') arcadeAudioCtx = new AudioContext();
-            else if (!arcadeAudioCtx && typeof webkitAudioContext !== 'undefined') arcadeAudioCtx = new webkitAudioContext();
-            if (arcadeAudioCtx && arcadeAudioCtx.state === 'suspended') arcadeAudioCtx.resume();
-        }
+        function ensureArcadeAudio() { ArcadeSession.ensureAudio(); }
 
         function toggleArcadeSound() {
             arcadeSoundEnabled = !arcadeSoundEnabled;
@@ -7391,12 +7483,17 @@
 
         function playGameSound(type) {
             if (!arcadeSoundEnabled) return;
-            ensureArcadeAudio();
-            if (!arcadeAudioCtx) return;
-            const ctx = arcadeAudioCtx;
+            const ctx = ArcadeSession.ensureAudio();
+            if (!ctx) return;
+
+            // Cap simultaneous active sources — never exceed browser limits
+            if (ArcadeSession.activeSources >= ArcadeSession.maxSources) return;
+
             const now = ctx.currentTime;
 
             function tone(freq, duration, wave = 'square', startGain = 0.1, slideTo = null, delay = 0) {
+                if (ArcadeSession.activeSources >= ArcadeSession.maxSources) return;
+                ArcadeSession.activeSources++;
                 const osc = ctx.createOscillator();
                 const g = ctx.createGain();
                 osc.type = wave;
@@ -7408,6 +7505,7 @@
                 g.connect(ctx.destination);
                 osc.start(now + delay);
                 osc.stop(now + delay + duration);
+                osc.onended = () => { try { ArcadeSession.activeSources = Math.max(0, ArcadeSession.activeSources - 1); g.disconnect(); } catch(e) {} };
             }
 
             if (type === 'win') {
@@ -7437,6 +7535,7 @@
                 return;
             }
             if (type === 'spin') {
+                ArcadeSession.activeSources++;
                 const osc = ctx.createOscillator();
                 const g = ctx.createGain();
                 osc.type = 'sawtooth';
@@ -7446,6 +7545,7 @@
                 g.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
                 osc.connect(g); g.connect(ctx.destination);
                 osc.start(now); osc.stop(now + 0.22);
+                osc.onended = () => { try { ArcadeSession.activeSources = Math.max(0, ArcadeSession.activeSources - 1); g.disconnect(); } catch(e) {} };
                 return;
             }
             if (type === 'open') {
@@ -7465,9 +7565,11 @@
         }
 
         function playNoise(duration, volume = 0.12) {
-            if (!arcadeAudioCtx) return;
-            const ctx = arcadeAudioCtx;
-            const size = ctx.sampleRate * duration;
+            const ctx = ArcadeSession.ensureAudio();
+            if (!ctx) return;
+            if (ArcadeSession.activeSources >= ArcadeSession.maxSources) return;
+            ArcadeSession.activeSources++;
+            const size = Math.min(ctx.sampleRate * duration, 960000); // cap buffer at 0.5s @ 48k mono
             const buffer = ctx.createBuffer(1, size, ctx.sampleRate);
             const data = buffer.getChannelData(0);
             for (let i = 0; i < size; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / size);
@@ -7478,16 +7580,22 @@
             g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
             src.connect(g); g.connect(ctx.destination);
             src.start(); src.stop(ctx.currentTime + duration);
+            src.onended = () => { try { ArcadeSession.activeSources = Math.max(0, ArcadeSession.activeSources - 1); g.disconnect(); } catch(e) {} };
         }
 
         function cameraShake(durationMs = 420) {
             const target = document.getElementById('arcade') || document.body;
             target.classList.add('camera-shake');
             target.style.animationDuration = `${durationMs}ms`;
-            setTimeout(() => { target.classList.remove('camera-shake'); target.style.animationDuration = ''; }, durationMs);
+            ArcadeSession.setTimeout(() => { target.classList.remove('camera-shake'); target.style.animationDuration = ''; }, durationMs);
         }
 
-        function pixelParticles(x, y, color = '#e50914', count = 36) {
+        function pixelParticles(x, y, color = '#e50914', requestedCount = 36) {
+            const container = ArcadeSession.getParticleContainer();
+            const count = Math.min(requestedCount, Math.max(8, ArcadeSession.maxParticles - ArcadeSession.particleCount));
+            if (count <= 0) return;
+
+            const fragment = document.createDocumentFragment();
             for (let i = 0; i < count; i++) {
                 const p = document.createElement('div');
                 p.className = 'pixel-particle' + (Math.random() < 0.35 ? ' trail' : '');
@@ -7505,19 +7613,27 @@
                 p.style.height = p.style.width;
                 p.style.transition = `transform ${duration}s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity ${duration}s ease`;
                 p.style.boxShadow = `0 0 ${6 + Math.random() * 8}px ${color}`;
-                document.body.appendChild(p);
+                fragment.appendChild(p);
                 requestAnimationFrame(() => {
                     p.style.transform = `translate(${tx}px, ${ty}px) rotate(${rot}deg) scale(${scale})`;
                     p.style.opacity = '0';
                 });
-                setTimeout(() => { try { p.remove(); } catch(e) {} }, duration * 1000 + 50);
+                ArcadeSession.setTimeout(() => { try { p.remove(); if (ArcadeSession.particleCount > 0) ArcadeSession.particleCount--; } catch(e) {} }, duration * 1000 + 50);
             }
+            container.appendChild(fragment);
+            ArcadeSession.particleCount += count;
         }
 
         function pixelConfetti() {
+            if (ArcadeSession.particleCount >= ArcadeSession.maxParticles) return;
             const colors = ['#e50914', '#4caf50', '#ffd700', '#00d4ff', '#ff00ff', '#ff5722', '#00e676'];
             const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
-            for (let i = 0; i < 120; i++) {
+            const count = Math.min(60, ArcadeSession.maxParticles - ArcadeSession.particleCount);
+            if (count <= 0) return;
+
+            const container = ArcadeSession.getParticleContainer();
+            const fragment = document.createDocumentFragment();
+            for (let i = 0; i < count; i++) {
                 const p = document.createElement('div');
                 p.className = 'pixel-particle' + (Math.random() < 0.3 ? ' trail' : '');
                 const color = colors[Math.floor(Math.random() * colors.length)];
@@ -7535,13 +7651,15 @@
                 p.style.height = p.style.width;
                 p.style.transition = `transform ${duration}s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity ${duration}s ease`;
                 p.style.boxShadow = `0 0 ${6 + Math.random() * 10}px ${color}`;
-                document.body.appendChild(p);
+                fragment.appendChild(p);
                 requestAnimationFrame(() => {
                     p.style.transform = `translate(${tx}px, ${ty}px) rotate(${rot}deg) scale(${scale})`;
                     p.style.opacity = '0';
                 });
-                setTimeout(() => { try { p.remove(); } catch(e) {} }, duration * 1000 + 50);
+                ArcadeSession.setTimeout(() => { try { p.remove(); if (ArcadeSession.particleCount > 0) ArcadeSession.particleCount--; } catch(e) {} }, duration * 1000 + 50);
             }
+            container.appendChild(fragment);
+            ArcadeSession.particleCount += count;
         }
 
         function screenFlash(color = 'rgba(255,255,255,0.25)') {
@@ -7556,7 +7674,7 @@
             flash.classList.remove('active');
             void flash.offsetWidth;
             flash.classList.add('active');
-            setTimeout(() => flash.classList.remove('active'), 600);
+            ArcadeSession.setTimeout(() => flash.classList.remove('active'), 600);
         }
 
         function floatingScore(text, x, y, color = '#4caf50') {
@@ -7567,7 +7685,7 @@
             el.style.left = x + 'px';
             el.style.top = y + 'px';
             document.body.appendChild(el);
-            setTimeout(() => { try { el.remove(); } catch(e) {} }, 1300);
+            ArcadeSession.setTimeout(() => { try { el.remove(); } catch(e) {} }, 1300);
         }
 
         function dramaticWin(screenSelector, amount, isJackpot = false) {
@@ -7576,7 +7694,7 @@
             pixelConfetti();
             screenFlash(isJackpot ? 'rgba(255,215,0,0.30)' : 'rgba(76,175,80,0.28)');
             const screen = document.querySelector(screenSelector);
-            if (screen) { screen.classList.add('big-win-glow'); setTimeout(() => screen.classList.remove('big-win-glow'), 2200); }
+            if (screen) { screen.classList.add('big-win-glow'); ArcadeSession.setTimeout(() => screen.classList.remove('big-win-glow'), 2200); }
             floatingScore('+ $' + amount.toFixed(2), window.innerWidth / 2, window.innerHeight / 2 - 80, isJackpot ? '#ffd700' : '#4caf50');
         }
 
@@ -7586,7 +7704,7 @@
             pixelParticles(window.innerWidth / 2, window.innerHeight / 2, '#e50914', 48);
             screenFlash('rgba(244,67,54,0.30)');
             const screen = document.querySelector(screenSelector);
-            if (screen) { screen.classList.add('loss-glow'); setTimeout(() => screen.classList.remove('loss-glow'), 1800); }
+            if (screen) { screen.classList.add('loss-glow'); ArcadeSession.setTimeout(() => screen.classList.remove('loss-glow'), 1800); }
             floatingScore('- $' + amount.toFixed(2), window.innerWidth / 2, window.innerHeight / 2 - 80, '#f44336');
         }
 
@@ -7600,21 +7718,18 @@
         }
 
         function exitArcadeGame() {
+            ArcadeSession.reset();
             const arcade = document.getElementById('arcade');
             if (arcade) arcade.classList.remove('arcade-fullscreen');
             document.body.style.overflow = '';
-            if (crashState && crashState.animInterval) { clearInterval(crashState.animInterval); crashState.animInterval = null; }
-            if (crashState && crashState.active && !crashState.cashedOut && !crashState.crashed) { crashState.active = false; }
+            if (crashState && crashState.active) crashState.active = false;
             if (typeof pvpState !== 'undefined' && pvpState.polling) { clearInterval(pvpState.polling); pvpState.polling = null; }
         }
 
         function switchArcadeTab(tab) {
-            // Clean up any active game intervals to prevent memory leaks / freezes
-            if (crashState && crashState.animInterval) { clearInterval(crashState.animInterval); crashState.animInterval = null; }
-            if (crashState && crashState.active && !crashState.cashedOut && !crashState.crashed) {
-                // Auto-cashout crash game at current multiplier when leaving
-                crashState.active = false;
-            }
+            // Full cleanup: audio, timers, particles, pending fetches — prevents 24h session crashes
+            ArcadeSession.reset();
+            if (crashState && crashState.active) crashState.active = false;
             if (typeof pvpState !== 'undefined' && pvpState.polling) { clearInterval(pvpState.polling); pvpState.polling = null; }
 
             const tabs = ['coinflip', 'slots', 'crash', 'mines', 'dice', 'plinko', 'pvp', 'predictions', 'winners', 'rankings'];
@@ -7665,6 +7780,8 @@
         async function playCoinflip() {
             if (!sessionToken) { showAuthModal(); return; }
             if (!coinflipChoice) { alert('Choose heads or tails first!'); return; }
+            if (ArcadeSession.isBusy('coinflip')) { return; }
+            ArcadeSession.lock('coinflip');
             const stake = parseFloat(document.getElementById('coinflipStake').value);
             const btn = document.getElementById('coinflipPlayBtn');
             const resultEl = document.getElementById('coinflipResult');
@@ -7679,22 +7796,23 @@
                     body: JSON.stringify({ choice: coinflipChoice, stake })
                 });
                 const data = await res.json();
-                if (!res.ok) { alert(data.error); btn.disabled = false; btn.textContent = 'FLIP COIN'; resultEl.classList.remove('flipping'); return; }
+                if (!res.ok) { alert(data.error); btn.disabled = false; btn.textContent = 'FLIP COIN'; resultEl.classList.remove('flipping'); ArcadeSession.unlock('coinflip'); return; }
 
                 let flips = 0;
                 playGameSound('flip');
-                const flipAnim = setInterval(() => {
+                const flipAnim = ArcadeSession.setInterval(() => {
                     const flipIcon = flips % 2 === 0 ? '👑' : '👸';
                     const flipLabel = flips % 2 === 0 ? 'HEADS' : 'TAILS';
                     resultEl.innerHTML = `<div class="arcade-coin-inner"><span>${flipIcon}</span><span class="coin-label">${flipLabel}</span></div>`;
                     flips++;
                     if (flips > 8) {
                         clearInterval(flipAnim);
+                        ArcadeSession.clearTimer(flipAnim);
                         resultEl.classList.remove('flipping');
                         const finalIcon = data.result === 'heads' ? '👑' : '👸';
                         const finalLabel = data.result === 'heads' ? 'HEADS' : 'TAILS';
                         resultEl.innerHTML = `<div class="arcade-coin-inner coin-blast"><span>${finalIcon}</span><span class="coin-label">${finalLabel}</span></div>`;
-                        setTimeout(() => { resultEl.querySelector('.coin-blast')?.classList.remove('coin-blast'); }, 800);
+                        ArcadeSession.setTimeout(() => { resultEl.querySelector('.coin-blast')?.classList.remove('coin-blast'); }, 800);
                         if (data.won) {
                             dramaticWin('#arcade-coinflip .arcade-screen', data.payout, false);
                             payoutEl.innerHTML = `🎉 WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
@@ -7706,13 +7824,16 @@
                         }
                         document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
                         btn.disabled = false; btn.textContent = 'FLIP COIN';
+                        ArcadeSession.unlock('coinflip');
                     }
                 }, 100);
-            } catch(e) { console.error('Coinflip error:', e); alert('Error playing coinflip: ' + (e.message || 'unknown')); btn.disabled = false; btn.textContent = 'FLIP COIN'; resultEl.classList.remove('flipping'); }
+            } catch(e) { console.error('Coinflip error:', e); alert('Error playing coinflip: ' + (e.message || 'unknown')); btn.disabled = false; btn.textContent = 'FLIP COIN'; resultEl.classList.remove('flipping'); ArcadeSession.unlock('coinflip'); }
         }
 
         async function playSlots() {
             if (!sessionToken) { showAuthModal(); return; }
+            if (ArcadeSession.isBusy('slots')) { return; }
+            ArcadeSession.lock('slots');
             const stake = parseFloat(document.getElementById('slotsStake').value);
             const btn = document.getElementById('slotsPlayBtn');
             const reelsEl = document.getElementById('slotsReels');
@@ -7724,23 +7845,24 @@
             let spins = 0;
             reelsEl.classList.add('reel-blur');
             playGameSound('spin');
-            const spinAnim = setInterval(() => {
+            const spinAnim = ArcadeSession.setInterval(() => {
                 reelsEl.innerHTML = symbols.map(() => `<span>${symbols[Math.floor(Math.random()*symbols.length)]}</span>`).join('');
                 spins++;
                 if (spins % 3 === 0) playGameSound('tick');
                 if (spins > 12) {
                     clearInterval(spinAnim);
+                    ArcadeSession.clearTimer(spinAnim);
                     reelsEl.classList.remove('reel-blur');
-                    fetch('/api/arcade/slots', {
+                    const fetchPromise = fetch('/api/arcade/slots', {
                         method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
                         body: JSON.stringify({ stake })
                     }).then(res => res.json()).then(data => {
-                        if (data.error) { alert(data.error); btn.disabled=false; btn.textContent='SPIN'; return; }
+                        if (data.error) { alert(data.error); btn.disabled=false; btn.textContent='SPIN'; ArcadeSession.unlock('slots'); return; }
                         reelsEl.innerHTML = data.reels.map(r => `<span${data.result === 'jackpot' ? ' class="jackpot"' : ''}>${r}</span>`).join('');
                         if (data.payout > 0) {
                             if (data.result === 'jackpot') {
                                 reelsEl.classList.add('jackpot-blast');
-                                setTimeout(() => reelsEl.classList.remove('jackpot-blast'), 2200);
+                                ArcadeSession.setTimeout(() => reelsEl.classList.remove('jackpot-blast'), 2200);
                             }
                             dramaticWin('#arcade-slots .arcade-screen', data.payout, data.result === 'jackpot');
                             const profit = Math.max(0, data.payout - stake);
@@ -7755,14 +7877,18 @@
                         }
                         document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
                         // Keep results on screen for 2.5s before re-enabling spin
-                        setTimeout(() => { btn.disabled = false; btn.textContent = 'SPIN'; }, 2500);
-                    }).catch((e) => { console.error('Slots error:', e); alert('Error: ' + (e.message || 'unknown')); btn.disabled=false; btn.textContent='SPIN'; });
+                        ArcadeSession.setTimeout(() => { btn.disabled = false; btn.textContent = 'SPIN'; ArcadeSession.unlock('slots'); }, 2500);
+                    }).catch((e) => { console.error('Slots error:', e); alert('Error: ' + (e.message || 'unknown')); btn.disabled=false; btn.textContent='SPIN'; ArcadeSession.unlock('slots'); });
+                    ArcadeSession.trackFetch(fetchPromise);
                 }
             }, 80);
         }
 
         async function startCrash() {
             if (!sessionToken) { showAuthModal(); return; }
+            if (ArcadeSession.isBusy('crash')) { return; }
+            if (crashState.active) { return; }
+            ArcadeSession.lock('crash');
             const stake = parseFloat(document.getElementById('crashStake').value);
             const startBtn = document.getElementById('crashStartBtn');
             const cashoutBtn = document.getElementById('crashCashoutBtn');
@@ -7778,7 +7904,7 @@
                     body: JSON.stringify({ stake })
                 });
                 const data = await res.json();
-                if (!res.ok) { alert(data.error); startBtn.disabled = false; return; }
+                if (!res.ok) { alert(data.error); startBtn.disabled = false; ArcadeSession.unlock('crash'); return; }
 
                 crashState = { active: true, sessionId: data.sessionId, stake: data.stake, crashPoint: data.crashPoint, currentMult: 1.0, cashedOut: false, crashed: false, animInterval: null };
                 document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
@@ -7794,8 +7920,8 @@
                 document.getElementById('crashGap').textContent = '- - - - - - - - - ->';
 
                 const startTime = Date.now();
-                crashState.animInterval = setInterval(() => {
-                    if (crashState.cashedOut || crashState.crashed) { clearInterval(crashState.animInterval); return; }
+                crashState.animInterval = ArcadeSession.setInterval(() => {
+                    if (crashState.cashedOut || crashState.crashed) { ArcadeSession.clearTimer(crashState.animInterval); return; }
                     const elapsed = (Date.now() - startTime) / 1000;
 
                     // Exponential growth curve (Aviator-style): starts slow, accelerates
@@ -7810,7 +7936,7 @@
                     // Safety: auto-crash after 90 seconds to prevent infinite interval
                     if (elapsed > 90) {
                         crashState.crashed = true;
-                        clearInterval(crashState.animInterval);
+                        ArcadeSession.clearTimer(crashState.animInterval);
                         document.getElementById('crashMultiplier').textContent = `${crashState.crashPoint.toFixed(2)}x`;
                         document.getElementById('crashMultiplier').style.color = '#f44336';
                         document.getElementById('crashStatus').innerHTML = '🚨 <strong>CAUGHT!</strong> Time limit reached!';
@@ -7819,7 +7945,7 @@
                         resultEl.innerHTML = `❌ LOST $${crashState.stake.toFixed(2)}`;
                         document.getElementById('crashGameArea').classList.add('crash-explode');
                         dramaticLoss('#arcade-crash .arcade-screen', crashState.stake);
-                        setTimeout(() => document.getElementById('crashGameArea').classList.remove('crash-explode'), 1800);
+                        ArcadeSession.setTimeout(() => document.getElementById('crashGameArea').classList.remove('crash-explode'), 1800);
                         showArcadeToast('loss', '🚨', 'CAUGHT!', `-$${crashState.stake.toFixed(2)}`);
                         fetch('/api/arcade/castle-crash/crash', {
                             method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
@@ -7827,11 +7953,12 @@
                         }).then(r => r.json()).then(d => {
                             if (d && d.newBalance !== undefined) document.getElementById('arcadeBalance').textContent = `$${d.newBalance.toFixed(2)}`;
                         }).catch(e => {});
-                        setTimeout(() => {
+                        ArcadeSession.setTimeout(() => {
                             gameArea.style.display = 'none';
                             setupArea.style.display = 'block';
                             startBtn.disabled = false;
                             resultEl.textContent = '';
+                            ArcadeSession.unlock('crash');
                         }, 4000);
                         return;
                     }
@@ -7839,7 +7966,7 @@
                     if (crashState.currentMult >= crashState.crashPoint) {
                         // CAUGHT
                         crashState.crashed = true;
-                        clearInterval(crashState.animInterval);
+                        ArcadeSession.clearTimer(crashState.animInterval);
                         document.getElementById('crashMultiplier').textContent = `${crashState.crashPoint.toFixed(2)}x`;
                         document.getElementById('crashMultiplier').style.color = '#f44336';
                         document.getElementById('crashStatus').innerHTML = '🚨 <strong>CAUGHT!</strong> The police caught the robber!';
@@ -7851,7 +7978,7 @@
                         resultEl.innerHTML = `❌ LOST $${crashState.stake.toFixed(2)}`;
                         document.getElementById('crashGameArea').classList.add('crash-explode');
                         dramaticLoss('#arcade-crash .arcade-screen', crashState.stake);
-                        setTimeout(() => document.getElementById('crashGameArea').classList.remove('crash-explode'), 1800);
+                        ArcadeSession.setTimeout(() => document.getElementById('crashGameArea').classList.remove('crash-explode'), 1800);
                         showArcadeToast('loss', '🚨', 'CAUGHT!', `-$${crashState.stake.toFixed(2)}`);
                         // Record crash
                         fetch('/api/arcade/castle-crash/crash', {
@@ -7860,11 +7987,12 @@
                         }).then(r => r.json()).then(d => {
                             if (d && d.newBalance !== undefined) document.getElementById('arcadeBalance').textContent = `$${d.newBalance.toFixed(2)}`;
                         }).catch(e => {});
-                        setTimeout(() => {
+                        ArcadeSession.setTimeout(() => {
                             gameArea.style.display = 'none';
                             setupArea.style.display = 'block';
                             startBtn.disabled = false;
                             resultEl.textContent = '';
+                            ArcadeSession.unlock('crash');
                         }, 4000);
                         return;
                     }
@@ -7927,13 +8055,13 @@
                     const policeSteps = ['🚔', '🚓', '🚔'];
                     policeEl.textContent = policeSteps[Math.floor(elapsed * policeSpeed) % policeSteps.length];
                 }, 100);
-            } catch(e) { console.error('Crash start error:', e); alert('Error starting crash: ' + (e.message || 'unknown')); startBtn.disabled = false; }
+            } catch(e) { console.error('Crash start error:', e); alert('Error starting crash: ' + (e.message || 'unknown')); startBtn.disabled = false; ArcadeSession.unlock('crash'); }
         }
 
         async function cashoutCrash() {
             if (!crashState.active || crashState.cashedOut || crashState.crashed) return;
             crashState.cashedOut = true;
-            clearInterval(crashState.animInterval);
+            ArcadeSession.clearTimer(crashState.animInterval);
             const cashoutBtn = document.getElementById('crashCashoutBtn');
             cashoutBtn.style.display = 'none';
             document.getElementById('crashGameArea').classList.remove('crash-shake');
@@ -7944,7 +8072,7 @@
                     body: JSON.stringify({ sessionId: crashState.sessionId, multiplier: crashState.currentMult, stake: crashState.stake })
                 });
                 const data = await res.json();
-                if (!res.ok) { alert(data.error); return; }
+                if (!res.ok) { ArcadeSession.unlock('crash'); alert(data.error); return; }
 
                 document.getElementById('crashMultiplier').textContent = `${crashState.currentMult.toFixed(2)}x`;
                 document.getElementById('crashMultiplier').style.color = '#4caf50';
@@ -7957,13 +8085,14 @@
                 dramaticWin('#arcade-crash .arcade-screen', data.payout || 0, false);
                 showArcadeToast('win', '💰', 'ESCAPED!', `+$${(data.payout || 0).toFixed(2)}`);
 
-                setTimeout(() => {
+                ArcadeSession.setTimeout(() => {
                     document.getElementById('crashGameArea').style.display = 'none';
                     document.getElementById('crashSetupArea').style.display = 'block';
                     document.getElementById('crashStartBtn').disabled = false;
                     document.getElementById('crashResult').textContent = '';
+                    ArcadeSession.unlock('crash');
                 }, 3000);
-            } catch(e) { console.error('Crash cashout error:', e); alert('Error cashing out: ' + (e.message || 'unknown')); }
+            } catch(e) { console.error('Crash cashout error:', e); alert('Error cashing out: ' + (e.message || 'unknown')); ArcadeSession.unlock('crash'); }
         }
 
         // ===== MINES =====
@@ -7985,6 +8114,8 @@
 
         async function startMines() {
             if (!sessionToken) { showAuthModal(); return; }
+            if (ArcadeSession.isBusy('mines')) { return; }
+            ArcadeSession.lock('mines');
             const stake = parseFloat(document.getElementById('minesStake').value);
             const startBtn = document.getElementById('minesStartBtn');
             const resultEl = document.getElementById('minesResult');
@@ -7998,8 +8129,8 @@
                 });
                 const text = await res.text();
                 let data;
-                try { data = JSON.parse(text); } catch(e) { alert('Server error. Please try again.'); startBtn.disabled = false; return; }
-                if (!res.ok) { alert(data.error || 'Error starting game'); startBtn.disabled = false; return; }
+                try { data = JSON.parse(text); } catch(e) { alert('Server error. Please try again.'); startBtn.disabled = false; ArcadeSession.unlock('mines'); return; }
+                if (!res.ok) { alert(data.error || 'Error starting game'); startBtn.disabled = false; ArcadeSession.unlock('mines'); return; }
 
                 minesState = { sessionId: data.sessionId, mineCount: data.mineCount, stake: stake, revealed: [], active: true, picking: false, cashingOut: false };
                 document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
@@ -8018,7 +8149,7 @@
                     card.onclick = () => pickMineCard(i);
                     grid.appendChild(card);
                 }
-            } catch(e) { console.error('Mines start error:', e); alert('Network error. Please try again.'); startBtn.disabled = false; }
+            } catch(e) { console.error('Mines start error:', e); alert('Network error. Please try again.'); startBtn.disabled = false; ArcadeSession.unlock('mines'); }
         }
 
         async function pickMineCard(index) {
@@ -8059,7 +8190,7 @@
                     document.getElementById('minesCashoutBtn').style.display = 'none';
                     minesState.active = false;
                     minesState.picking = false;
-                    setTimeout(() => { resetMinesUI(); }, 3500);
+                    ArcadeSession.setTimeout(() => { resetMinesUI(); ArcadeSession.unlock('mines'); }, 3500);
                 } else {
                     card.classList.add('revealed', 'safe');
                     card.textContent = '✅';
@@ -8110,7 +8241,7 @@
                     if (mc && !mc.classList.contains('safe')) { mc.classList.add('revealed', 'bomb'); mc.textContent = '💣'; }
                 });
 
-                setTimeout(() => { resetMinesUI(); }, 3500);
+                ArcadeSession.setTimeout(() => { resetMinesUI(); ArcadeSession.unlock('mines'); }, 3500);
             } catch(e) { console.error('Mines cashout error:', e); alert('Network error. Please try again.'); }
         }
 
@@ -8235,6 +8366,7 @@
 
         async function playDice() {
             if (!sessionToken) { showAuthModal(); return; }
+            if (ArcadeSession.isBusy('dice')) { return; }
             if (!dicePrediction) {
                 const msg = diceMode === 'single' ? 'Select a number 1-6 first!' :
                             diceMode === 'sum' ? 'Select a number 2-12 first!' :
@@ -8242,6 +8374,7 @@
                 alert(msg);
                 return;
             }
+            ArcadeSession.lock('dice');
             const stake = parseFloat(document.getElementById('diceStake').value);
             const btn = document.getElementById('dicePlayBtn');
             const resultEl = document.getElementById('diceResult');
@@ -8254,20 +8387,21 @@
 
             let spins = 0;
             playGameSound('spin');
-            const rollAnim = setInterval(() => {
+            const rollAnim = ArcadeSession.setInterval(() => {
                 die1El.textContent = Math.floor(Math.random() * 6) + 1;
                 if (diceMode !== 'single') die2El.textContent = Math.floor(Math.random() * 6) + 1;
                 spins++;
                 if (spins % 3 === 0) playGameSound('tick');
                 if (spins > 15) {
                     clearInterval(rollAnim);
+                    ArcadeSession.clearTimer(rollAnim);
                     die1El.classList.remove('rolling');
                     die2El.classList.remove('rolling');
-                    fetch('/api/arcade/dice', {
+                    const fetchPromise = fetch('/api/arcade/dice', {
                         method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
                         body: JSON.stringify({ prediction: dicePrediction, stake, mode: diceMode })
                     }).then(res => res.json()).then(data => {
-                        if (data.error) { alert(data.error); btn.disabled=false; btn.textContent='ROLL DICE'; return; }
+                        if (data.error) { alert(data.error); btn.disabled=false; btn.textContent='ROLL DICE'; ArcadeSession.unlock('dice'); return; }
                         die1El.textContent = data.die1;
                         if (data.numDice === 2) die2El.textContent = data.die2;
                         const resultStr = data.numDice === 2 ? `${data.die1}+${data.die2} = ${data.sum}` : `${data.die1}`;
@@ -8281,8 +8415,9 @@
                             showArcadeToast('loss', '❌', 'YOU LOST!', `-$${(data.stake || 0).toFixed(2)}`);
                         }
                         document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
-                        setTimeout(() => { btn.disabled = false; btn.textContent = 'ROLL DICE'; }, 2500);
-                    }).catch(e => { console.error('Dice error:', e); btn.disabled=false; btn.textContent='ROLL DICE'; });
+                        ArcadeSession.setTimeout(() => { btn.disabled = false; btn.textContent = 'ROLL DICE'; ArcadeSession.unlock('dice'); }, 2500);
+                    }).catch(e => { console.error('Dice error:', e); btn.disabled=false; btn.textContent='ROLL DICE'; ArcadeSession.unlock('dice'); });
+                    ArcadeSession.trackFetch(fetchPromise);
                 }
             }, 80);
         }
@@ -8333,10 +8468,15 @@
 
         async function playPlinko() {
             if (!sessionToken) { showAuthModal(); return; }
+            if (ArcadeSession.isBusy('plinko')) { return; }
+            ArcadeSession.lock('plinko');
             const stake = parseFloat(document.getElementById('plinkoStake').value);
             const btn = document.getElementById('plinkoPlayBtn');
             const resultEl = document.getElementById('plinkoResult');
             const ball = document.getElementById('plinkoBall');
+            const board = document.getElementById('plinkoBoard');
+            const boardWidth = board ? board.clientWidth : 300;
+            const boardHeight = board ? board.clientHeight : 400;
             btn.disabled = true; btn.textContent = 'DROPPING...';
             resultEl.textContent = '';
             ball.style.display = 'block';
@@ -8349,19 +8489,20 @@
                     body: JSON.stringify({ stake, riskLevel: plinkoRisk })
                 });
                 const data = await res.json();
-                if (!res.ok) { alert(data.error); btn.disabled=false; btn.textContent='DROP BALL'; ball.style.display='none'; return; }
+                if (!res.ok) { alert(data.error); btn.disabled=false; btn.textContent='DROP BALL'; ball.style.display='none'; ArcadeSession.unlock('plinko'); return; }
 
-                // Animate ball path
+                // Animate ball path using percentages to avoid repeated layout thrashing
                 const path = data.path;
                 let pos = 0;
-                const pegsEl = document.getElementById('plinkoPegs');
-                const rows = pegsEl.children;
+                const rows = data.path.length;
+                const cols = rows + 1;
                 let step = 0;
                 playGameSound('spin');
-                const ballAnim = setInterval(() => {
+                const ballAnim = ArcadeSession.setInterval(() => {
                     playGameSound('tick');
                     if (step >= path.length) {
                         clearInterval(ballAnim);
+                        ArcadeSession.clearTimer(ballAnim);
                         // Highlight the slot
                         const slots = document.getElementById('plinkoSlots').children;
                         if (slots[data.slotIndex]) {
@@ -8379,28 +8520,22 @@
                             showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
                         }
                         document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
-                        setTimeout(() => {
+                        ArcadeSession.setTimeout(() => {
                             btn.disabled = false; btn.textContent = 'DROP BALL';
                             if (slots[data.slotIndex]) { slots[data.slotIndex].style.transform = ''; slots[data.slotIndex].style.boxShadow = ''; }
+                            ArcadeSession.unlock('plinko');
                         }, 2500);
                         return;
                     }
-                    // Move ball
+                    // Move ball using percentage to avoid forced reflow on every tick
                     if (path[step] === 'R') pos++;
-                    const rowEl = rows[step];
-                    if (rowEl) {
-                        const pegs = rowEl.children;
-                        const pegIdx = Math.min(pos, pegs.length - 1);
-                        if (pegs[pegIdx]) {
-                            const rect = pegs[pegIdx].getBoundingClientRect();
-                            const boardRect = document.getElementById('plinkoBoard').getBoundingClientRect();
-                            ball.style.left = `${rect.left - boardRect.left + 3}px`;
-                            ball.style.top = `${rect.top - boardRect.top + 10}px`;
-                        }
-                    }
+                    const pctX = (50 + (pos - (step / 2)) * (100 / Math.max(1, cols))) / 2; // mirrored offset
+                    const pctY = 8 + ((step + 1) / Math.max(1, rows)) * 82;
+                    ball.style.left = `${pctX}%`;
+                    ball.style.top = `${pctY}%`;
                     step++;
                 }, 100);
-            } catch(e) { console.error('Plinko error:', e); btn.disabled=false; btn.textContent='DROP BALL'; ball.style.display='none'; }
+            } catch(e) { console.error('Plinko error:', e); btn.disabled=false; btn.textContent='DROP BALL'; ball.style.display='none'; ArcadeSession.unlock('plinko'); }
         }
 
         // ===== PVP COLOR CLASH =====
