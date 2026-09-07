@@ -30,10 +30,17 @@
         /* Default = night background. .day-mode only swaps the background image. */
         body.day-mode {
             background:
-                linear-gradient(180deg, rgba(20,45,75,0.45) 0%, rgba(30,60,95,0.4) 40%, rgba(40,80,115,0.35) 100%),
+                linear-gradient(180deg, rgba(15,20,35,0.78) 0%, rgba(18,22,38,0.72) 40%, rgba(22,28,45,0.68) 100%),
                 url('/images/pixel-kingdom-bg-day.svg') center top / cover no-repeat,
                 linear-gradient(180deg, #87CEEB 0%, #B0E0E6 40%, #E0F8F7 100%);
             background-attachment: fixed;
+        }
+        .day-mode .hero-pixel-bg::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(10,10,20,0.45);
+            z-index: 1;
         }
 
         /* Theme Toggle Button */
@@ -2053,6 +2060,18 @@
     .social-link { display: flex; align-items: center; gap: 10px; color: #aaa; text-decoration: none; margin-bottom: 10px; transition: color 0.2s; }
     .social-link:hover { color: #e50914; }
     .social-link i { font-size: 20px; width: 24px; text-align: center; }
+    .hero-trust-bar { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 24px 0 28px; }
+    .hero-trust-item { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 999px; padding: 7px 14px; font-size: 12px; color: #eee; backdrop-filter: blur(4px); }
+    .trust-section { padding: 60px 4%; background: #0a0a10; border-top: 1px solid #1a1a1a; }
+    .trust-container { max-width: 1000px; margin: 0 auto; text-align: center; }
+    .trust-title { font-size: 26px; font-weight: bold; margin-bottom: 10px; color: #fff; }
+    .trust-subtitle { color: #888; margin-bottom: 32px; }
+    .trust-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; }
+    .trust-card { background: #14141c; border: 1px solid #262632; border-radius: 12px; padding: 24px 16px; transition: transform 0.2s, border-color 0.2s; }
+    .trust-card:hover { transform: translateY(-3px); border-color: #e50914; }
+    .trust-icon { font-size: 28px; margin-bottom: 10px; }
+    .trust-label { font-size: 14px; font-weight: 600; color: #eee; }
+    .trust-note { color: #666; font-size: 12px; margin-top: 24px; }
     @media (max-width: 768px) { .chat-layout { grid-template-columns: 1fr; } }
     </style>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
@@ -2298,13 +2317,18 @@
         </svg>
 
         <div class="hero-content">
-            <div class="hero-tagline">⚔️ Welcome to the Pixel Kingdom ⚔️</div>
-            <h1 class="hero-title">PixelPulse</h1>
-            <p class="hero-description">Trade skins, swap tokens, sell game accounts, exchange gift cards, predict esports, and climb the ranks. Your all-in-one gaming marketplace — CS2, Roblox, Fortnite, PUBG Mobile, Free Fire, Valorant, Call of Duty, and more.</p>
+            <div class="hero-tagline">P2P Gaming Marketplace + Arcade</div>
+            <h1 class="hero-title">Trade. Swap. Bet. Win.</h1>
+            <p class="hero-description">Buy and sell skins, game accounts, and gift cards with escrow protection. Swap tokens, predict esports outcomes, and play provably fair arcade games — all in one community.</p>
             <div class="hero-buttons">
-                <button class="btn btn-primary" onclick="showAuthModal(); showRegisterForm();">🚀 Join Free</button>
-                <button class="btn btn-secondary" onclick="showSection('marketplace')">Browse Marketplace</button>
-                <button class="btn btn-secondary" onclick="showSection('gold-transfer')">Swap Tokens</button>
+                <button class="btn btn-primary" onclick="showAuthModal(); showRegisterForm();">🚀 Start Trading Free</button>
+                <button class="btn btn-secondary" onclick="showSection('marketplace')">Browse Deals</button>
+            </div>
+            <div class="hero-trust-bar">
+                <div class="hero-trust-item">🔒 Escrow Protected</div>
+                <div class="hero-trust-item">🎲 Provably Fair</div>
+                <div class="hero-trust-item">₿ Crypto Payments</div>
+                <div class="hero-trust-item">🔞 18+ Responsible</div>
             </div>
             <div class="hero-stats">
                 <div class="hero-stat">
@@ -2321,7 +2345,7 @@
                 </div>
                 <div class="hero-stat">
                     <div class="hero-stat-num">100%</div>
-                    <div class="hero-stat-label">Escrow Protected</div>
+                    <div class="hero-stat-label">Escrow Safe</div>
                 </div>
             </div>
         </div>
@@ -3592,6 +3616,40 @@
 
     <!-- Ad Slot: Footer (hidden until an ad is placed via admin) -->
     <div class="ad-slot" id="adSlot-footer" data-slot="footer"></div>
+
+    <section class="trust-section">
+        <div class="trust-container">
+            <h2 class="trust-title">Trusted & Transparent Gaming</h2>
+            <p class="trust-subtitle">Fair play, secure transactions, and responsible gaming are built into every trade.</p>
+            <div class="trust-grid">
+                <div class="trust-card">
+                    <div class="trust-icon">🔒</div>
+                    <div class="trust-label">SSL Encrypted</div>
+                </div>
+                <div class="trust-card">
+                    <div class="trust-icon">🛡️</div>
+                    <div class="trust-label">P2P Escrow</div>
+                </div>
+                <div class="trust-card">
+                    <div class="trust-icon">🎲</div>
+                    <div class="trust-label">Provably Fair</div>
+                </div>
+                <div class="trust-card">
+                    <div class="trust-icon">🔞</div>
+                    <div class="trust-label">18+ Responsible Gaming</div>
+                </div>
+                <div class="trust-card">
+                    <div class="trust-icon">📜</div>
+                    <div class="trust-label">Licensed by [Your Jurisdiction]</div>
+                </div>
+                <div class="trust-card">
+                    <div class="trust-icon">✅</div>
+                    <div class="trust-label">Certified RNG / Fair Play</div>
+                </div>
+            </div>
+            <p class="trust-note">Replace the placeholder certification badges above with your actual gambling authority license, eCOGRA, GamCare, GLI, or iTech Labs certification links and logos.</p>
+        </div>
+    </section>
 
     <footer class="site-footer">
         <div class="footer-grid">
