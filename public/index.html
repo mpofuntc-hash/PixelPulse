@@ -2075,6 +2075,17 @@
     .trust-icon { font-size: 28px; margin-bottom: 10px; }
     .trust-label { font-size: 14px; font-weight: 600; color: #eee; }
     .trust-note { color: #666; font-size: 12px; margin-top: 24px; }
+    .module-section { padding: 50px 4%; background: #0a0a10; border-top: 1px solid #1a1a1a; }
+    .module-section-title { text-align: center; font-size: 26px; font-weight: bold; margin-bottom: 8px; }
+    .module-section-subtitle { text-align: center; color: #888; margin-bottom: 32px; font-size: 15px; }
+    .module-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; max-width: 1200px; margin: 0 auto; }
+    .module-card { background: linear-gradient(135deg, #16161f, #0f0f16); border: 1px solid #252532; border-radius: 14px; padding: 26px; cursor: pointer; transition: transform 0.25s, border-color 0.25s, box-shadow 0.25s; text-align: center; position: relative; overflow: hidden; }
+    .module-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--card-accent, #e50914); opacity: 0.7; transition: opacity 0.25s; }
+    .module-card:hover { transform: translateY(-6px); border-color: var(--card-accent, #e50914); box-shadow: 0 12px 28px rgba(0,0,0,0.35), 0 0 18px var(--card-glow, rgba(229,9,20,0.15)); }
+    .module-card-icon { font-size: 34px; margin-bottom: 14px; color: var(--card-accent, #e50914); }
+    .module-card-title { font-size: 17px; font-weight: 700; margin-bottom: 6px; color: #fff; }
+    .module-card-desc { font-size: 13px; color: #9ca3af; line-height: 1.5; }
+    @media (max-width: 600px) { .module-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); } }
     @media (max-width: 768px) { .chat-layout { grid-template-columns: 1fr; } }
     </style>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
@@ -2353,6 +2364,53 @@
             </div>
         </div>
     </div>
+
+    <section class="module-section" id="explore-modules">
+        <h2 class="module-section-title">Explore PixelPulse</h2>
+        <p class="module-section-subtitle">Tap any module to jump in — trade, play, predict, and earn.</p>
+        <div class="module-grid">
+            <div class="module-card" onclick="showSection('marketplace')" style="--card-accent:#e50914; --card-glow:rgba(229,9,20,0.25);">
+                <div class="module-card-icon"><i class="fas fa-store"></i></div>
+                <div class="module-card-title">Marketplace</div>
+                <div class="module-card-desc">Buy & sell skins, game accounts, and gift cards with escrow protection.</div>
+            </div>
+            <div class="module-card" onclick="showSection('arcade')" style="--card-accent:#FFD700; --card-glow:rgba(255,215,0,0.25);">
+                <div class="module-card-icon"><i class="fas fa-gamepad"></i></div>
+                <div class="module-card-title">Arcade</div>
+                <div class="module-card-desc">Play provably fair mini-games: Coin Flip, Slots, Crash, Mines, Dice, Plinko.</div>
+            </div>
+            <div class="module-card" onclick="showSection('betting')" style="--card-accent:#9B59B6; --card-glow:rgba(155,89,182,0.25);">
+                <div class="module-card-icon"><i class="fas fa-chart-line"></i></div>
+                <div class="module-card-title">Predictions</div>
+                <div class="module-card-desc">Bet on esports, sports, and community events with real odds.</div>
+            </div>
+            <div class="module-card" onclick="showSection('gold-transfer'); switchTradeHubTab('tradetokens')" style="--card-accent:#4CAF50; --card-glow:rgba(76,175,80,0.25);">
+                <div class="module-card-icon"><i class="fas fa-exchange-alt"></i></div>
+                <div class="module-card-title">Trade Hub</div>
+                <div class="module-card-desc">Swap tokens, list skins, and trade in-game assets instantly.</div>
+            </div>
+            <div class="module-card" onclick="showSection('chat')" style="--card-accent:#58A6FF; --card-glow:rgba(88,166,255,0.25);">
+                <div class="module-card-icon"><i class="fas fa-comments"></i></div>
+                <div class="module-card-title">Community Chat</div>
+                <div class="module-card-desc">Join threads, talk strategy, and find deals with other players.</div>
+            </div>
+            <div class="module-card" onclick="showSection('clips')" style="--card-accent:#FF5722; --card-glow:rgba(255,87,34,0.25);">
+                <div class="module-card-icon"><i class="fas fa-video"></i></div>
+                <div class="module-card-title">Gaming Clips</div>
+                <div class="module-card-desc">Share highlights, watch top plays, and vote for the best moments.</div>
+            </div>
+            <div class="module-card" onclick="showSection('leaderboard')" style="--card-accent:#e8b830; --card-glow:rgba(232,184,48,0.25);">
+                <div class="module-card-icon"><i class="fas fa-trophy"></i></div>
+                <div class="module-card-title">Leaderboard</div>
+                <div class="module-card-desc">Climb the ranks and earn reputation across games and trades.</div>
+            </div>
+            <div class="module-card" onclick="showSection('support')" style="--card-accent:#aaa; --card-glow:rgba(170,170,170,0.25);">
+                <div class="module-card-icon"><i class="fas fa-headset"></i></div>
+                <div class="module-card-title">Support</div>
+                <div class="module-card-desc">Get help with trades, deposits, withdrawals, and account issues.</div>
+            </div>
+        </div>
+    </section>
 
     <!-- How It Works Section -->
     <div class="how-it-works" id="how-it-works">
