@@ -2050,8 +2050,12 @@
     .chat-tab.active, .chat-tab:hover { background: #e50914; color: #fff; border-color: #e50914; }
     .highlight-pulse { animation: highlightPulse 1.2s ease-out; }
     @keyframes highlightPulse { 0% { background: rgba(229,9,20,0.4); } 100% { background: transparent; } }
+    .social-link { display: flex; align-items: center; gap: 10px; color: #aaa; text-decoration: none; margin-bottom: 10px; transition: color 0.2s; }
+    .social-link:hover { color: #e50914; }
+    .social-link i { font-size: 20px; width: 24px; text-align: center; }
     @media (max-width: 768px) { .chat-layout { grid-template-columns: 1fr; } }
     </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
 <body>
     <script>
@@ -3615,6 +3619,15 @@
                 <a onclick="showSection('profile')">Profile</a>
                 <a onclick="showSection('support')">Support</a>
                 <a href="https://t.me/PixelPulse" target="_blank" rel="noopener">Telegram Bot</a>
+            </div>
+            <div class="footer-col">
+                <h4>Socials</h4>
+                <a class="social-link" href="https://discord.gg/YOUR_INVITE" target="_blank" rel="noopener">
+                    <i class="fab fa-discord"></i> Discord
+                </a>
+                <a class="social-link" href="https://t.me/PixelPulse" target="_blank" rel="noopener">
+                    <i class="fab fa-telegram"></i> Telegram
+                </a>
             </div>
         </div>
         <div class="footer-bottom">
