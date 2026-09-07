@@ -1457,6 +1457,9 @@
             display: flex !important;
             animation: gamePanelEnter 0.5s cubic-bezier(0.22, 1, 0.36, 1);
         }
+        #arcade:not(.arcade-fullscreen) > div[id^="arcade-"] {
+            display: none !important;
+        }
         @keyframes gamePanelEnter {
             from { opacity: 0; transform: translateY(30px) scale(0.96) rotateX(4deg); }
             to { opacity: 1; transform: translateY(0) scale(1) rotateX(0deg); }
@@ -2578,7 +2581,7 @@
         </script>
 
         <div class="arcade-game-grid">
-            <div class="arcade-game-card active" id="arcadeTab-coinflip" onclick="openArcadeGame('coinflip')" style="--card-accent:#FFD700; --card-glow:rgba(255,215,0,0.25);">
+            <div class="arcade-game-card" id="arcadeTab-coinflip" onclick="openArcadeGame('coinflip')" style="--card-accent:#FFD700; --card-glow:rgba(255,215,0,0.25);">
                 <svg class="game-card-icon"><use href="#icon-coinflip"/></svg>
                 <div class="game-card-name">COIN FLIP</div>
                 <div class="game-card-tag">1.90x PAYOUT</div>
@@ -2618,12 +2621,12 @@
                 <div class="game-card-name">PREDICTIONS</div>
                 <div class="game-card-tag">BET ON EVENTS</div>
             </div>
-            <div class="arcade-game-card" id="arcadeTab-winners" onclick="switchArcadeTab('winners')" style="--card-accent:#FFD700; --card-glow:rgba(255,215,0,0.25);">
+            <div class="arcade-game-card" id="arcadeTab-winners" onclick="openArcadeGame('winners')" style="--card-accent:#FFD700; --card-glow:rgba(255,215,0,0.25);">
                 <svg class="game-card-icon"><use href="#icon-winners"/></svg>
                 <div class="game-card-name">WINNERS</div>
                 <div class="game-card-tag">LEADERBOARD</div>
             </div>
-            <div class="arcade-game-card" id="arcadeTab-rankings" onclick="switchArcadeTab('rankings')" style="--card-accent:#e50914; --card-glow:rgba(229,9,20,0.25);">
+            <div class="arcade-game-card" id="arcadeTab-rankings" onclick="openArcadeGame('rankings')" style="--card-accent:#e50914; --card-glow:rgba(229,9,20,0.25);">
                 <span class="game-card-icon" style="font-size:28px;">🏆</span>
                 <div class="game-card-name">RANKINGS</div>
                 <div class="game-card-tag">GAMBLER RANKS</div>
