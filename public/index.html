@@ -9221,6 +9221,22 @@
         }
         document.addEventListener('DOMContentLoaded', loadAds);
 
+        // Visitor tracking — reports a page view + unique visitor to site analytics
+        (function () {
+            try {
+                var vid = localStorage.getItem('pp_vid');
+                if (!vid) {
+                    vid = 'v_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+                    localStorage.setItem('pp_vid', vid);
+                }
+                fetch('/api/track/visit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ visitorId: vid })
+                }).catch(function () {});
+            } catch (e) {}
+        })();
+
     </script>
     <script src="chat.js"></script>
 </body>

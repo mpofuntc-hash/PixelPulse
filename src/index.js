@@ -1100,6 +1100,15 @@ async function initSchema() {
   `);
 
   await dbExec(`
+    CREATE TABLE IF NOT EXISTS site_visitors (
+      visitor_id TEXT PRIMARY KEY,
+      visits INTEGER DEFAULT 1,
+      first_seen TEXT DEFAULT CURRENT_TIMESTAMP,
+      last_seen TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await dbExec(`
     CREATE TABLE IF NOT EXISTS it_tickets (
       id INTEGER PRIMARY KEY,
       title TEXT,
@@ -5615,6 +5624,26 @@ app.post('/api/admin/award-points', checkAdminSession, (req, res) => {
   awardRoyalCoins(userId, points, reason || 'Admin award');
   
   res.json({ message: 'Royal Coins awarded', userId, points });
+});
+
+// Public: track a page visit (called by frontend on load)
+app.post('/api/track/visit', rateLimit({ windowMs: 60 * 1000, max: 30, key: req => `track:${req.ip || 'unknown'}` }), async (req, res) => {
+    try {
+        const visitorId = String((req.body && req.body.visitorId) || '').slice(0, 64);
+        await trackPageView();
+        if (visitorId) {
+            const existing = await dbGet('SELECT visitor_id FROM site_visitors WHERE visitor_id = ?', [visitorId]);
+            if (existing) {
+                await dbRun('UPDATE site_visitors SET last_seen = CURRENT_TIMESTAMP, visits = visits + 1 WHERE visitor_id = ?', [visitorId]);
+            } else {
+                await dbRun('INSERT INTO site_visitors (visitor_id, visits) VALUES (?, 1)', [visitorId]);
+                await trackVisitor(visitorId);
+            }
+        }
+        res.json({ ok: true });
+    } catch (e) {
+        res.json({ ok: false });
+    }
 });
 
 // ADMIN DASHBOARD API ENDPOINTS
