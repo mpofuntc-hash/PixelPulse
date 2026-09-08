@@ -93,6 +93,8 @@ async function ensureLegacySchema() {
     ['users', 'freefire_diamonds_tokens', 'REAL DEFAULT 0'],
     ['users', 'discord_id', 'TEXT'],
     ['users', 'referred_by', 'TEXT'],
+    ['users', 'referral_code', 'TEXT'],
+    ['users', 'referred_by_user_id', 'INTEGER'],
     ['chat_messages', 'source', "TEXT DEFAULT 'webapp'"],
     ['chat_messages', 'reply_to_id', 'INTEGER'],
     ['skins', 'price_fiat', 'REAL DEFAULT 0'],
@@ -4233,28 +4235,38 @@ app.post('/api/auth/register', rateLimit({ windowMs: 60 * 1000, max: 5, key: req
 
   const passwordHash = await hashPassword(String(password));
 
-  // Validate referral code if provided
+  // Validate referral code if provided — accepts agent codes OR any user's personal referral code
   let validReferralCode = null;
+  let referringUserId = null;
   if (referralCode && String(referralCode).trim().length > 0) {
-    const agent = await dbGet('SELECT id, is_active FROM referral_agents WHERE referral_code = ?', [String(referralCode).trim()]);
+    const code = String(referralCode).trim();
+    const agent = await dbGet('SELECT id, is_active FROM referral_agents WHERE referral_code = ?', [code]);
     if (agent && agent.is_active === 1) {
-      validReferralCode = String(referralCode).trim();
+      validReferralCode = code;
+    } else {
+      const referrer = await dbGet('SELECT id FROM users WHERE referral_code = ?', [code]);
+      if (referrer) referringUserId = referrer.id;
     }
   }
 
   const result = await dbRun(`
-    INSERT INTO users (email, password_hash, username, is_adult, referred_by)
-    VALUES (?, ?, ?, ?, ?)
-  `, [normalizedEmail, passwordHash, String(username).trim(), 1, validReferralCode]);
+    INSERT INTO users (email, password_hash, username, is_adult, referred_by, referred_by_user_id)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `, [normalizedEmail, passwordHash, String(username).trim(), 1, validReferralCode, referringUserId]);
 
   const userId = result.lastID;
-  await dbRun('INSERT INTO user_balances (user_id, btc_balance) VALUES (?, 0)', [userId]);
+  // Generate the new user's personal referral code
+  const myReferralCode = 'PP' + userId + Math.random().toString(36).slice(2, 7).toUpperCase();
+  await dbRun('UPDATE users SET referral_code = ? WHERE id = ?', [myReferralCode, userId]);
+
+  await dbRun('INSERT INTO user_balances (user_id, btc_balance, usd_balance) VALUES (?, 0, 0)', [userId]);
   await dbRun('INSERT INTO user_profiles (user_id, username, avatar_id, banner_id, pixelation_level, weekly_streak, max_streak, clip_wins) VALUES (?, ?, ?, ?, 8, 0, 0, 0)', [userId, String(username).trim(), 'male_default', 'bronze_cloth']);
   await dbRun('INSERT INTO user_points (user_id, points, total_earned, total_spent) VALUES (?, 0, 0, 0)', [userId]);
 
-  // Welcome signup bonus: 500 Royal Coins
-  const SIGNUP_BONUS = 500;
-  await awardRoyalCoins(userId, SIGNUP_BONUS, 'Welcome signup bonus');
+  // Welcome signup bonus: $2.00 real arcade credit (below $5 min withdrawal — must be wagered or topped up)
+  const SIGNUP_BONUS_USD = 2.00;
+  await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [SIGNUP_BONUS_USD, userId]);
+  await logSystemEvent('info', `Signup bonus $${SIGNUP_BONUS_USD} credited to user ${userId}`, 'Welcome signup bonus');
 
   // Create referral tracking record if valid referral code was used
   if (validReferralCode) {
@@ -6781,13 +6793,25 @@ app.post('/api/admin/verify-deposit', checkAdminSession, async (req, res) => {
     await dbRun(`UPDATE users SET ${tokenColumn} = ${tokenColumn} + ? WHERE id = ?`, [deposit.amount, deposit.user_id]);
     await dbRun('UPDATE token_deposits SET status = ?, verified_at = CURRENT_TIMESTAMP WHERE id = ?', ['verified', depositId]);
 
-    // First-deposit bonus: 500 Royal Coins on the user's first verified deposit
+    // First-deposit bonus: +$2.00 real arcade credit on the user's first verified deposit
     const priorVerified = await dbGet(
       "SELECT id FROM token_deposits WHERE user_id = ? AND status = 'verified' AND id != ? LIMIT 1",
       [deposit.user_id, depositId]
     );
     if (!priorVerified) {
-      await awardRoyalCoins(deposit.user_id, 500, 'First deposit bonus');
+      const FIRST_DEPOSIT_BONUS_USD = 2.00;
+      await dbRun('INSERT OR IGNORE INTO user_balances (user_id, usd_balance) VALUES (?, 0)', [deposit.user_id]);
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [FIRST_DEPOSIT_BONUS_USD, deposit.user_id]);
+      await logSystemEvent('info', `First-deposit bonus $${FIRST_DEPOSIT_BONUS_USD} credited to user ${deposit.user_id}`, 'First deposit bonus');
+
+      // Referral payout: $1.00 to the referring user on their friend's first deposit
+      const referred = await dbGet('SELECT referred_by_user_id FROM users WHERE id = ?', [deposit.user_id]);
+      if (referred && referred.referred_by_user_id) {
+        const REFERRAL_PAYOUT_USD = 1.00;
+        await dbRun('INSERT OR IGNORE INTO user_balances (user_id, usd_balance) VALUES (?, 0)', [referred.referred_by_user_id]);
+        await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [REFERRAL_PAYOUT_USD, referred.referred_by_user_id]);
+        await logSystemEvent('info', `Referral payout $${REFERRAL_PAYOUT_USD} to user ${referred.referred_by_user_id}`, `Referred user ${deposit.user_id} made first deposit`);
+      }
     }
 
     logSystemEvent('info', `Token deposit verified`, `Deposit ID: ${depositId}, ${deposit.amount} ${deposit.token_type} tokens to user ${deposit.user_id}`);
@@ -7941,9 +7965,9 @@ app.get('/api/arcade/balance', authenticateRequest, async (req, res) => {
   res.json({ balance: bal?.usd_balance || 0, currency: 'USD', min_stake: WEB_MIN_STAKE });
 });
 
-// API: Claim daily bonus (50 Royal Coins once per 24h) — retention hook
+// API: Claim daily bonus ($0.25 arcade credit once per 24h) — retention hook
 app.post('/api/arcade/daily-bonus', authenticateRequest, async (req, res) => {
-  const DAILY_BONUS = 50;
+  const DAILY_BONUS_USD = 0.25;
   const profile = await dbGet('SELECT last_daily_claim FROM user_profiles WHERE user_id = ?', [req.userId]);
   const now = Date.now();
   if (profile && profile.last_daily_claim) {
@@ -7955,8 +7979,22 @@ app.post('/api/arcade/daily-bonus', authenticateRequest, async (req, res) => {
     }
   }
   await dbRun('UPDATE user_profiles SET last_daily_claim = CURRENT_TIMESTAMP WHERE user_id = ?', [req.userId]);
-  await awardRoyalCoins(req.userId, DAILY_BONUS, 'Daily arcade bonus');
-  res.json({ message: `Daily bonus claimed: +${DAILY_BONUS} Royal Coins`, amount: DAILY_BONUS });
+  await dbRun('INSERT OR IGNORE INTO user_balances (user_id, usd_balance) VALUES (?, 0)', [req.userId]);
+  await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [DAILY_BONUS_USD, req.userId]);
+  await logSystemEvent('info', `Daily bonus $${DAILY_BONUS_USD} claimed by user ${req.userId}`, 'Daily arcade bonus');
+  res.json({ message: `Daily bonus claimed: +$${DAILY_BONUS_USD.toFixed(2)} arcade credit`, amount: DAILY_BONUS_USD });
+});
+
+// API: Get the current user's personal referral code + link
+app.get('/api/referral/my-code', authenticateRequest, async (req, res) => {
+  const user = await dbGet('SELECT referral_code FROM users WHERE id = ?', [req.userId]);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  let code = user.referral_code;
+  if (!code) {
+    code = 'PP' + req.userId + Math.random().toString(36).slice(2, 7).toUpperCase();
+    await dbRun('UPDATE users SET referral_code = ? WHERE id = ?', [code, req.userId]);
+  }
+  res.json({ code, link: `https://pixelpulse.zentriva-clubsync.online/?ref=${code}`, reward: 'Earn $1.00 when a friend makes their first deposit' });
 });
 
 // API: Get recent winners feed

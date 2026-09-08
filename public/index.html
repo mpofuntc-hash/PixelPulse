@@ -191,6 +191,32 @@
         }
         .promo-strip span { color: #fff; }
 
+        /* ===== PIXEL-IN ENTRANCE ===== */
+        @keyframes pixelIn {
+            0% { opacity: 0; transform: scale(0.85); filter: blur(14px) contrast(2); }
+            40% { opacity: 1; filter: blur(7px) contrast(1.6); }
+            70% { filter: blur(3px) contrast(1.2); }
+            100% { opacity: 1; transform: scale(1); filter: none; }
+        }
+        .module-card { opacity: 0; }
+        .module-card.pixel-in {
+            animation: pixelIn 0.7s steps(6) both;
+        }
+        .module-card.pixel-in:nth-child(1) { animation-delay: 0.05s; }
+        .module-card.pixel-in:nth-child(2) { animation-delay: 0.15s; }
+        .module-card.pixel-in:nth-child(3) { animation-delay: 0.25s; }
+        .module-card.pixel-in:nth-child(4) { animation-delay: 0.35s; }
+        .module-card.pixel-in:nth-child(5) { animation-delay: 0.45s; }
+        .module-card.pixel-in:nth-child(6) { animation-delay: 0.55s; }
+        .module-card.pixel-in:nth-child(7) { animation-delay: 0.65s; }
+        .module-card.pixel-in:nth-child(8) { animation-delay: 0.75s; }
+        .hero-cinematic .hero-title {
+            animation: pixelIn 1s steps(7) 2.4s both;
+        }
+        .hero-cinematic .hero-tagline {
+            animation: pixelIn 0.9s steps(6) 2.8s both;
+        }
+
         .hero-pixel-bg {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -2413,7 +2439,7 @@
     </div>
 
     <div class="promo-strip">
-        🎁 <span>WELCOME BONUS:</span> Sign up → <span>500 Royal Coins free</span> &nbsp;·&nbsp; First deposit → <span>+500 RC bonus</span> &nbsp;·&nbsp; Daily arcade bonus → <span>50 RC every 24h</span>
+        🎁 <span>WELCOME BONUS:</span> Sign up → <span>$2.00 free credit</span> &nbsp;·&nbsp; First deposit → <span>+$2.00 bonus</span> &nbsp;·&nbsp; Refer friends → <span>$1.00 each</span> &nbsp;·&nbsp; Daily bonus → <span>$0.25 every 24h</span>
     </div>
 
     <section class="module-section" id="explore-modules">
@@ -2667,6 +2693,7 @@
             <button class="btn btn-primary" onclick="showDepositModal()" style="font-size: 13px;">Deposit / Withdraw</button>
             <button class="btn btn-secondary" onclick="loadArcadeHistory()" style="font-size: 13px;">My History</button>
             <button class="btn btn-secondary" id="dailyBonusBtn" onclick="claimDailyBonus()" style="font-size: 13px; border-color: #e8b830; color: #e8b830;">🎁 Daily Bonus</button>
+            <button class="btn btn-secondary" onclick="showReferralLink()" style="font-size: 13px; border-color: #4caf50; color: #4caf50;">💸 Refer & Earn</button>
         </div>
 
         <!-- SVG Game Icons (pixelated) -->
@@ -9304,6 +9331,36 @@
                 alert('Failed to claim daily bonus');
             }
         }
+
+        // Referral link — earn $1 when a friend makes their first deposit
+        async function showReferralLink() {
+            if (!sessionToken) { alert('Please login to get your referral link'); showLoginForm(); return; }
+            try {
+                const res = await fetch('/api/referral/my-code', {
+                    headers: { 'Authorization': `Bearer ${sessionToken}` }
+                });
+                const data = await res.json();
+                if (data.error) { alert(data.error); return; }
+                window.prompt('Share your link — earn $1.00 when a friend makes their first deposit:', data.link);
+            } catch (e) {
+                alert('Failed to load referral link');
+            }
+        }
+
+        // Pixel-in entrance for module cards when they scroll into view
+        (function () {
+            var cards = document.querySelectorAll('.module-card');
+            if (!('IntersectionObserver' in window) || !cards.length) {
+                cards.forEach(function (c) { c.classList.add('pixel-in'); });
+                return;
+            }
+            var obs = new IntersectionObserver(function (entries) {
+                entries.forEach(function (e) {
+                    if (e.isIntersecting) { e.target.classList.add('pixel-in'); obs.unobserve(e.target); }
+                });
+            }, { threshold: 0.15 });
+            cards.forEach(function (c) { obs.observe(c); });
+        })();
 
         // Cinematic intro — plays once per session: sky → pan down to the kingdom
         (function () {
