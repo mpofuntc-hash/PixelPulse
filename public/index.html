@@ -148,6 +148,49 @@
             overflow: hidden;
         }
 
+        /* ===== CINEMATIC INTRO ===== */
+        .cinematic-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: linear-gradient(180deg, #7ec8e3 0%, #3a5a8c 35%, #14142a 75%, #0d0d0d 100%);
+            animation: skyReveal 3.4s ease-in-out forwards;
+            pointer-events: none;
+        }
+        @keyframes skyReveal {
+            0% { opacity: 1; }
+            55% { opacity: 1; }
+            100% { opacity: 0; visibility: hidden; }
+        }
+        .hero-cinematic .hero-pixel-bg {
+            animation: camPanDown 3.4s cubic-bezier(0.25, 0.8, 0.3, 1) both;
+        }
+        @keyframes camPanDown {
+            0% { transform: scale(1.25) translateY(-14%); filter: brightness(1.4); }
+            100% { transform: scale(1) translateY(0); filter: brightness(1); }
+        }
+        .hero-cinematic .hero-content {
+            animation: heroFadeIn 1.1s ease 2.3s both;
+        }
+        @keyframes heroFadeIn {
+            from { opacity: 0; transform: translateY(28px); }
+            to { opacity: 1; transform: none; }
+        }
+
+        /* ===== PROMO STRIP ===== */
+        .promo-strip {
+            background: linear-gradient(90deg, #1a1205, #2a1a08, #1a1205);
+            border-top: 1px solid #e8b830;
+            border-bottom: 1px solid #e8b830;
+            padding: 14px 4%;
+            text-align: center;
+            font-size: 14px;
+            color: #e8b830;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+        .promo-strip span { color: #fff; }
+
         .hero-pixel-bg {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -2369,6 +2412,10 @@
         </div>
     </div>
 
+    <div class="promo-strip">
+        🎁 <span>WELCOME BONUS:</span> Sign up → <span>500 Royal Coins free</span> &nbsp;·&nbsp; First deposit → <span>+500 RC bonus</span> &nbsp;·&nbsp; Daily arcade bonus → <span>50 RC every 24h</span>
+    </div>
+
     <section class="module-section" id="explore-modules">
         <h2 class="module-section-title">Explore PixelPulse</h2>
         <p class="module-section-subtitle">Tap any module to jump in — trade, play, predict, and earn.</p>
@@ -2619,6 +2666,7 @@
             </div>
             <button class="btn btn-primary" onclick="showDepositModal()" style="font-size: 13px;">Deposit / Withdraw</button>
             <button class="btn btn-secondary" onclick="loadArcadeHistory()" style="font-size: 13px;">My History</button>
+            <button class="btn btn-secondary" id="dailyBonusBtn" onclick="claimDailyBonus()" style="font-size: 13px; border-color: #e8b830; color: #e8b830;">🎁 Daily Bonus</button>
         </div>
 
         <!-- SVG Game Icons (pixelated) -->
@@ -3862,6 +3910,16 @@
                     alert(data.error);
                     return;
                 }
+
+                // Fire PopCash conversion postback if this visitor came from a PopCash ad
+                try {
+                    var pcClickId = localStorage.getItem('pp_clickid');
+                    if (pcClickId) {
+                        var pcPixel = new Image();
+                        pcPixel.src = 'https://ct.popcash.net/click?aid=505056&type=1&clickid=' + encodeURIComponent(pcClickId) + '&payout=0';
+                        localStorage.removeItem('pp_clickid');
+                    }
+                } catch (e) {}
 
                 alert('Registration successful! Please login.');
                 document.getElementById('signupPrompt').style.display = 'none';
@@ -9221,9 +9279,53 @@
         }
         document.addEventListener('DOMContentLoaded', loadAds);
 
+        // Daily bonus claim — retention hook for the arcade
+        async function claimDailyBonus() {
+            if (!sessionToken) { alert('Please login to claim your daily bonus'); showLoginForm(); return; }
+            const btn = document.getElementById('dailyBonusBtn');
+            try {
+                const res = await fetch('/api/arcade/daily-bonus', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` }
+                });
+                const data = await res.json();
+                if (data.error) {
+                    if (data.nextClaim) {
+                        const t = new Date(data.nextClaim);
+                        alert('Daily bonus already claimed. Next claim: ' + t.toLocaleString());
+                    } else {
+                        alert(data.error);
+                    }
+                    return;
+                }
+                alert('🎁 ' + data.message);
+                if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
+            } catch (e) {
+                alert('Failed to claim daily bonus');
+            }
+        }
+
+        // Cinematic intro — plays once per session: sky → pan down to the kingdom
+        (function () {
+            try {
+                if (sessionStorage.getItem('pp_intro_seen')) return;
+                sessionStorage.setItem('pp_intro_seen', '1');
+                var overlay = document.createElement('div');
+                overlay.className = 'cinematic-overlay';
+                document.body.appendChild(overlay);
+                var hero = document.getElementById('home');
+                if (hero) hero.classList.add('hero-cinematic');
+                setTimeout(function () { overlay.remove(); }, 3600);
+            } catch (e) {}
+        })();
+
         // Visitor tracking — reports a page view + unique visitor to site analytics
         (function () {
             try {
+                // Capture PopCash clickid from ad campaign URL for conversion tracking
+                var pcClick = new URLSearchParams(window.location.search).get('clickid');
+                if (pcClick) { localStorage.setItem('pp_clickid', pcClick); }
+
                 var vid = localStorage.getItem('pp_vid');
                 if (!vid) {
                     vid = 'v_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);

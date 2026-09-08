@@ -119,6 +119,7 @@ async function ensureLegacySchema() {
     ['user_profiles', 'max_streak', 'INTEGER DEFAULT 0'],
     ['user_profiles', 'clip_wins', 'INTEGER DEFAULT 0'],
     ['user_profiles', 'username_changed_at', 'TEXT'],
+    ['user_profiles', 'last_daily_claim', 'TEXT'],
     ['user_points', 'points', 'INTEGER DEFAULT 0'],
     ['sessions', 'session_token', 'TEXT'],
     ['sessions', 'expires_at', 'TEXT'],
@@ -4251,6 +4252,10 @@ app.post('/api/auth/register', rateLimit({ windowMs: 60 * 1000, max: 5, key: req
   await dbRun('INSERT INTO user_profiles (user_id, username, avatar_id, banner_id, pixelation_level, weekly_streak, max_streak, clip_wins) VALUES (?, ?, ?, ?, 8, 0, 0, 0)', [userId, String(username).trim(), 'male_default', 'bronze_cloth']);
   await dbRun('INSERT INTO user_points (user_id, points, total_earned, total_spent) VALUES (?, 0, 0, 0)', [userId]);
 
+  // Welcome signup bonus: 500 Royal Coins
+  const SIGNUP_BONUS = 500;
+  await awardRoyalCoins(userId, SIGNUP_BONUS, 'Welcome signup bonus');
+
   // Create referral tracking record if valid referral code was used
   if (validReferralCode) {
     const agent = await dbGet('SELECT id FROM referral_agents WHERE referral_code = ?', [validReferralCode]);
@@ -6775,7 +6780,16 @@ app.post('/api/admin/verify-deposit', checkAdminSession, async (req, res) => {
     const tokenColumn = getTokenColumn(deposit.token_type);
     await dbRun(`UPDATE users SET ${tokenColumn} = ${tokenColumn} + ? WHERE id = ?`, [deposit.amount, deposit.user_id]);
     await dbRun('UPDATE token_deposits SET status = ?, verified_at = CURRENT_TIMESTAMP WHERE id = ?', ['verified', depositId]);
-    
+
+    // First-deposit bonus: 500 Royal Coins on the user's first verified deposit
+    const priorVerified = await dbGet(
+      "SELECT id FROM token_deposits WHERE user_id = ? AND status = 'verified' AND id != ? LIMIT 1",
+      [deposit.user_id, depositId]
+    );
+    if (!priorVerified) {
+      await awardRoyalCoins(deposit.user_id, 500, 'First deposit bonus');
+    }
+
     logSystemEvent('info', `Token deposit verified`, `Deposit ID: ${depositId}, ${deposit.amount} ${deposit.token_type} tokens to user ${deposit.user_id}`);
     res.json({ message: 'Deposit verified and tokens credited' });
   } else {
@@ -7925,6 +7939,24 @@ app.get('/api/arcade/balance', authenticateRequest, async (req, res) => {
   if (admin) return res.json({ balance: 10000, currency: 'USD', min_stake: WEB_MIN_STAKE, admin_test: true });
   const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
   res.json({ balance: bal?.usd_balance || 0, currency: 'USD', min_stake: WEB_MIN_STAKE });
+});
+
+// API: Claim daily bonus (50 Royal Coins once per 24h) — retention hook
+app.post('/api/arcade/daily-bonus', authenticateRequest, async (req, res) => {
+  const DAILY_BONUS = 50;
+  const profile = await dbGet('SELECT last_daily_claim FROM user_profiles WHERE user_id = ?', [req.userId]);
+  const now = Date.now();
+  if (profile && profile.last_daily_claim) {
+    const last = new Date(profile.last_daily_claim).getTime();
+    const cooldown = 24 * 60 * 60 * 1000;
+    if (now - last < cooldown) {
+      const nextClaim = new Date(last + cooldown).toISOString();
+      return res.status(400).json({ error: 'Daily bonus already claimed', nextClaim });
+    }
+  }
+  await dbRun('UPDATE user_profiles SET last_daily_claim = CURRENT_TIMESTAMP WHERE user_id = ?', [req.userId]);
+  await awardRoyalCoins(req.userId, DAILY_BONUS, 'Daily arcade bonus');
+  res.json({ message: `Daily bonus claimed: +${DAILY_BONUS} Royal Coins`, amount: DAILY_BONUS });
 });
 
 // API: Get recent winners feed
