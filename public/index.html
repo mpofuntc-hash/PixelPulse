@@ -2363,7 +2363,9 @@
                 </div>
             </div>
         </div>
-        <section class="module-section" id="explore-modules">
+    </div>
+
+    <section class="module-section" id="explore-modules">
         <h2 class="module-section-title">Explore PixelPulse</h2>
         <p class="module-section-subtitle">Tap any module to jump in — trade, play, predict, and earn.</p>
         <div class="module-grid">
@@ -2408,8 +2410,7 @@
                 <div class="module-card-desc">Get help with trades, deposits, withdrawals, and account issues.</div>
             </div>
         </div>
-        </section>
-    </div>
+    </section>
 
     <!-- How It Works Section -->
     <div class="how-it-works" id="how-it-works">
@@ -4620,9 +4621,11 @@
             // Handle 'home' section (hero + how it works)
             const heroEl = document.getElementById('home');
             const howEl = document.getElementById('how-it-works');
+            const exploreEl = document.getElementById('explore-modules');
             if (section === 'home') {
                 if (heroEl) heroEl.style.display = 'flex';
                 if (howEl) howEl.style.display = 'block';
+                if (exploreEl) exploreEl.style.display = 'block';
                 document.getElementById('nav-home').classList.add('active');
                 window.scrollTo(0, 0);
                 return;
@@ -4630,6 +4633,7 @@
             // Hide hero and how-it-works for other sections
             if (heroEl) heroEl.style.display = 'none';
             if (howEl) howEl.style.display = 'none';
+            if (exploreEl) exploreEl.style.display = 'none';
             
             // Show selected section
             document.getElementById(section).style.display = 'block';
