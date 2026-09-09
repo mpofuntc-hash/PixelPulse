@@ -112,6 +112,8 @@ async function ensureLegacySchema() {
     ['betting_markets', 'parent_market_id', 'INTEGER'],
     ['betting_markets', 'layer_depth', 'INTEGER DEFAULT 0'],
     ['betting_markets', 'condition_logic', 'TEXT'],
+    ['prediction_markets', 'api_source', 'TEXT'],
+    ['prediction_markets', 'api_event_id', 'TEXT'],
     ['user_balances', 'btc_balance', 'REAL DEFAULT 0'],
     ['user_profiles', 'username', 'TEXT'],
     ['user_profiles', 'avatar_id', "TEXT DEFAULT 'male_default'"],
@@ -1273,6 +1275,8 @@ async function initSchema() {
       total_yes REAL DEFAULT 0,
       total_no REAL DEFAULT 0,
       fee_rate REAL DEFAULT 0.02,
+      api_source TEXT,
+      api_event_id TEXT,
       created_by INTEGER,
       resolved_by INTEGER,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -8593,6 +8597,58 @@ app.post('/api/admin/prediction-markets/:id/resolve', authenticateRequest, async
 // API: Check if user is arcade/admin so the frontend can show admin tools
 app.get('/api/arcade/admin-check', authenticateRequest, async (req, res) => {
   res.json({ isAdmin: await isArcadeAdmin(req.userId) });
+});
+
+// API: Admin seed football (soccer) prediction markets from free worldcup26 API
+app.post('/api/admin/predictions/football/seed', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+
+  try {
+    const today = new Date();
+    const toDate = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const fmt = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');
+    const fromStr = fmt(today);
+    const toStr = fmt(toDate);
+
+    const apiUrl = `https://worldcup26.ir/get/soccer/eng.1/fixtures?status=all&from=${fromStr}&to=${toStr}`;
+    const apiRes = await fetch(apiUrl);
+    if (!apiRes.ok) throw new Error(`Football API ${apiRes.status}`);
+    const apiData = await apiRes.json();
+    const events = apiData?.events || [];
+
+    let created = 0;
+    let skipped = 0;
+
+    for (const event of events.slice(0, 30)) {
+      if (event?.status?.type?.name !== 'STATUS_SCHEDULED') { skipped++; continue; }
+      const comp = event?.competitions?.[0];
+      if (!comp?.competitors || comp.competitors.length < 2) { skipped++; continue; }
+
+      const homeComp = comp.competitors.find(c => c.homeAway === 'home');
+      const awayComp = comp.competitors.find(c => c.homeAway === 'away');
+      if (!homeComp?.team?.displayName || !awayComp?.team?.displayName) { skipped++; continue; }
+
+      const home = homeComp.team.displayName;
+      const away = awayComp.team.displayName;
+      const matchDate = new Date(event.date).toLocaleString();
+      const eventId = String(event.id);
+
+      const existing = await dbGet('SELECT id FROM prediction_markets WHERE api_source = ? AND api_event_id = ? AND status = ?', ['worldcup26', eventId, 'active']);
+      if (existing) { skipped++; continue; }
+
+      await dbRun(`
+        INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, api_source, api_event_id, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [`Will ${home} beat ${away}?`, `English Premier League match on ${matchDate}. Yes = ${home} wins. No = ${away} wins or draw.`, 'sports', `${home} wins`, `${away} or draw`, 'worldcup26', eventId, req.userId]);
+      created++;
+    }
+
+    await logSystemEvent('info', `Admin seeded football prediction markets`, `Created ${created}, skipped ${skipped}`);
+    res.json({ created, skipped, total: events.length });
+  } catch (e) {
+    console.error('Football seed error:', e);
+    res.status(500).json({ error: 'Failed to seed football markets' });
+  }
 });
 
 // ===== CASTLE CRASH =====

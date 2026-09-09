@@ -3123,6 +3123,9 @@
                 <input type="text" id="predAdminYes" placeholder="Yes label (default Yes)" class="arcade-input" style="margin-bottom: 8px;">
                 <input type="text" id="predAdminNo" placeholder="No label (default No)" class="arcade-input" style="margin-bottom: 8px;">
                 <button class="arcade-btn" onclick="adminCreatePrediction()">CREATE MARKET</button>
+                <hr style="border: 1px solid #2a2a4a; margin: 16px 0;">
+                <button class="arcade-btn" style="background: rgba(76,175,80,0.2); border-color: #4caf50;" onclick="adminSeedFootballMarkets()">⚽ SEED FREE FOOTBALL MARKETS</button>
+                <p style="font-size: 12px; color: #888; margin-top: 6px;">Auto-creates English Premier League markets from free API (worldcup26.ir).</p>
             </div>
             <div id="predictionsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;">
                 <div style="color: #888; text-align: center; padding: 40px;">Loading prediction markets...</div>
@@ -9345,6 +9348,19 @@
                 alert(data.message);
                 loadPredictions();
             } catch(e) { alert('Error resolving market'); }
+        }
+
+        async function adminSeedFootballMarkets() {
+            if (!confirm('Seed English Premier League markets for the next 7 days from the free football API?')) return;
+            try {
+                const res = await fetch('/api/admin/predictions/football/seed', {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); return; }
+                alert(`✅ Created ${data.created} football markets (skipped ${data.skipped})`);
+                loadPredictions();
+            } catch(e) { alert('Error seeding football markets'); }
         }
 
         async function loadArcadeHistory() {
