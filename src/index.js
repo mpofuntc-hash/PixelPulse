@@ -8232,6 +8232,190 @@ app.post('/api/arcade/slots', authenticateRequest, async (req, res) => {
   res.json({ reels, multiplier, payout, result, stake: stakeAmount, newBalance });
 });
 
+// ===== ROULETTE =====
+const ROULETTE_COLORS = {
+  0: 'green', 1: 'red', 2: 'black', 3: 'red', 4: 'black', 5: 'red', 6: 'black',
+  7: 'red', 8: 'black', 9: 'red', 10: 'black', 11: 'black', 12: 'red', 13: 'black',
+  14: 'red', 15: 'black', 16: 'red', 17: 'black', 18: 'red', 19: 'red', 20: 'black',
+  21: 'red', 22: 'black', 23: 'red', 24: 'black', 25: 'red', 26: 'black', 27: 'red',
+  28: 'black', 29: 'black', 30: 'red', 31: 'black', 32: 'red', 33: 'black', 34: 'red',
+  35: 'black', 36: 'red'
+};
+
+app.post('/api/arcade/roulette', authenticateRequest, async (req, res) => {
+  const { choice, pick, stake, clientSeed } = req.body;
+  const stakeAmount = parseFloat(stake);
+  if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
+  if (!choice || !['red', 'black', 'green', 'number'].includes(choice)) return res.status(400).json({ error: 'Pick red, black, green, or number' });
+  if (choice === 'number' && (pick === undefined || pick < 0 || pick > 36)) return res.status(400).json({ error: 'Pick a number between 0 and 36' });
+
+  const isAdmin = await isArcadeAdmin(req.userId);
+  let bal = null;
+  if (!isAdmin) {
+    bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+    const coverage = await checkPoolCoverage(stakeAmount);
+    if (!coverage.allowed) {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
+      await creditHouseRevenue(stakeAmount);
+      return res.status(400).json({ error: 'House pool cannot cover this bet. Try a smaller stake.', poolInsufficient: true, newBalance: bal.usd_balance - stakeAmount });
+    }
+  }
+
+  const serverSeed = generateServerSeed();
+  const cSeed = clientSeed || arcadeCrypto.randomBytes(8).toString('hex');
+  const nonce = Date.now();
+  const rollNumber = Math.floor(provablyFairResult(serverSeed, cSeed, nonce) * 37);
+  const color = ROULETTE_COLORS[rollNumber];
+
+  let won = false, multiplier = 0, result = 'lost';
+  if (choice === 'number' && rollNumber === Number(pick)) {
+    won = true;
+    multiplier = 35 * (1 - HOUSE_EDGE);
+    result = 'jackpot';
+  } else if (choice === 'red' && color === 'red') {
+    won = true;
+    multiplier = 1 * (1 - HOUSE_EDGE);
+    result = 'won';
+  } else if (choice === 'black' && color === 'black') {
+    won = true;
+    multiplier = 1 * (1 - HOUSE_EDGE);
+    result = 'won';
+  } else if (choice === 'green' && color === 'green') {
+    won = true;
+    multiplier = 17 * (1 - HOUSE_EDGE);
+    result = 'won';
+  }
+
+  const payout = won ? Math.floor(stakeAmount * multiplier * 100) / 100 : 0;
+  if (!isAdmin) {
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
+    if (payout > 0) {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+      await debitPoolPayout(payout);
+    } else {
+      await creditHouseRevenue(stakeAmount);
+    }
+  }
+
+  await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'roulette', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
+    [req.userId, stakeAmount, multiplier, payout, result, JSON.stringify({ choice, pick, rollNumber, color, admin_test: isAdmin }), serverSeed, cSeed, nonce]);
+
+  const newBalance = isAdmin ? 10000 : (bal.usd_balance - stakeAmount + payout);
+  res.json({ rollNumber, color, choice, pick, won, multiplier, payout, stake: stakeAmount, newBalance });
+});
+
+// ===== HI-LO =====
+app.post('/api/arcade/hilo', authenticateRequest, async (req, res) => {
+  const { guess, stake, clientSeed } = req.body;
+  const stakeAmount = parseFloat(stake);
+  if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
+  if (!guess || !['higher', 'lower', 'same'].includes(guess)) return res.status(400).json({ error: 'Choose higher, lower, or same' });
+
+  const isAdmin = await isArcadeAdmin(req.userId);
+  let bal = null;
+  if (!isAdmin) {
+    bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+    const coverage = await checkPoolCoverage(stakeAmount);
+    if (!coverage.allowed) {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
+      await creditHouseRevenue(stakeAmount);
+      return res.status(400).json({ error: 'House pool cannot cover this bet. Try a smaller stake.', poolInsufficient: true, newBalance: bal.usd_balance - stakeAmount });
+    }
+  }
+
+  const serverSeed = generateServerSeed();
+  const cSeed = clientSeed || arcadeCrypto.randomBytes(8).toString('hex');
+  const nonce = Date.now();
+  const baseCard = Math.floor(provablyFairResult(serverSeed, cSeed, nonce) * 13) + 1; // 1-13
+  const nextCard = Math.floor(provablyFairResult(serverSeed, cSeed, nonce + 1) * 13) + 1;
+
+  let won = false, multiplier = 0, result = 'lost';
+  if (guess === 'higher' && nextCard > baseCard) { won = true; multiplier = 1.8 * (1 - HOUSE_EDGE); result = 'won'; }
+  if (guess === 'lower' && nextCard < baseCard) { won = true; multiplier = 1.8 * (1 - HOUSE_EDGE); result = 'won'; }
+  if (guess === 'same' && nextCard === baseCard) { won = true; multiplier = 12 * (1 - HOUSE_EDGE); result = 'won'; }
+
+  const payout = won ? Math.floor(stakeAmount * multiplier * 100) / 100 : 0;
+  if (!isAdmin) {
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
+    if (payout > 0) {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+      await debitPoolPayout(payout);
+    } else {
+      await creditHouseRevenue(stakeAmount);
+    }
+  }
+
+  await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'hilo', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
+    [req.userId, stakeAmount, multiplier, payout, result, JSON.stringify({ guess, baseCard, nextCard, admin_test: isAdmin }), serverSeed, cSeed, nonce]);
+
+  const newBalance = isAdmin ? 10000 : (bal.usd_balance - stakeAmount + payout);
+  res.json({ baseCard, nextCard, guess, won, multiplier, payout, stake: stakeAmount, newBalance });
+});
+
+// ===== LUCKY WHEEL =====
+const WHEEL_SEGMENTS = [
+  { multiplier: 0, label: '0x' },
+  { multiplier: 0.5, label: '0.5x' },
+  { multiplier: 0.5, label: '0.5x' },
+  { multiplier: 1, label: '1x' },
+  { multiplier: 1, label: '1x' },
+  { multiplier: 1, label: '1x' },
+  { multiplier: 1.5, label: '1.5x' },
+  { multiplier: 1.5, label: '1.5x' },
+  { multiplier: 2, label: '2x' },
+  { multiplier: 2, label: '2x' },
+  { multiplier: 3, label: '3x' },
+  { multiplier: 5, label: '5x' },
+  { multiplier: 10, label: '10x' },
+  { multiplier: 25, label: '25x' }
+];
+
+app.post('/api/arcade/wheel', authenticateRequest, async (req, res) => {
+  const { stake, clientSeed } = req.body;
+  const stakeAmount = parseFloat(stake);
+  if (isNaN(stakeAmount) || stakeAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum stake is $${WEB_MIN_STAKE}` });
+
+  const isAdmin = await isArcadeAdmin(req.userId);
+  let bal = null;
+  if (!isAdmin) {
+    bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+    const coverage = await checkPoolCoverage(stakeAmount);
+    if (!coverage.allowed) {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
+      await creditHouseRevenue(stakeAmount);
+      return res.status(400).json({ error: 'House pool cannot cover this bet. Try a smaller stake.', poolInsufficient: true, newBalance: bal.usd_balance - stakeAmount });
+    }
+  }
+
+  const serverSeed = generateServerSeed();
+  const cSeed = clientSeed || arcadeCrypto.randomBytes(8).toString('hex');
+  const nonce = Date.now();
+  const roll = provablyFairResult(serverSeed, cSeed, nonce);
+  const segment = WHEEL_SEGMENTS[Math.floor(roll * WHEEL_SEGMENTS.length)];
+  const multiplier = segment.multiplier * (1 - HOUSE_EDGE);
+  const payout = Math.floor(stakeAmount * multiplier * 100) / 100;
+  const result = payout > 0 ? 'won' : 'lost';
+
+  if (!isAdmin) {
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
+    if (payout > 0) {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, req.userId]);
+      await debitPoolPayout(payout);
+    } else {
+      await creditHouseRevenue(stakeAmount);
+    }
+  }
+
+  await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, server_seed, client_seed, nonce) VALUES (?, 'wheel', ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
+    [req.userId, stakeAmount, multiplier, payout, result, JSON.stringify({ segment: segment.label, admin_test: isAdmin }), serverSeed, cSeed, nonce]);
+
+  const newBalance = isAdmin ? 10000 : (bal.usd_balance - stakeAmount + payout);
+  res.json({ segment: segment.label, multiplier: segment.multiplier, payout, stake: stakeAmount, newBalance });
+});
+
 // ===== CASTLE CRASH =====
 // Three-roll system for Aviator-level unpredictability:
 // Roll 1: picks a bucket with non-round, irregular boundaries (harder to learn)

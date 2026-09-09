@@ -2748,6 +2748,21 @@
                 <div class="game-card-name">PLINKO</div>
                 <div class="game-card-tag">DROP &amp; WIN</div>
             </div>
+            <div class="arcade-game-card" id="arcadeTab-roulette" onclick="openArcadeGame('roulette')" style="--card-accent:#e50914; --card-glow:rgba(229,9,20,0.25);">
+                <span class="game-card-icon" style="font-size:28px;">🎰</span>
+                <div class="game-card-name">ROULETTE</div>
+                <div class="game-card-tag">UP TO 35x</div>
+            </div>
+            <div class="arcade-game-card" id="arcadeTab-hilo" onclick="openArcadeGame('hilo')" style="--card-accent:#9B59B6; --card-glow:rgba(155,89,182,0.25);">
+                <span class="game-card-icon" style="font-size:28px;">🃏</span>
+                <div class="game-card-name">HI-LO</div>
+                <div class="game-card-tag">HIGHER OR LOWER</div>
+            </div>
+            <div class="arcade-game-card" id="arcadeTab-wheel" onclick="openArcadeGame('wheel')" style="--card-accent:#4CAF50; --card-glow:rgba(76,175,80,0.25);">
+                <span class="game-card-icon" style="font-size:28px;">🎡</span>
+                <div class="game-card-name">LUCKY WHEEL</div>
+                <div class="game-card-tag">SPIN &amp; WIN</div>
+            </div>
             <div class="arcade-game-card" id="arcadeTab-pvp" onclick="openArcadeGame('pvp')" style="--card-accent:#FFD700; --card-glow:rgba(255,215,0,0.25);">
                 <svg class="game-card-icon"><use href="#icon-pvp"/></svg>
                 <div class="game-card-name">PVP CLASH</div>
@@ -2972,6 +2987,68 @@
                 </div>
                 <button class="arcade-btn" onclick="playPlinko()" id="plinkoPlayBtn">DROP BALL</button>
                 <div id="plinkoResult" class="arcade-payout"></div>
+            </div>
+        </div>
+
+        <!-- Roulette -->
+        <div id="arcade-roulette" style="display: none;">
+            <div class="arcade-game" style="max-width: 520px;">
+                <h3>🎰 ROULETTE</h3>
+                <p style="color: #888; font-size: 12px; margin-bottom: 16px;">Pick red, black, green, or a straight number (0-36). Pays up to 35x!</p>
+                <div style="margin-bottom: 12px;">
+                    <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">BET TYPE:</label>
+                    <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px;">
+                        <button class="plinko-risk-btn" onclick="selectRouletteChoice('red', this)" id="rouletteChoice-red">RED (1x)</button>
+                        <button class="plinko-risk-btn" onclick="selectRouletteChoice('black', this)" id="rouletteChoice-black">BLACK (1x)</button>
+                        <button class="plinko-risk-btn" onclick="selectRouletteChoice('green', this)" id="rouletteChoice-green">GREEN (17x)</button>
+                        <button class="plinko-risk-btn active" onclick="selectRouletteChoice('number', this)" id="rouletteChoice-number">NUMBER (35x)</button>
+                    </div>
+                    <div id="rouletteNumberPicker">
+                        <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">PICK NUMBER (0-36):</label>
+                        <input type="number" id="rouletteNumber" value="0" min="0" max="36" step="1" class="arcade-input" style="max-width: 120px; text-align: center;">
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">STAKE (USD, MIN $2):</label>
+                    <input type="number" id="rouletteStake" value="2" min="2" step="0.50" class="arcade-input">
+                </div>
+                <button class="arcade-btn" onclick="playRoulette()" id="roulettePlayBtn">SPIN</button>
+                <div id="rouletteResult" class="arcade-payout"></div>
+            </div>
+        </div>
+
+        <!-- Hi-Lo -->
+        <div id="arcade-hilo" style="display: none;">
+            <div class="arcade-game" style="max-width: 480px;">
+                <h3>🃏 HI-LO</h3>
+                <p style="color: #888; font-size: 12px; margin-bottom: 16px;">We draw a card. Will the next card be higher, lower, or the same?</p>
+                <div id="hiloBaseCard" style="font-size: 48px; margin-bottom: 16px;">?</div>
+                <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px;">
+                    <button class="plinko-risk-btn active" onclick="selectHilo('higher', this)">HIGHER (1.8x)</button>
+                    <button class="plinko-risk-btn" onclick="selectHilo('lower', this)">LOWER (1.8x)</button>
+                    <button class="plinko-risk-btn" onclick="selectHilo('same', this)">SAME (12x)</button>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">STAKE (USD, MIN $2):</label>
+                    <input type="number" id="hiloStake" value="2" min="2" step="0.50" class="arcade-input">
+                </div>
+                <button class="arcade-btn" onclick="playHilo()" id="hiloPlayBtn">DRAW CARD</button>
+                <div id="hiloResult" class="arcade-payout"></div>
+            </div>
+        </div>
+
+        <!-- Lucky Wheel -->
+        <div id="arcade-wheel" style="display: none;">
+            <div class="arcade-game" style="max-width: 480px;">
+                <h3>🎡 LUCKY WHEEL</h3>
+                <p style="color: #888; font-size: 12px; margin-bottom: 16px;">Spin the wheel and land a multiplier. Includes 0x, 0.5x, 1x, 1.5x, 2x, 3x, 5x, 10x, 25x.</p>
+                <div style="font-size: 60px; margin-bottom: 16px;" id="wheelDisplay">🎡</div>
+                <div style="margin-bottom: 16px;">
+                    <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">STAKE (USD, MIN $2):</label>
+                    <input type="number" id="wheelStake" value="2" min="2" step="0.50" class="arcade-input">
+                </div>
+                <button class="arcade-btn" onclick="playWheel()" id="wheelPlayBtn">SPIN WHEEL</button>
+                <div id="wheelResult" class="arcade-payout"></div>
             </div>
         </div>
 
@@ -8009,7 +8086,7 @@
             if (crashState && crashState.active) crashState.active = false;
             if (typeof pvpState !== 'undefined' && pvpState.polling) { clearInterval(pvpState.polling); pvpState.polling = null; }
 
-            const tabs = ['coinflip', 'slots', 'crash', 'mines', 'dice', 'plinko', 'pvp', 'predictions', 'winners', 'rankings'];
+            const tabs = ['coinflip', 'slots', 'crash', 'mines', 'dice', 'plinko', 'roulette', 'hilo', 'wheel', 'pvp', 'predictions', 'winners', 'rankings'];
             tabs.forEach(t => {
                 const panel = document.getElementById('arcade-' + t);
                 const btn = document.getElementById('arcadeTab-' + t);
@@ -8813,6 +8890,114 @@
                     step++;
                 }, 100);
             } catch(e) { console.error('Plinko error:', e); btn.disabled=false; btn.textContent='DROP BALL'; ball.style.display='none'; ArcadeSession.unlock('plinko'); }
+        }
+
+        // ===== ROULETTE =====
+        let rouletteChoice = 'number';
+        function selectRouletteChoice(choice, btn) {
+            rouletteChoice = choice;
+            document.querySelectorAll('#arcade-roulette .plinko-risk-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('rouletteNumberPicker').style.display = (choice === 'number') ? 'block' : 'none';
+        }
+
+        async function playRoulette() {
+            if (!sessionToken) { showAuthModal(); return; }
+            if (ArcadeSession.isBusy('roulette')) { return; }
+            ArcadeSession.lock('roulette');
+            const stake = parseFloat(document.getElementById('rouletteStake').value);
+            const btn = document.getElementById('roulettePlayBtn');
+            const resultEl = document.getElementById('rouletteResult');
+            const pick = rouletteChoice === 'number' ? parseInt(document.getElementById('rouletteNumber').value) : null;
+            btn.disabled = true; btn.textContent = 'SPINNING...';
+            resultEl.textContent = '';
+            try {
+                const res = await fetch('/api/arcade/roulette', { method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ choice: rouletteChoice, pick, stake }) });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); btn.disabled = false; btn.textContent = 'SPIN'; ArcadeSession.unlock('roulette'); return; }
+                const colorEmoji = data.color === 'red' ? '🔴' : data.color === 'black' ? '⚫' : '🟢';
+                if (data.won) {
+                    dramaticWin('#arcade-roulette .arcade-game', data.payout || 0, false);
+                    resultEl.innerHTML = `🎉 Rolled ${colorEmoji} ${data.rollNumber} — WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
+                    showArcadeToast('win', '🎰', 'YOU WON!', `+$${data.payout.toFixed(2)}`);
+                } else {
+                    dramaticLoss('#arcade-roulette .arcade-game', data.stake || 0);
+                    resultEl.innerHTML = `Rolled ${colorEmoji} ${data.rollNumber} — Lost $${data.stake.toFixed(2)}`;
+                    showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
+                }
+                document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
+            } catch(e) { console.error('Roulette error:', e); }
+            ArcadeSession.setTimeout(() => { btn.disabled = false; btn.textContent = 'SPIN'; ArcadeSession.unlock('roulette'); }, 2000);
+        }
+
+        // ===== HI-LO =====
+        const CARD_RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+        let hiloChoice = 'higher';
+        function selectHilo(guess, btn) {
+            hiloChoice = guess;
+            document.querySelectorAll('#arcade-hilo .plinko-risk-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+
+        async function playHilo() {
+            if (!sessionToken) { showAuthModal(); return; }
+            if (ArcadeSession.isBusy('hilo')) { return; }
+            ArcadeSession.lock('hilo');
+            const stake = parseFloat(document.getElementById('hiloStake').value);
+            const btn = document.getElementById('hiloPlayBtn');
+            const resultEl = document.getElementById('hiloResult');
+            const baseEl = document.getElementById('hiloBaseCard');
+            btn.disabled = true; btn.textContent = 'DRAWING...';
+            resultEl.textContent = '';
+            baseEl.textContent = '?';
+            try {
+                const res = await fetch('/api/arcade/hilo', { method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ guess: hiloChoice, stake }) });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); btn.disabled = false; btn.textContent = 'DRAW CARD'; ArcadeSession.unlock('hilo'); return; }
+                baseEl.textContent = `${CARD_RANKS[data.baseCard - 1]} → ${CARD_RANKS[data.nextCard - 1]}`;
+                if (data.won) {
+                    dramaticWin('#arcade-hilo .arcade-game', data.payout || 0, false);
+                    resultEl.innerHTML = `🎉 ${data.guess.toUpperCase()} — WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
+                    showArcadeToast('win', '🃏', 'YOU WON!', `+$${data.payout.toFixed(2)}`);
+                } else {
+                    dramaticLoss('#arcade-hilo .arcade-game', data.stake || 0);
+                    resultEl.innerHTML = `${data.guess.toUpperCase()} — Lost $${data.stake.toFixed(2)}`;
+                    showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
+                }
+                document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
+            } catch(e) { console.error('Hi-Lo error:', e); }
+            ArcadeSession.setTimeout(() => { btn.disabled = false; btn.textContent = 'DRAW CARD'; ArcadeSession.unlock('hilo'); }, 2000);
+        }
+
+        // ===== LUCKY WHEEL =====
+        async function playWheel() {
+            if (!sessionToken) { showAuthModal(); return; }
+            if (ArcadeSession.isBusy('wheel')) { return; }
+            ArcadeSession.lock('wheel');
+            const stake = parseFloat(document.getElementById('wheelStake').value);
+            const btn = document.getElementById('wheelPlayBtn');
+            const resultEl = document.getElementById('wheelResult');
+            const display = document.getElementById('wheelDisplay');
+            btn.disabled = true; btn.textContent = 'SPINNING...';
+            resultEl.textContent = '';
+            display.textContent = '🎡';
+            try {
+                const res = await fetch('/api/arcade/wheel', { method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ stake }) });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); btn.disabled = false; btn.textContent = 'SPIN WHEEL'; ArcadeSession.unlock('wheel'); return; }
+                display.textContent = data.segment;
+                if (data.payout > 0) {
+                    dramaticWin('#arcade-wheel .arcade-game', data.payout || 0, false);
+                    resultEl.innerHTML = `🎉 Landed on <span style="color:#00d4ff;font-weight:700">${data.segment}</span> — WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span>`;
+                    showArcadeToast('win', '🎡', 'YOU WON!', `+$${data.payout.toFixed(2)}`);
+                } else {
+                    dramaticLoss('#arcade-wheel .arcade-game', data.stake || 0);
+                    resultEl.innerHTML = `Landed on ${data.segment} — Lost $${data.stake.toFixed(2)}`;
+                    showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
+                }
+                document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
+            } catch(e) { console.error('Wheel error:', e); }
+            ArcadeSession.setTimeout(() => { btn.disabled = false; btn.textContent = 'SPIN WHEEL'; ArcadeSession.unlock('wheel'); }, 2000);
         }
 
         // ===== PVP COLOR CLASH =====
