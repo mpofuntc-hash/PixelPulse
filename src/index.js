@@ -114,6 +114,7 @@ async function ensureLegacySchema() {
     ['betting_markets', 'condition_logic', 'TEXT'],
     ['prediction_markets', 'api_source', 'TEXT'],
     ['prediction_markets', 'api_event_id', 'TEXT'],
+    ['prediction_markets', 'api_event_date', 'TEXT'],
     ['user_balances', 'btc_balance', 'REAL DEFAULT 0'],
     ['user_profiles', 'username', 'TEXT'],
     ['user_profiles', 'avatar_id', "TEXT DEFAULT 'male_default'"],
@@ -1277,6 +1278,7 @@ async function initSchema() {
       fee_rate REAL DEFAULT 0.02,
       api_source TEXT,
       api_event_id TEXT,
+      api_event_date TEXT,
       created_by INTEGER,
       resolved_by INTEGER,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -8535,14 +8537,12 @@ app.post('/api/admin/prediction-markets', authenticateRequest, async (req, res) 
   res.json({ id: result.lastID, message: 'Market created' });
 });
 
-// API: Admin resolve prediction market (parimutuel payout)
-app.post('/api/admin/prediction-markets/:id/resolve', authenticateRequest, async (req, res) => {
-  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
-  const { outcome } = req.body;
-  if (!outcome || !['yes', 'no', 'cancel'].includes(String(outcome).toLowerCase())) return res.status(400).json({ error: 'Outcome must be yes, no, or cancel' });
+// Core: resolve a prediction market and distribute the pool
+async function resolvePredictionMarket(marketId, outcome, resolverUserId) {
+  if (!outcome || !['yes', 'no', 'cancel'].includes(String(outcome).toLowerCase())) throw new Error('Outcome must be yes, no, or cancel');
 
-  const market = await dbGet('SELECT * FROM prediction_markets WHERE id = ?', [req.params.id]);
-  if (!market || market.status !== 'active') return res.status(400).json({ error: 'Market not active' });
+  const market = await dbGet('SELECT * FROM prediction_markets WHERE id = ?', [marketId]);
+  if (!market || market.status !== 'active') throw new Error('Market not active');
 
   const outcomeLower = String(outcome).toLowerCase();
   if (outcomeLower === 'cancel') {
@@ -8552,8 +8552,8 @@ app.post('/api/admin/prediction-markets/:id/resolve', authenticateRequest, async
       await dbRun('UPDATE prediction_bets SET status = ? WHERE id = ?', ['refunded', bet.id]);
     }
     await dbRun(`UPDATE prediction_markets SET status = ?, resolution_value = ?, resolved_by = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      ['cancelled', 'cancel', req.userId, market.id]);
-    return res.json({ message: 'Market cancelled and bets refunded' });
+      ['cancelled', 'cancel', resolverUserId, market.id]);
+    return { message: 'Market cancelled and bets refunded' };
   }
 
   const winningOption = outcomeLower;
@@ -8563,8 +8563,8 @@ app.post('/api/admin/prediction-markets/:id/resolve', authenticateRequest, async
 
   if (winningPool <= 0) {
     await dbRun(`UPDATE prediction_markets SET status = ?, resolution_value = ?, resolved_by = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      ['resolved', winningOption, req.userId, market.id]);
-    return res.json({ message: 'Market resolved. No winning bets to pay.' });
+      ['resolved', winningOption, resolverUserId, market.id]);
+    return { message: 'Market resolved. No winning bets to pay.' };
   }
 
   const feeRate = market.fee_rate || 0;
@@ -8588,10 +8588,59 @@ app.post('/api/admin/prediction-markets/:id/resolve', authenticateRequest, async
   }
 
   await dbRun(`UPDATE prediction_markets SET status = ?, resolution_value = ?, resolved_by = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?`,
-    ['resolved', winningOption, req.userId, market.id]);
+    ['resolved', winningOption, resolverUserId, market.id]);
 
   await logSystemEvent('info', `Prediction market ${market.id} resolved`, `Outcome: ${winningOption}`);
-  res.json({ message: `Resolved as ${winningOption}`, winners: winningBets.length, paid: poolAfterFee });
+  return { message: `Resolved as ${winningOption}`, winners: winningBets.length, paid: poolAfterFee };
+}
+
+// API: Admin resolve prediction market (parimutuel payout)
+app.post('/api/admin/prediction-markets/:id/resolve', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+  try {
+    const result = await resolvePredictionMarket(req.params.id, req.body.outcome, req.userId);
+    res.json(result);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// API: Admin auto-resolve a football market from the free worldcup26 scoreboard
+app.post('/api/admin/predictions/football/:id/auto-resolve', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+
+  const market = await dbGet('SELECT * FROM prediction_markets WHERE id = ? AND api_source = ? AND status = ?', [req.params.id, 'worldcup26', 'active']);
+  if (!market) return res.status(400).json({ error: 'Football market not active or not from API' });
+
+  try {
+    if (!market.api_event_date) throw new Error('No match date stored for this market');
+    const date = market.api_event_date.replace(/-/g, '');
+    const apiRes = await fetch(`https://worldcup26.ir/get/soccer/eng.1/scoreboard?dates=${date}`);
+    if (!apiRes.ok) throw new Error(`Scoreboard API returned ${apiRes.status}`);
+
+    const data = await apiRes.json();
+    const event = (data?.events || []).find(e => String(e.id) === String(market.api_event_id));
+    if (!event) throw new Error('Match not found on this date');
+
+    const status = event?.status?.type?.name || '';
+    const completed = event?.status?.type?.completed === true || status === 'STATUS_FINAL';
+    if (!completed) throw new Error(`Match status is ${status}, not final yet`);
+
+    const comp = event?.competitions?.[0];
+    const home = comp?.competitors?.find(c => c.homeAway === 'home');
+    const away = comp?.competitors?.find(c => c.homeAway === 'away');
+    if (!home || !away || home.score === undefined || away.score === undefined) throw new Error('Match scores unavailable');
+
+    const homeScore = parseInt(home.score, 10);
+    const awayScore = parseInt(away.score, 10);
+    const outcome = homeScore > awayScore ? 'yes' : 'no';
+
+    const result = await resolvePredictionMarket(market.id, outcome, req.userId);
+    res.json({ ...result, apiOutcome: outcome, homeScore, awayScore, match: `${home.team?.displayName || ''} ${homeScore} - ${awayScore} ${away.team?.displayName || ''}` });
+  } catch (e) {
+    console.error('Football auto-resolve error:', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // API: Check if user is arcade/admin so the frontend can show admin tools
@@ -8636,10 +8685,11 @@ app.post('/api/admin/predictions/football/seed', authenticateRequest, async (req
       const existing = await dbGet('SELECT id FROM prediction_markets WHERE api_source = ? AND api_event_id = ? AND status = ?', ['worldcup26', eventId, 'active']);
       if (existing) { skipped++; continue; }
 
+      const eventDate = event.date?.slice(0, 10);
       await dbRun(`
-        INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, api_source, api_event_id, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `, [`Will ${home} beat ${away}?`, `English Premier League match on ${matchDate}. Yes = ${home} wins. No = ${away} wins or draw.`, 'sports', `${home} wins`, `${away} or draw`, 'worldcup26', eventId, req.userId]);
+        INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, api_source, api_event_id, api_event_date, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [`Will ${home} beat ${away}?`, `English Premier League match on ${matchDate}. Yes = ${home} wins. No = ${away} wins or draw.`, 'sports', `${home} wins`, `${away} or draw`, 'worldcup26', eventId, eventDate, req.userId]);
       created++;
     }
 

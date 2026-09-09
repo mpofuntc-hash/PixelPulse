@@ -9286,10 +9286,11 @@
                             ` : `<div style="font-size:13px;color:#aaa;">Resolved: <strong>${(m.option_yes_label || 'Yes')} — ${m.resolution_value || 'n/a'}</strong></div>`}
                         </div>
                         ${arcadeAdmin && m.status === 'active' ? `
-                            <div style="margin-top:12px;display:flex;gap:8px;">
+                            <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
                                 <button class="btn" style="font-size:11px;padding:6px;" onclick="adminResolvePrediction(${m.id}, 'yes')">Resolve YES</button>
                                 <button class="btn" style="font-size:11px;padding:6px;" onclick="adminResolvePrediction(${m.id}, 'no')">Resolve NO</button>
                                 <button class="btn" style="font-size:11px;padding:6px;" onclick="adminResolvePrediction(${m.id}, 'cancel')">Cancel</button>
+                                ${m.api_source === 'worldcup26' ? `<button class="btn" style="font-size:11px;padding:6px;background:rgba(76,175,80,0.15);" onclick="adminAutoResolveFootball(${m.id})">🤖 Auto-resolve</button>` : ''}
                             </div>
                         ` : ''}
                     </div>
@@ -9361,6 +9362,19 @@
                 alert(`✅ Created ${data.created} football markets (skipped ${data.skipped})`);
                 loadPredictions();
             } catch(e) { alert('Error seeding football markets'); }
+        }
+
+        async function adminAutoResolveFootball(marketId) {
+            if (!confirm('Auto-resolve this football market from the free API?')) return;
+            try {
+                const res = await fetch(`/api/admin/predictions/football/${marketId}/auto-resolve`, {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); return; }
+                alert(`✅ Resolved as ${data.apiOutcome.toUpperCase()}\n${data.match}\n${data.message}`);
+                loadPredictions();
+            } catch(e) { alert('Error auto-resolving market'); }
         }
 
         async function loadArcadeHistory() {
