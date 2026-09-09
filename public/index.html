@@ -2439,7 +2439,7 @@
     </div>
 
     <div class="promo-strip">
-        🎁 <span>WELCOME BONUS:</span> Sign up → <span>$2.00 free credit</span> &nbsp;·&nbsp; First deposit → <span>+$2.00 bonus</span> &nbsp;·&nbsp; Refer friends → <span>$1.00 each</span> &nbsp;·&nbsp; Daily bonus → <span>$0.25 every 24h</span>
+        🎮 <span>13 PROVABLY FAIR GAMES</span> — Coin Flip, Slots, Crash, Mines, Dice, Plinko, Roulette, Hi-Lo, Lucky Wheel &amp; more &nbsp;•&nbsp; 🔮 <span>PREDICTION MARKETS</span> — Sports, News, Esports, Politics, Crypto &nbsp;•&nbsp; 🎁 <span>BONUSES:</span> $2.00 signup + $2.00 first deposit + $1.00 per referral + $0.25 daily
     </div>
 
     <section class="module-section" id="explore-modules">
@@ -3106,9 +3106,25 @@
         <div id="arcade-predictions" style="display: none;">
             <div style="margin-bottom: 20px;">
                 <h3 style="margin-bottom: 12px;">🔮 Prediction Markets</h3>
-                <p style="color: #888; font-size: 13px; margin-bottom: 16px;">Bet on anime, gaming, and community polls. Winners split the pool proportionally (5% house edge).</p>
+                <p style="color: #888; font-size: 13px; margin-bottom: 16px;">Bet on sports, news, esports, politics, and crypto. Admin-created, manually resolved, winner-takes-all pool. 2% house fee.</p>
             </div>
-            <div id="predictionsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 16px;">
+            <div id="predictionAdminPanel" style="display: none; margin-bottom: 20px; padding: 16px; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 8px;">
+                <h4 style="margin-bottom: 12px;">⚙️ Admin Create Market</h4>
+                <input type="text" id="predAdminTitle" placeholder="Title" class="arcade-input" style="margin-bottom: 8px;">
+                <input type="text" id="predAdminDesc" placeholder="Description" class="arcade-input" style="margin-bottom: 8px;">
+                <select id="predAdminCategory" class="arcade-input" style="margin-bottom: 8px;">
+                    <option value="sports">Sports</option>
+                    <option value="news">News</option>
+                    <option value="esports">Esports</option>
+                    <option value="politics">Politics</option>
+                    <option value="crypto">Crypto</option>
+                    <option value="misc">Misc</option>
+                </select>
+                <input type="text" id="predAdminYes" placeholder="Yes label (default Yes)" class="arcade-input" style="margin-bottom: 8px;">
+                <input type="text" id="predAdminNo" placeholder="No label (default No)" class="arcade-input" style="margin-bottom: 8px;">
+                <button class="arcade-btn" onclick="adminCreatePrediction()">CREATE MARKET</button>
+            </div>
+            <div id="predictionsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;">
                 <div style="color: #888; text-align: center; padding: 40px;">Loading prediction markets...</div>
             </div>
         </div>
@@ -9223,42 +9239,112 @@
             } catch(e) {}
         }
 
+        let arcadeAdmin = false;
+
         async function loadPredictions() {
+            if (!sessionToken) { showAuthModal(); return; }
+            const grid = document.getElementById('predictionsGrid');
+            grid.innerHTML = '<div style="color:#888;text-align:center;padding:40px;">Loading prediction markets...</div>';
             try {
-                const res = await fetch('/api/predictions');
-                const data = await res.json();
-                const grid = document.getElementById('predictionsGrid');
-                if (data.length === 0) { grid.innerHTML = '<div style="color:#888;text-align:center;padding:40px;">No open prediction markets right now. Check back soon!</div>'; return; }
-                grid.innerHTML = data.map(m => `
+                const [marketsRes, adminRes] = await Promise.all([
+                    fetch('/api/arcade/predictions/markets', { headers: { 'Authorization': `Bearer ${sessionToken}` } }),
+                    fetch('/api/arcade/admin-check', { headers: { 'Authorization': `Bearer ${sessionToken}` } })
+                ]);
+                const data = await marketsRes.json();
+                const adminData = await adminRes.json();
+                arcadeAdmin = adminData.isAdmin;
+                document.getElementById('predictionAdminPanel').style.display = arcadeAdmin ? 'block' : 'none';
+
+                const active = data.active || [];
+                const resolved = data.resolved || [];
+                const all = [...active, ...resolved];
+
+                if (all.length === 0) {
+                    grid.innerHTML = '<div style="color:#888;text-align:center;padding:40px;">No prediction markets yet. Admins can create sports, news, esports, politics, and crypto markets above.</div>';
+                    return;
+                }
+
+                grid.innerHTML = all.map(m => `
                     <div style="background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:20px;">
-                        <div style="font-size:12px;color:#888;margin-bottom:6px">${m.category.toUpperCase()} ${m.source_url ? `• <a href="${m.source_url}" target="_blank" style="color:#e50914">Source</a>` : ''}</div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                            <span style="font-size:12px;color:#888;">${(m.category || 'misc').toUpperCase()}</span>
+                            <span style="font-size:11px;color:${m.status === 'active' ? '#4caf50' : m.status === 'resolved' ? '#e50914' : '#888'};border:1px solid currentColor;padding:2px 8px;border-radius:20px;">${m.status.toUpperCase()}</span>
+                        </div>
                         <h4 style="margin-bottom:8px">${m.title}</h4>
                         ${m.description ? `<p style="color:#aaa;font-size:13px;margin-bottom:12px">${m.description}</p>` : ''}
-                        <div style="display:flex;flex-direction:column;gap:8px;">
-                            ${m.options.map(opt => `
-                                <button class="btn btn-secondary" onclick="placePredictionBet(${m.id}, '${opt.replace(/'/g,"\\'")}')" style="text-align:left;justify-content:flex-start;">${opt}</button>
-                            `).join('')}
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:12px;color:#888;">
+                            <span>Yes pool: <strong style="color:#4caf50">$${(m.total_yes || 0).toFixed(2)}</strong></span>
+                            <span>No pool: <strong style="color:#f44336">$${(m.total_no || 0).toFixed(2)}</strong></span>
                         </div>
-                        ${m.resolves_at ? `<div style="margin-top:10px;font-size:12px;color:#666">Resolves: ${new Date(m.resolves_at).toLocaleDateString()}</div>` : ''}
+                        <div style="display:flex;flex-direction:column;gap:8px;">
+                            ${m.status === 'active' ? `
+                                <button class="btn btn-secondary" onclick="placePredictionBet(${m.id}, 'yes', '${(m.option_yes_label || 'Yes').replace(/'/g, "\\'")}')" style="text-align:center;justify-content:center;background:rgba(76,175,80,0.15);border-color:#4caf50;">${m.option_yes_label || 'Yes'}</button>
+                                <button class="btn btn-secondary" onclick="placePredictionBet(${m.id}, 'no', '${(m.option_no_label || 'No').replace(/'/g, "\\'")}')" style="text-align:center;justify-content:center;background:rgba(244,67,54,0.15);border-color:#f44336;">${m.option_no_label || 'No'}</button>
+                            ` : `<div style="font-size:13px;color:#aaa;">Resolved: <strong>${(m.option_yes_label || 'Yes')} — ${m.resolution_value || 'n/a'}</strong></div>`}
+                        </div>
+                        ${arcadeAdmin && m.status === 'active' ? `
+                            <div style="margin-top:12px;display:flex;gap:8px;">
+                                <button class="btn" style="font-size:11px;padding:6px;" onclick="adminResolvePrediction(${m.id}, 'yes')">Resolve YES</button>
+                                <button class="btn" style="font-size:11px;padding:6px;" onclick="adminResolvePrediction(${m.id}, 'no')">Resolve NO</button>
+                                <button class="btn" style="font-size:11px;padding:6px;" onclick="adminResolvePrediction(${m.id}, 'cancel')">Cancel</button>
+                            </div>
+                        ` : ''}
                     </div>
                 `).join('');
-            } catch(e) {}
+            } catch(e) { console.error('Predictions load error:', e); }
         }
 
-        async function placePredictionBet(marketId, option) {
+        async function placePredictionBet(marketId, option, label) {
             if (!sessionToken) { showAuthModal(); return; }
-            const stake = prompt(`Bet on: ${option}\nEnter stake amount (min $2):`, '2');
+            const stake = prompt(`Bet on: ${label}\nEnter stake amount (min $2):`, '2');
             if (!stake) return;
             try {
-                const res = await fetch(`/api/predictions/${marketId}/bet`, {
+                const res = await fetch('/api/arcade/predictions/bet', {
                     method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ chosen_option: option, stake: parseFloat(stake) })
+                    body: JSON.stringify({ marketId, option, amount: parseFloat(stake) })
                 });
                 const data = await res.json();
                 if (!res.ok) { alert(data.error); return; }
-                alert(`✅ Bet placed: $${stake} on "${option}"`);
+                alert(`✅ Bet placed: $${stake} on "${label}"`);
                 loadArcadeBalance();
+                loadPredictions();
             } catch(e) { alert('Error placing bet'); }
+        }
+
+        async function adminCreatePrediction() {
+            if (!sessionToken) { showAuthModal(); return; }
+            const title = document.getElementById('predAdminTitle').value.trim();
+            const description = document.getElementById('predAdminDesc').value.trim();
+            const category = document.getElementById('predAdminCategory').value;
+            const option_yes_label = document.getElementById('predAdminYes').value.trim() || 'Yes';
+            const option_no_label = document.getElementById('predAdminNo').value.trim() || 'No';
+            if (!title) { alert('Enter a title'); return; }
+            try {
+                const res = await fetch('/api/admin/prediction-markets', {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, description, category, option_yes_label, option_no_label })
+                });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); return; }
+                alert('✅ Market created');
+                document.getElementById('predAdminTitle').value = '';
+                document.getElementById('predAdminDesc').value = '';
+                loadPredictions();
+            } catch(e) { alert('Error creating market'); }
+        }
+
+        async function adminResolvePrediction(marketId, outcome) {
+            if (!confirm(`Resolve market #${marketId} as ${outcome.toUpperCase()}?`)) return;
+            try {
+                const res = await fetch(`/api/admin/prediction-markets/${marketId}/resolve`, {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ outcome })
+                });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); return; }
+                alert(data.message);
+                loadPredictions();
+            } catch(e) { alert('Error resolving market'); }
         }
 
         async function loadArcadeHistory() {

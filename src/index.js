@@ -1261,6 +1261,43 @@ async function initSchema() {
   `);
 
   await dbExec(`
+    CREATE TABLE IF NOT EXISTS prediction_markets (
+      id INTEGER PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT,
+      category TEXT,
+      option_yes_label TEXT DEFAULT 'Yes',
+      option_no_label TEXT DEFAULT 'No',
+      status TEXT DEFAULT 'active',
+      resolution_value TEXT,
+      total_yes REAL DEFAULT 0,
+      total_no REAL DEFAULT 0,
+      fee_rate REAL DEFAULT 0.02,
+      created_by INTEGER,
+      resolved_by INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      resolved_at TEXT,
+      FOREIGN KEY (created_by) REFERENCES users(id),
+      FOREIGN KEY (resolved_by) REFERENCES users(id)
+    );
+  `);
+
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS prediction_bets (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER,
+      market_id INTEGER,
+      option TEXT,
+      amount REAL,
+      payout REAL DEFAULT 0,
+      status TEXT DEFAULT 'pending',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (market_id) REFERENCES prediction_markets(id)
+    );
+  `);
+
+  await dbExec(`
     CREATE TABLE IF NOT EXISTS user_balances (
       id INTEGER PRIMARY KEY,
       user_id INTEGER UNIQUE,
@@ -8414,6 +8451,148 @@ app.post('/api/arcade/wheel', authenticateRequest, async (req, res) => {
 
   const newBalance = isAdmin ? 10000 : (bal.usd_balance - stakeAmount + payout);
   res.json({ segment: segment.label, multiplier: segment.multiplier, payout, stake: stakeAmount, newBalance });
+});
+
+// ===== PREDICTION MARKETS (manual, no paid APIs) =====
+const VALID_PREDICTION_CATEGORIES = ['sports', 'news', 'esports', 'politics', 'crypto', 'misc'];
+
+// API: List active + recently resolved prediction markets
+app.get('/api/arcade/predictions/markets', authenticateRequest, async (req, res) => {
+  const active = await dbAll(`
+    SELECT id, title, description, category, option_yes_label, option_no_label, status, resolution_value,
+           total_yes, total_no, fee_rate, created_at, resolved_at
+    FROM prediction_markets WHERE status = ?
+    ORDER BY created_at DESC LIMIT 50`, ['active']);
+  const resolved = await dbAll(`
+    SELECT id, title, description, category, option_yes_label, option_no_label, status, resolution_value,
+           total_yes, total_no, fee_rate, created_at, resolved_at
+    FROM prediction_markets WHERE status IN (?, ?)
+    ORDER BY resolved_at DESC LIMIT 20`, ['resolved', 'cancelled']);
+  res.json({ active, resolved });
+});
+
+// API: Place a prediction bet with USD
+app.post('/api/arcade/predictions/bet', authenticateRequest, async (req, res) => {
+  const { marketId, option, amount } = req.body;
+  const betAmount = parseFloat(amount);
+  if (!marketId || !option || !['yes', 'no'].includes(String(option).toLowerCase())) return res.status(400).json({ error: 'Choose Yes or No' });
+  if (isNaN(betAmount) || betAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum bet is $${WEB_MIN_STAKE}` });
+
+  const market = await dbGet('SELECT * FROM prediction_markets WHERE id = ? AND status = ?', [marketId, 'active']);
+  if (!market) return res.status(400).json({ error: 'Market not available for betting' });
+
+  const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+  if (!bal || bal.usd_balance < betAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
+
+  await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [betAmount, betAmount, req.userId]);
+
+  const optionLower = String(option).toLowerCase();
+  await dbRun(`
+    INSERT INTO prediction_bets (user_id, market_id, option, amount, status)
+    VALUES (?, ?, ?, ?, 'pending')
+  `, [req.userId, marketId, optionLower, betAmount]);
+
+  if (optionLower === 'yes') {
+    await dbRun('UPDATE prediction_markets SET total_yes = total_yes + ? WHERE id = ?', [betAmount, marketId]);
+  } else {
+    await dbRun('UPDATE prediction_markets SET total_no = total_no + ? WHERE id = ?', [betAmount, marketId]);
+  }
+
+  await logSystemEvent('info', `Prediction bet placed by user ${req.userId}`, `Market ${marketId}, option ${optionLower}, amount ${betAmount}`);
+  const newBal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+  res.json({ message: 'Bet placed', newBalance: newBal.usd_balance });
+});
+
+// API: User's prediction bets
+app.get('/api/arcade/predictions/my-bets', authenticateRequest, async (req, res) => {
+  const bets = await dbAll(`
+    SELECT pb.*, pm.title, pm.status as market_status, pm.resolution_value, pm.category
+    FROM prediction_bets pb
+    JOIN prediction_markets pm ON pb.market_id = pm.id
+    WHERE pb.user_id = ?
+    ORDER BY pb.created_at DESC LIMIT 50
+  `, [req.userId]);
+  res.json(bets);
+});
+
+// API: Admin create prediction market
+app.post('/api/admin/prediction-markets', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+  const { title, description, category, option_yes_label, option_no_label } = req.body;
+  if (!title) return res.status(400).json({ error: 'Title required' });
+  if (!VALID_PREDICTION_CATEGORIES.includes(category)) return res.status(400).json({ error: 'Invalid category' });
+
+  const result = await dbRun(`
+    INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, created_by)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `, [title, description || '', category, option_yes_label || 'Yes', option_no_label || 'No', req.userId]);
+
+  await logSystemEvent('info', `Prediction market created by admin ${req.userId}`, `Market ${result.lastID}: ${title}`);
+  res.json({ id: result.lastID, message: 'Market created' });
+});
+
+// API: Admin resolve prediction market (parimutuel payout)
+app.post('/api/admin/prediction-markets/:id/resolve', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+  const { outcome } = req.body;
+  if (!outcome || !['yes', 'no', 'cancel'].includes(String(outcome).toLowerCase())) return res.status(400).json({ error: 'Outcome must be yes, no, or cancel' });
+
+  const market = await dbGet('SELECT * FROM prediction_markets WHERE id = ?', [req.params.id]);
+  if (!market || market.status !== 'active') return res.status(400).json({ error: 'Market not active' });
+
+  const outcomeLower = String(outcome).toLowerCase();
+  if (outcomeLower === 'cancel') {
+    const bets = await dbAll('SELECT * FROM prediction_bets WHERE market_id = ? AND status = ?', [market.id, 'pending']);
+    for (const bet of bets) {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [bet.amount, bet.user_id]);
+      await dbRun('UPDATE prediction_bets SET status = ? WHERE id = ?', ['refunded', bet.id]);
+    }
+    await dbRun(`UPDATE prediction_markets SET status = ?, resolution_value = ?, resolved_by = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      ['cancelled', 'cancel', req.userId, market.id]);
+    return res.json({ message: 'Market cancelled and bets refunded' });
+  }
+
+  const winningOption = outcomeLower;
+  const losingOption = winningOption === 'yes' ? 'no' : 'yes';
+  const losingPool = losingOption === 'yes' ? market.total_yes : market.total_no;
+  const winningPool = winningOption === 'yes' ? market.total_yes : market.total_no;
+
+  if (winningPool <= 0) {
+    await dbRun(`UPDATE prediction_markets SET status = ?, resolution_value = ?, resolved_by = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      ['resolved', winningOption, req.userId, market.id]);
+    return res.json({ message: 'Market resolved. No winning bets to pay.' });
+  }
+
+  const feeRate = market.fee_rate || 0;
+  const poolAfterFee = losingPool * (1 - feeRate);
+
+  const winningBets = await dbAll('SELECT * FROM prediction_bets WHERE market_id = ? AND option = ? AND status = ?', [market.id, winningOption, 'pending']);
+  for (const bet of winningBets) {
+    const share = bet.amount / winningPool;
+    const payout = Math.floor((bet.amount + (poolAfterFee * share)) * 100) / 100;
+    await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, bet.user_id]);
+    await dbRun('UPDATE prediction_bets SET status = ?, payout = ? WHERE id = ?', ['won', payout, bet.id]);
+  }
+
+  const losingBets = await dbAll('SELECT * FROM prediction_bets WHERE market_id = ? AND option = ? AND status = ?', [market.id, losingOption, 'pending']);
+  for (const bet of losingBets) {
+    await dbRun('UPDATE prediction_bets SET status = ? WHERE id = ?', ['lost', bet.id]);
+  }
+
+  if (feeRate > 0) {
+    await creditHouseRevenue(losingPool * feeRate);
+  }
+
+  await dbRun(`UPDATE prediction_markets SET status = ?, resolution_value = ?, resolved_by = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    ['resolved', winningOption, req.userId, market.id]);
+
+  await logSystemEvent('info', `Prediction market ${market.id} resolved`, `Outcome: ${winningOption}`);
+  res.json({ message: `Resolved as ${winningOption}`, winners: winningBets.length, paid: poolAfterFee });
+});
+
+// API: Check if user is arcade/admin so the frontend can show admin tools
+app.get('/api/arcade/admin-check', authenticateRequest, async (req, res) => {
+  res.json({ isAdmin: await isArcadeAdmin(req.userId) });
 });
 
 // ===== CASTLE CRASH =====
