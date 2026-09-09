@@ -3926,10 +3926,11 @@
 
             try {
                 const refCode = new URLSearchParams(window.location.search).get('ref') || '';
+                const pcClick = localStorage.getItem('pp_clickid') || '';
                 const response = await fetch('/api/auth/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password, username, isAdult, referralCode: refCode })
+                    body: JSON.stringify({ email, password, username, isAdult, referralCode: refCode, clickid: pcClick })
                 });
                 const data = await response.json();
 

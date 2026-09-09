@@ -95,6 +95,7 @@ async function ensureLegacySchema() {
     ['users', 'referred_by', 'TEXT'],
     ['users', 'referral_code', 'TEXT'],
     ['users', 'referred_by_user_id', 'INTEGER'],
+    ['users', 'popcash_clickid', 'TEXT'],
     ['chat_messages', 'source', "TEXT DEFAULT 'webapp'"],
     ['chat_messages', 'reply_to_id', 'INTEGER'],
     ['skins', 'price_fiat', 'REAL DEFAULT 0'],
@@ -4213,7 +4214,7 @@ function ensureOwnsResource(req, res, resourceUserId, label = 'resource') {
 
 // API: Register user
 app.post('/api/auth/register', rateLimit({ windowMs: 60 * 1000, max: 5, key: req => `register:${req.ip || 'unknown'}` }), async (req, res) => {
-  const { email, password, username, isAdult, referralCode } = req.body;
+  const { email, password, username, isAdult, referralCode, clickid } = req.body;
 
   if (!validateEmail(email) || !validateText(password, { maxLength: 128, required: true }) || !validateText(username, { maxLength: 50, required: true })) {
     return res.status(400).json({ error: 'Invalid email, password, or username.' });
@@ -4249,10 +4250,12 @@ app.post('/api/auth/register', rateLimit({ windowMs: 60 * 1000, max: 5, key: req
     }
   }
 
+  const popcashClickId = (clickid && String(clickid).trim().length > 0) ? String(clickid).trim().slice(0, 128) : null;
+
   const result = await dbRun(`
-    INSERT INTO users (email, password_hash, username, is_adult, referred_by, referred_by_user_id)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `, [normalizedEmail, passwordHash, String(username).trim(), 1, validReferralCode, referringUserId]);
+    INSERT INTO users (email, password_hash, username, is_adult, referred_by, referred_by_user_id, popcash_clickid)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `, [normalizedEmail, passwordHash, String(username).trim(), 1, validReferralCode, referringUserId, popcashClickId]);
 
   const userId = result.lastID;
   // Generate the new user's personal referral code
@@ -6805,12 +6808,19 @@ app.post('/api/admin/verify-deposit', checkAdminSession, async (req, res) => {
       await logSystemEvent('info', `First-deposit bonus $${FIRST_DEPOSIT_BONUS_USD} credited to user ${deposit.user_id}`, 'First deposit bonus');
 
       // Referral payout: $1.00 to the referring user on their friend's first deposit
-      const referred = await dbGet('SELECT referred_by_user_id FROM users WHERE id = ?', [deposit.user_id]);
+      const referred = await dbGet('SELECT referred_by_user_id, popcash_clickid FROM users WHERE id = ?', [deposit.user_id]);
       if (referred && referred.referred_by_user_id) {
         const REFERRAL_PAYOUT_USD = 1.00;
         await dbRun('INSERT OR IGNORE INTO user_balances (user_id, usd_balance) VALUES (?, 0)', [referred.referred_by_user_id]);
         await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [REFERRAL_PAYOUT_USD, referred.referred_by_user_id]);
         await logSystemEvent('info', `Referral payout $${REFERRAL_PAYOUT_USD} to user ${referred.referred_by_user_id}`, `Referred user ${deposit.user_id} made first deposit`);
+      }
+
+      // PopCash type=2 postback: fire server-side on first verified deposit
+      if (referred && referred.popcash_clickid) {
+        const pbUrl = 'https://ct.popcash.net/click?aid=505056&type=2&clickid=' + encodeURIComponent(referred.popcash_clickid) + '&payout=0';
+        fetch(pbUrl).catch(() => {});
+        logSystemEvent('info', `PopCash type=2 postback fired for user ${deposit.user_id}`, 'First deposit conversion');
       }
     }
 
