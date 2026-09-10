@@ -8201,7 +8201,7 @@
                         btn.disabled = false; btn.textContent = 'FLIP COIN';
                         ArcadeSession.unlock('coinflip');
                     }
-                }, 100);
+                }, 180);
             } catch(e) { console.error('Coinflip error:', e); alert('Error playing coinflip: ' + (e.message || 'unknown')); btn.disabled = false; btn.textContent = 'FLIP COIN'; resultEl.classList.remove('flipping'); ArcadeSession.unlock('coinflip'); }
         }
 
@@ -8256,7 +8256,7 @@
                     }).catch((e) => { console.error('Slots error:', e); alert('Error: ' + (e.message || 'unknown')); btn.disabled=false; btn.textContent='SPIN'; ArcadeSession.unlock('slots'); });
                     ArcadeSession.trackFetch(fetchPromise);
                 }
-            }, 80);
+            }, 140);
         }
 
         async function startCrash() {
@@ -8429,7 +8429,7 @@
                     const policeSpeed = 3 + Math.floor(tension * 5);
                     const policeSteps = ['🚔', '🚓', '🚔'];
                     policeEl.textContent = policeSteps[Math.floor(elapsed * policeSpeed) % policeSteps.length];
-                }, 100);
+                }, 180);
             } catch(e) { console.error('Crash start error:', e); alert('Error starting crash: ' + (e.message || 'unknown')); startBtn.disabled = false; ArcadeSession.unlock('crash'); }
         }
 
@@ -8794,7 +8794,7 @@
                     }).catch(e => { console.error('Dice error:', e); btn.disabled=false; btn.textContent='ROLL DICE'; ArcadeSession.unlock('dice'); });
                     ArcadeSession.trackFetch(fetchPromise);
                 }
-            }, 80);
+            }, 140);
         }
 
         // ===== PLINKO =====
@@ -8909,7 +8909,7 @@
                     ball.style.left = `${pctX}%`;
                     ball.style.top = `${pctY}%`;
                     step++;
-                }, 100);
+                }, 180);
             } catch(e) { console.error('Plinko error:', e); btn.disabled=false; btn.textContent='DROP BALL'; ball.style.display='none'; ArcadeSession.unlock('plinko'); }
         }
 

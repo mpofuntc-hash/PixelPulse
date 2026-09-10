@@ -8470,12 +8470,14 @@ const VALID_PREDICTION_CATEGORIES = ['sports', 'news', 'esports', 'politics', 'c
 app.get('/api/arcade/predictions/markets', authenticateRequest, async (req, res) => {
   const active = await dbAll(`
     SELECT id, title, description, category, option_yes_label, option_no_label, status, resolution_value,
-           total_yes, total_no, fee_rate, created_at, resolved_at
+           total_yes, total_no, fee_rate, created_at, resolved_at,
+           image_url, metadata, api_source, api_event_id, api_event_date
     FROM prediction_markets WHERE status = ?
     ORDER BY created_at DESC LIMIT 50`, ['active']);
   const resolved = await dbAll(`
     SELECT id, title, description, category, option_yes_label, option_no_label, status, resolution_value,
-           total_yes, total_no, fee_rate, created_at, resolved_at
+           total_yes, total_no, fee_rate, created_at, resolved_at,
+           image_url, metadata, api_source, api_event_id, api_event_date
     FROM prediction_markets WHERE status IN (?, ?)
     ORDER BY resolved_at DESC LIMIT 20`, ['resolved', 'cancelled']);
   res.json({ active, resolved });
