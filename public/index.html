@@ -2730,7 +2730,7 @@
             </div>
             <div class="arcade-game-card" id="arcadeTab-crash" onclick="openArcadeGame('crash')" style="--card-accent:#1A4D8F; --card-glow:rgba(26,77,143,0.25);">
                 <svg class="game-card-icon"><use href="#icon-crash"/></svg>
-                <div class="game-card-name">POLICE CHASE</div>
+                <div class="game-card-name">AVIATOR</div>
                 <div class="game-card-tag">CRASH GAME</div>
             </div>
             <div class="arcade-game-card" id="arcadeTab-mines" onclick="openArcadeGame('mines')" style="--card-accent:#E94560; --card-glow:rgba(233,69,96,0.25);">
@@ -2830,14 +2830,14 @@
         <!-- Castle Crash -->
         <div id="arcade-crash" style="display: none;">
             <div class="arcade-game" style="max-width: 600px;">
-                <h3>🚔 POLICE CHASE</h3>
-                <p style="color: #888; font-size: 12px; margin-bottom: 16px;">The robber is on the run! Cash out before the police car catches him!</p>
+                <h3>✈️ AVIATOR</h3>
+                <p style="color: #888; font-size: 12px; margin-bottom: 16px;">The plane is taking off! Cash out before it crashes!</p>
                 <div id="crashGameArea" class="arcade-screen arcade-crash-screen" style="display: none; flex-direction: column; gap: 6px;">
                     <div id="crashMultiplier" class="arcade-mult" style="color: #4caf50;">1.00x</div>
                     <div id="crashVisualizer" class="arcade-chase-track">
-                        <span id="crashPolice" class="chase-police">🚔</span>
+                        <span id="crashPolice" class="chase-police">☁️</span>
                         <span id="crashGap" class="chase-gap">- - - - - - - - - -&gt;</span>
-                        <span id="crashRobber" class="chase-robber">🏃</span>
+                        <span id="crashRobber" class="chase-robber">✈️</span>
                     </div>
                     <div id="crashStatus" style="font-size: 12px; color: #888; font-family: 'Courier New', monospace;">THE ROBBER IS RUNNING...</div>
                     <div id="crashTensionBar" style="width: 100%; height: 4px; background: #222; border-radius: 2px; overflow: hidden; margin-top: 2px;">
@@ -3125,7 +3125,9 @@
                 <button class="arcade-btn" onclick="adminCreatePrediction()">CREATE MARKET</button>
                 <hr style="border: 1px solid #2a2a4a; margin: 16px 0;">
                 <button class="arcade-btn" style="background: rgba(76,175,80,0.2); border-color: #4caf50;" onclick="adminSeedFootballMarkets()">⚽ SEED FREE FOOTBALL MARKETS</button>
-                <p style="font-size: 12px; color: #888; margin-top: 6px;">Auto-creates English Premier League markets from free API (worldcup26.ir).</p>
+                <button class="arcade-btn" style="background: rgba(255,193,7,0.15); border-color: #ffc107; margin-top: 8px;" onclick="adminSeedCryptoMarkets()">🪙 SEED CRYPTO MARKETS</button>
+                <button class="arcade-btn" style="background: rgba(142,68,173,0.15); border-color: #8e44ad; margin-top: 8px;" onclick="adminSeedEsportsMarkets()">🎮 SEED ESPORTS MARKETS</button>
+                <p style="font-size: 12px; color: #888; margin-top: 6px;">Auto-creates English Premier League, CoinGecko crypto, and CS2 esports markets from free public APIs.</p>
             </div>
             <div id="predictionsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;">
                 <div style="color: #888; text-align: center; padding: 40px;">Loading prediction markets...</div>
@@ -8286,9 +8288,9 @@
                 cashoutBtn.style.display = 'block';
                 document.getElementById('crashMultiplier').textContent = '1.00x';
                 document.getElementById('crashMultiplier').style.color = '#4caf50';
-                document.getElementById('crashStatus').textContent = '🏃 THE ROBBER IS RUNNING...';
-                document.getElementById('crashRobber').textContent = '🏃';
-                document.getElementById('crashPolice').textContent = '🚔';
+                document.getElementById('crashStatus').textContent = '✈️ THE PLANE IS FLYING...';
+                document.getElementById('crashRobber').textContent = '✈️';
+                document.getElementById('crashPolice').textContent = '☁️';
                 document.getElementById('crashGap').className = 'chase-gap';
                 document.getElementById('crashGap').textContent = '- - - - - - - - - ->';
 
@@ -8312,14 +8314,14 @@
                         ArcadeSession.clearTimer(crashState.animInterval);
                         document.getElementById('crashMultiplier').textContent = `${crashState.crashPoint.toFixed(2)}x`;
                         document.getElementById('crashMultiplier').style.color = '#f44336';
-                        document.getElementById('crashStatus').innerHTML = '🚨 <strong>CAUGHT!</strong> Time limit reached!';
+                        document.getElementById('crashStatus').innerHTML = '🚨 <strong>CRASHED!</strong> Time limit reached!';
                         document.getElementById('crashGameArea').classList.remove('crash-shake');
                         cashoutBtn.style.display = 'none';
                         resultEl.innerHTML = `❌ LOST $${crashState.stake.toFixed(2)}`;
                         document.getElementById('crashGameArea').classList.add('crash-explode');
                         dramaticLoss('#arcade-crash .arcade-screen', crashState.stake);
                         ArcadeSession.setTimeout(() => document.getElementById('crashGameArea').classList.remove('crash-explode'), 1800);
-                        showArcadeToast('loss', '🚨', 'CAUGHT!', `-$${crashState.stake.toFixed(2)}`);
+                        showArcadeToast('loss', '🚨', 'CRASHED!', `-$${crashState.stake.toFixed(2)}`);
                         fetch('/api/arcade/castle-crash/crash', {
                             method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
                             body: JSON.stringify({ sessionId: crashState.sessionId, stake: crashState.stake, crashPoint: crashState.crashPoint, multiplierAtCrash: crashState.currentMult })
@@ -8337,14 +8339,14 @@
                     }
 
                     if (crashState.currentMult >= crashState.crashPoint) {
-                        // CAUGHT
+                        // CRASHED
                         crashState.crashed = true;
                         ArcadeSession.clearTimer(crashState.animInterval);
                         document.getElementById('crashMultiplier').textContent = `${crashState.crashPoint.toFixed(2)}x`;
                         document.getElementById('crashMultiplier').style.color = '#f44336';
-                        document.getElementById('crashStatus').innerHTML = '🚨 <strong>CAUGHT!</strong> The police caught the robber!';
+                        document.getElementById('crashStatus').innerHTML = '🚨 <strong>CRASHED!</strong> The plane went down!';
                         document.getElementById('crashGameArea').classList.remove('crash-shake');
-                        document.getElementById('crashRobber').textContent = '🚔';
+                        document.getElementById('crashRobber').textContent = '💥';
                         document.getElementById('crashGap').textContent = 'XX';
                         document.getElementById('crashGap').className = 'chase-gap danger';
                         cashoutBtn.style.display = 'none';
@@ -8352,7 +8354,7 @@
                         document.getElementById('crashGameArea').classList.add('crash-explode');
                         dramaticLoss('#arcade-crash .arcade-screen', crashState.stake);
                         ArcadeSession.setTimeout(() => document.getElementById('crashGameArea').classList.remove('crash-explode'), 1800);
-                        showArcadeToast('loss', '🚨', 'CAUGHT!', `-$${crashState.stake.toFixed(2)}`);
+                        showArcadeToast('loss', '🚨', 'CRASHED!', `-$${crashState.stake.toFixed(2)}`);
                         // Record crash
                         fetch('/api/arcade/castle-crash/crash', {
                             method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
@@ -9244,6 +9246,66 @@
 
         let arcadeAdmin = false;
 
+        const PREDICTION_CATEGORY_ICONS = {
+            sports: '⚽',
+            esports: '🎮',
+            crypto: '🪙',
+            politics: '🏛️',
+            news: '📰',
+            misc: '🔮'
+        };
+        const PREDICTION_CATEGORY_ORDER = ['sports', 'crypto', 'esports', 'politics', 'news', 'misc'];
+
+        function renderPredictionMarket(m) {
+            let meta = {};
+            try { meta = m.metadata ? JSON.parse(m.metadata) : {}; } catch (e) { meta = {}; }
+            const hasLogos = meta.home_logo && meta.away_logo;
+            const categoryIcon = PREDICTION_CATEGORY_ICONS[m.category] || '🔮';
+            return `
+                <div style="background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:18px;transition: transform .15s;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;">
+                        <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
+                            ${hasLogos ? `
+                                <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                                    <img src="${meta.home_logo}" alt="" style="width:34px;height:34px;object-fit:contain;background:#fff;border-radius:6px;padding:2px;">
+                                    <span style="font-size:13px;color:#888;">vs</span>
+                                    <img src="${meta.away_logo}" alt="" style="width:34px;height:34px;object-fit:contain;background:#fff;border-radius:6px;padding:2px;">
+                                </div>
+                            ` : m.image_url ? `
+                                <img src="${m.image_url}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:8px;background:#fff;flex-shrink:0;">
+                            ` : `
+                                <div style="width:40px;height:40px;border-radius:8px;background:#2a2a4a;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">${categoryIcon}</div>
+                            `}
+                            <div style="min-width:0;">
+                                <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.4px;">${categoryIcon} ${(m.category || 'misc').toUpperCase()}</div>
+                                <h4 style="margin:2px 0 0 0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${m.title.replace(/"/g, '&quot;')}">${m.title}</h4>
+                            </div>
+                        </div>
+                        <span style="font-size:10px;color:${m.status === 'active' ? '#4caf50' : m.status === 'resolved' ? '#e50914' : '#888'};border:1px solid currentColor;padding:2px 8px;border-radius:20px;white-space:nowrap;">${m.status.toUpperCase()}</span>
+                    </div>
+                    ${m.description ? `<p style="color:#aaa;font-size:12px;margin-bottom:12px">${m.description}</p>` : ''}
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:12px;color:#888;">
+                        <span>Yes: <strong style="color:#4caf50">$${(m.total_yes || 0).toFixed(2)}</strong></span>
+                        <span>No: <strong style="color:#f44336">$${(m.total_no || 0).toFixed(2)}</strong></span>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                        ${m.status === 'active' ? `
+                            <button class="btn btn-secondary" onclick="placePredictionBet(${m.id}, 'yes', '${(m.option_yes_label || 'Yes').replace(/'/g, "\\'")}')" style="text-align:center;justify-content:center;background:rgba(76,175,80,0.15);border-color:#4caf50;">${m.option_yes_label || 'Yes'}</button>
+                            <button class="btn btn-secondary" onclick="placePredictionBet(${m.id}, 'no', '${(m.option_no_label || 'No').replace(/'/g, "\\'")}')" style="text-align:center;justify-content:center;background:rgba(244,67,54,0.15);border-color:#f44336;">${m.option_no_label || 'No'}</button>
+                        ` : `<div style="font-size:13px;color:#aaa;">Resolved: <strong>${(m.option_yes_label || 'Yes')} — ${m.resolution_value || 'n/a'}</strong></div>`}
+                    </div>
+                    ${arcadeAdmin && m.status === 'active' ? `
+                        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+                            <button class="btn" style="font-size:11px;padding:6px;" onclick="adminResolvePrediction(${m.id}, 'yes')">Resolve YES</button>
+                            <button class="btn" style="font-size:11px;padding:6px;" onclick="adminResolvePrediction(${m.id}, 'no')">Resolve NO</button>
+                            <button class="btn" style="font-size:11px;padding:6px;" onclick="adminResolvePrediction(${m.id}, 'cancel')">Cancel</button>
+                            ${['worldcup26','coingecko','csapi'].includes(m.api_source) ? `<button class="btn" style="font-size:11px;padding:6px;background:rgba(76,175,80,0.15);" onclick="adminAutoResolvePrediction(${m.id}, '${m.api_source}')">🤖 Auto-resolve</button>` : ''}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
         async function loadPredictions() {
             if (!sessionToken) { showAuthModal(); return; }
             const grid = document.getElementById('predictionsGrid');
@@ -9263,38 +9325,53 @@
                 const all = [...active, ...resolved];
 
                 if (all.length === 0) {
-                    grid.innerHTML = '<div style="color:#888;text-align:center;padding:40px;">No prediction markets yet. Admins can create sports, news, esports, politics, and crypto markets above.</div>';
+                    grid.innerHTML = `
+                        <div style="color:#888;text-align:center;padding:40px;background:#1a1a1a;border-radius:12px;border:1px dashed #444;">
+                            <div style="font-size:32px;margin-bottom:10px;">🔮</div>
+                            No prediction markets yet.<br>
+                            ${arcadeAdmin ? 'Admins can create or seed sports, news, esports, politics, and crypto markets above.' : 'Check back soon — new markets are added daily.'}
+                        </div>
+                    `;
                     return;
                 }
 
-                grid.innerHTML = all.map(m => `
-                    <div style="background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:20px;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                            <span style="font-size:12px;color:#888;">${(m.category || 'misc').toUpperCase()}</span>
-                            <span style="font-size:11px;color:${m.status === 'active' ? '#4caf50' : m.status === 'resolved' ? '#e50914' : '#888'};border:1px solid currentColor;padding:2px 8px;border-radius:20px;">${m.status.toUpperCase()}</span>
+                // Group active + resolved by category
+                const groups = {};
+                for (const m of all) {
+                    const cat = m.category || 'misc';
+                    if (!groups[cat]) groups[cat] = [];
+                    groups[cat].push(m);
+                }
+
+                let html = '';
+                for (const cat of PREDICTION_CATEGORY_ORDER) {
+                    if (!groups[cat]) continue;
+                    const icon = PREDICTION_CATEGORY_ICONS[cat] || '🔮';
+                    html += `
+                        <div style="grid-column: 1 / -1; margin-top: 22px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #333;">
+                            <h4 style="margin:0; display:flex; align-items:center; gap:8px; font-size:17px; color:#eee;">
+                                <span style="font-size:22px;">${icon}</span>
+                                ${cat.toUpperCase()} MARKETS
+                            </h4>
                         </div>
-                        <h4 style="margin-bottom:8px">${m.title}</h4>
-                        ${m.description ? `<p style="color:#aaa;font-size:13px;margin-bottom:12px">${m.description}</p>` : ''}
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:12px;color:#888;">
-                            <span>Yes pool: <strong style="color:#4caf50">$${(m.total_yes || 0).toFixed(2)}</strong></span>
-                            <span>No pool: <strong style="color:#f44336">$${(m.total_no || 0).toFixed(2)}</strong></span>
+                    `;
+                    for (const m of groups[cat]) html += renderPredictionMarket(m);
+                }
+
+                // Any unlisted categories
+                const listed = new Set(PREDICTION_CATEGORY_ORDER);
+                for (const cat of Object.keys(groups)) {
+                    if (listed.has(cat)) continue;
+                    const icon = PREDICTION_CATEGORY_ICONS[cat] || '🔮';
+                    html += `
+                        <div style="grid-column: 1 / -1; margin-top: 22px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #333;">
+                            <h4 style="margin:0; display:flex; align-items:center; gap:8px; font-size:17px; color:#eee;">${icon} ${cat.toUpperCase()} MARKETS</h4>
                         </div>
-                        <div style="display:flex;flex-direction:column;gap:8px;">
-                            ${m.status === 'active' ? `
-                                <button class="btn btn-secondary" onclick="placePredictionBet(${m.id}, 'yes', '${(m.option_yes_label || 'Yes').replace(/'/g, "\\'")}')" style="text-align:center;justify-content:center;background:rgba(76,175,80,0.15);border-color:#4caf50;">${m.option_yes_label || 'Yes'}</button>
-                                <button class="btn btn-secondary" onclick="placePredictionBet(${m.id}, 'no', '${(m.option_no_label || 'No').replace(/'/g, "\\'")}')" style="text-align:center;justify-content:center;background:rgba(244,67,54,0.15);border-color:#f44336;">${m.option_no_label || 'No'}</button>
-                            ` : `<div style="font-size:13px;color:#aaa;">Resolved: <strong>${(m.option_yes_label || 'Yes')} — ${m.resolution_value || 'n/a'}</strong></div>`}
-                        </div>
-                        ${arcadeAdmin && m.status === 'active' ? `
-                            <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
-                                <button class="btn" style="font-size:11px;padding:6px;" onclick="adminResolvePrediction(${m.id}, 'yes')">Resolve YES</button>
-                                <button class="btn" style="font-size:11px;padding:6px;" onclick="adminResolvePrediction(${m.id}, 'no')">Resolve NO</button>
-                                <button class="btn" style="font-size:11px;padding:6px;" onclick="adminResolvePrediction(${m.id}, 'cancel')">Cancel</button>
-                                ${m.api_source === 'worldcup26' ? `<button class="btn" style="font-size:11px;padding:6px;background:rgba(76,175,80,0.15);" onclick="adminAutoResolveFootball(${m.id})">🤖 Auto-resolve</button>` : ''}
-                            </div>
-                        ` : ''}
-                    </div>
-                `).join('');
+                    `;
+                    for (const m of groups[cat]) html += renderPredictionMarket(m);
+                }
+
+                grid.innerHTML = html;
             } catch(e) { console.error('Predictions load error:', e); }
         }
 
@@ -9364,15 +9441,42 @@
             } catch(e) { alert('Error seeding football markets'); }
         }
 
-        async function adminAutoResolveFootball(marketId) {
-            if (!confirm('Auto-resolve this football market from the free API?')) return;
+        async function adminSeedCryptoMarkets() {
+            if (!confirm('Seed CoinGecko crypto price markets for the next 7 days?')) return;
             try {
-                const res = await fetch(`/api/admin/predictions/football/${marketId}/auto-resolve`, {
+                const res = await fetch('/api/admin/predictions/crypto/seed', {
                     method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }
                 });
                 const data = await res.json();
                 if (!res.ok) { alert(data.error); return; }
-                alert(`✅ Resolved as ${data.apiOutcome.toUpperCase()}\n${data.match}\n${data.message}`);
+                alert(`✅ Created ${data.created} crypto markets (skipped ${data.skipped})`);
+                loadPredictions();
+            } catch(e) { alert('Error seeding crypto markets'); }
+        }
+
+        async function adminSeedEsportsMarkets() {
+            if (!confirm('Seed CS2 esports match markets from CSAPI?')) return;
+            try {
+                const res = await fetch('/api/admin/predictions/esports/seed', {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); return; }
+                alert(`✅ Created ${data.created} esports markets (skipped ${data.skipped})`);
+                loadPredictions();
+            } catch(e) { alert('Error seeding esports markets'); }
+        }
+
+        async function adminAutoResolvePrediction(marketId, source) {
+            if (!confirm(`Auto-resolve this ${source} market from the free API?`)) return;
+            try {
+                const res = await fetch(`/api/admin/predictions/${source}/${marketId}/auto-resolve`, {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); return; }
+                const matchLine = data.match ? `${data.match}\n` : (data.coin ? `${data.coin} @ $${data.price}\n` : '');
+                alert(`✅ Resolved as ${(data.apiOutcome || '').toUpperCase()}\n${matchLine}${data.message || ''}`);
                 loadPredictions();
             } catch(e) { alert('Error auto-resolving market'); }
         }

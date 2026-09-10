@@ -115,6 +115,8 @@ async function ensureLegacySchema() {
     ['prediction_markets', 'api_source', 'TEXT'],
     ['prediction_markets', 'api_event_id', 'TEXT'],
     ['prediction_markets', 'api_event_date', 'TEXT'],
+    ['prediction_markets', 'image_url', 'TEXT'],
+    ['prediction_markets', 'metadata', 'TEXT'],
     ['user_balances', 'btc_balance', 'REAL DEFAULT 0'],
     ['user_profiles', 'username', 'TEXT'],
     ['user_profiles', 'avatar_id', "TEXT DEFAULT 'male_default'"],
@@ -1279,6 +1281,8 @@ async function initSchema() {
       api_source TEXT,
       api_event_id TEXT,
       api_event_date TEXT,
+      image_url TEXT,
+      metadata TEXT,
       created_by INTEGER,
       resolved_by INTEGER,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -8529,9 +8533,9 @@ app.post('/api/admin/prediction-markets', authenticateRequest, async (req, res) 
   if (!VALID_PREDICTION_CATEGORIES.includes(category)) return res.status(400).json({ error: 'Invalid category' });
 
   const result = await dbRun(`
-    INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, created_by)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `, [title, description || '', category, option_yes_label || 'Yes', option_no_label || 'No', req.userId]);
+    INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, image_url, metadata, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `, [title, description || '', category, option_yes_label || 'Yes', option_no_label || 'No', req.body.image_url || '', req.body.metadata || '', req.userId]);
 
   await logSystemEvent('info', `Prediction market created by admin ${req.userId}`, `Market ${result.lastID}: ${title}`);
   res.json({ id: result.lastID, message: 'Market created' });
@@ -8648,58 +8652,257 @@ app.get('/api/arcade/admin-check', authenticateRequest, async (req, res) => {
   res.json({ isAdmin: await isArcadeAdmin(req.userId) });
 });
 
+// Seed English Premier League fixtures from worldcup26 into sports prediction markets
+async function seedFootballMarkets(userId = null) {
+  const today = new Date();
+  const toDate = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const fmt = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');
+  const fromStr = fmt(today);
+  const toStr = fmt(toDate);
+
+  const apiUrl = `https://worldcup26.ir/get/soccer/eng.1/fixtures?status=all&from=${fromStr}&to=${toStr}`;
+  const apiRes = await fetch(apiUrl);
+  if (!apiRes.ok) throw new Error(`Football API ${apiRes.status}`);
+  const apiData = await apiRes.json();
+  const events = apiData?.events || [];
+
+  let created = 0;
+  let skipped = 0;
+
+  for (const event of events.slice(0, 30)) {
+    if (event?.status?.type?.name !== 'STATUS_SCHEDULED') { skipped++; continue; }
+    const comp = event?.competitions?.[0];
+    if (!comp?.competitors || comp.competitors.length < 2) { skipped++; continue; }
+
+    const homeComp = comp.competitors.find(c => c.homeAway === 'home');
+    const awayComp = comp.competitors.find(c => c.homeAway === 'away');
+    if (!homeComp?.team?.displayName || !awayComp?.team?.displayName) { skipped++; continue; }
+
+    const home = homeComp.team.displayName;
+    const away = awayComp.team.displayName;
+    const matchDate = new Date(event.date).toLocaleString();
+    const eventId = String(event.id);
+
+    const existing = await dbGet('SELECT id FROM prediction_markets WHERE api_source = ? AND api_event_id = ? AND status = ?', ['worldcup26', eventId, 'active']);
+    if (existing) { skipped++; continue; }
+
+    const eventDate = event.date?.slice(0, 10);
+    const metadata = JSON.stringify({ home_logo: homeComp.team?.logo || '', away_logo: awayComp.team?.logo || '', home, away, competition: event.competition || 'English Premier League', competition_logo: event.competition_logo || '' });
+    const imageUrl = homeComp.team?.logo || '';
+    await dbRun(`
+      INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, api_source, api_event_id, api_event_date, image_url, metadata, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [`Will ${home} beat ${away}?`, `English Premier League match on ${matchDate}. Yes = ${home} wins. No = ${away} wins or draw.`, 'sports', `${home} wins`, `${away} or draw`, 'worldcup26', eventId, eventDate, imageUrl, metadata, userId]);
+    created++;
+  }
+
+  await logSystemEvent('info', `Seeded football prediction markets`, `Created ${created}, skipped ${skipped}`);
+  return { created, skipped, total: events.length };
+}
+
 // API: Admin seed football (soccer) prediction markets from free worldcup26 API
 app.post('/api/admin/predictions/football/seed', authenticateRequest, async (req, res) => {
   if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
-
   try {
-    const today = new Date();
-    const toDate = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const fmt = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');
-    const fromStr = fmt(today);
-    const toStr = fmt(toDate);
-
-    const apiUrl = `https://worldcup26.ir/get/soccer/eng.1/fixtures?status=all&from=${fromStr}&to=${toStr}`;
-    const apiRes = await fetch(apiUrl);
-    if (!apiRes.ok) throw new Error(`Football API ${apiRes.status}`);
-    const apiData = await apiRes.json();
-    const events = apiData?.events || [];
-
-    let created = 0;
-    let skipped = 0;
-
-    for (const event of events.slice(0, 30)) {
-      if (event?.status?.type?.name !== 'STATUS_SCHEDULED') { skipped++; continue; }
-      const comp = event?.competitions?.[0];
-      if (!comp?.competitors || comp.competitors.length < 2) { skipped++; continue; }
-
-      const homeComp = comp.competitors.find(c => c.homeAway === 'home');
-      const awayComp = comp.competitors.find(c => c.homeAway === 'away');
-      if (!homeComp?.team?.displayName || !awayComp?.team?.displayName) { skipped++; continue; }
-
-      const home = homeComp.team.displayName;
-      const away = awayComp.team.displayName;
-      const matchDate = new Date(event.date).toLocaleString();
-      const eventId = String(event.id);
-
-      const existing = await dbGet('SELECT id FROM prediction_markets WHERE api_source = ? AND api_event_id = ? AND status = ?', ['worldcup26', eventId, 'active']);
-      if (existing) { skipped++; continue; }
-
-      const eventDate = event.date?.slice(0, 10);
-      await dbRun(`
-        INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, api_source, api_event_id, api_event_date, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [`Will ${home} beat ${away}?`, `English Premier League match on ${matchDate}. Yes = ${home} wins. No = ${away} wins or draw.`, 'sports', `${home} wins`, `${away} or draw`, 'worldcup26', eventId, eventDate, req.userId]);
-      created++;
-    }
-
-    await logSystemEvent('info', `Admin seeded football prediction markets`, `Created ${created}, skipped ${skipped}`);
-    res.json({ created, skipped, total: events.length });
+    const result = await seedFootballMarkets(req.userId);
+    res.json(result);
   } catch (e) {
     console.error('Football seed error:', e);
     res.status(500).json({ error: 'Failed to seed football markets' });
   }
 });
+
+// Seed crypto price prediction markets from CoinGecko (free API)
+async function seedCryptoMarkets(userId = null) {
+  const targetDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const apiUrl = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&sparkline=false';
+  const apiRes = await fetch(apiUrl);
+  if (!apiRes.ok) throw new Error(`CoinGecko API ${apiRes.status}`);
+  const coins = await apiRes.json();
+
+  let created = 0;
+  let skipped = 0;
+
+  for (const coin of coins) {
+    if (!coin?.id || !coin.current_price || !coin.name) { skipped++; continue; }
+    const eventId = `${coin.id}-${targetDate}`;
+    const existing = await dbGet('SELECT id FROM prediction_markets WHERE api_source = ? AND api_event_id = ? AND status = ?', ['coingecko', eventId, 'active']);
+    if (existing) { skipped++; continue; }
+
+    const targetPrice = Math.round(coin.current_price * 1.05 * 100) / 100;
+    const metadata = JSON.stringify({ coin_id: coin.id, symbol: coin.symbol || '', coin_name: coin.name, current_price: coin.current_price, target_price: targetPrice, currency: 'usd', image: coin.image || '' });
+
+    await dbRun(`
+      INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, api_source, api_event_id, api_event_date, image_url, metadata, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [`Will ${coin.name} (${coin.symbol?.toUpperCase() || 'Coin'}) be above $${targetPrice.toLocaleString()} on ${targetDate}?`, `Target price $${targetPrice.toLocaleString()} is 5% above today's $${coin.current_price.toLocaleString()}. Yes = price is strictly higher on ${targetDate}.`, 'crypto', 'Above target', 'At or below target', 'coingecko', eventId, targetDate, coin.image || '', metadata, userId]);
+    created++;
+  }
+
+  await logSystemEvent('info', `Seeded crypto prediction markets`, `Created ${created}, skipped ${skipped}`);
+  return { created, skipped, total: coins.length };
+}
+
+// API: Admin seed crypto prediction markets
+app.post('/api/admin/predictions/crypto/seed', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+  try {
+    const result = await seedCryptoMarkets(req.userId);
+    res.json(result);
+  } catch (e) {
+    console.error('Crypto seed error:', e);
+    res.status(500).json({ error: 'Failed to seed crypto markets' });
+  }
+});
+
+// API: Admin auto-resolve a crypto prediction market from CoinGecko
+app.post('/api/admin/predictions/crypto/:id/auto-resolve', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+
+  const market = await dbGet('SELECT * FROM prediction_markets WHERE id = ? AND api_source = ? AND status = ?', [req.params.id, 'coingecko', 'active']);
+  if (!market) return res.status(400).json({ error: 'Crypto market not active or not from API' });
+
+  let meta = {};
+  try { meta = market.metadata ? JSON.parse(market.metadata) : {}; } catch (e) { meta = {}; }
+  if (!meta.coin_id) return res.status(400).json({ error: 'No coin ID stored for this market' });
+
+  const targetDate = new Date(market.api_event_date || Date.now());
+  const now = new Date();
+  if (targetDate > now) return res.status(400).json({ error: `Target date ${market.api_event_date} has not been reached yet` });
+
+  try {
+    const [dd, mm, yyyy] = [String(targetDate.getDate()).padStart(2, '0'), String(targetDate.getMonth() + 1).padStart(2, '0'), targetDate.getFullYear()];
+    const historyUrl = `https://api.coingecko.com/api/v3/coins/${meta.coin_id}/history?date=${dd}-${mm}-${yyyy}&localization=false`;
+    const histRes = await fetch(historyUrl);
+    let price;
+    if (histRes.ok) {
+      const histData = await histRes.json();
+      price = histData?.market_data?.current_price?.usd;
+    }
+    if (typeof price !== 'number') {
+      // Fallback to current price if historical data isn't available
+      const currentUrl = `https://api.coingecko.com/api/v3/simple/price?ids=${meta.coin_id}&vs_currencies=usd`;
+      const currentRes = await fetch(currentUrl);
+      if (!currentRes.ok) throw new Error(`CoinGecko price API ${currentRes.status}`);
+      const currentData = await currentRes.json();
+      price = currentData[meta.coin_id]?.usd;
+    }
+    if (typeof price !== 'number') throw new Error('Unable to retrieve price for this coin');
+
+    const outcome = price > meta.target_price ? 'yes' : 'no';
+    const result = await resolvePredictionMarket(market.id, outcome, req.userId);
+    res.json({ ...result, apiOutcome: outcome, price, target: meta.target_price, coin: meta.coin_name || meta.coin_id });
+  } catch (e) {
+    console.error('Crypto auto-resolve error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Seed esports (CS2) prediction markets from CSAPI.de (free, no key)
+async function seedEsportsMarkets(userId = null) {
+  const apiUrl = 'https://api.csapi.de/matches/?limit=30&offset=0';
+  const apiRes = await fetch(apiUrl);
+  if (!apiRes.ok) throw new Error(`CSAPI ${apiRes.status}`);
+  const data = await apiRes.json();
+  const matches = Array.isArray(data) ? data : (data?.matches || data?.results || []);
+
+  let created = 0;
+  let skipped = 0;
+
+  for (const match of matches) {
+    const opponents = match?.opponents || match?.teams || [];
+    if (opponents.length < 2) { skipped++; continue; }
+    const teamA = opponents[0]?.name || opponents[0]?.team?.name || opponents[0]?.opponent?.name;
+    const teamB = opponents[1]?.name || opponents[1]?.team?.name || opponents[1]?.opponent?.name;
+    if (!teamA || !teamB) { skipped++; continue; }
+
+    const matchDateRaw = match?.scheduled_at || match?.begin_at || match?.date || match?.start_time;
+    const matchDate = matchDateRaw ? new Date(matchDateRaw).toLocaleString() : 'TBD';
+    const eventDate = matchDateRaw ? new Date(matchDateRaw).toISOString().slice(0, 10) : '';
+    const matchId = String(match?.id || `${teamA}-vs-${teamB}-${eventDate || Date.now()}`);
+    const eventId = matchId;
+
+    const existing = await dbGet('SELECT id FROM prediction_markets WHERE api_source = ? AND api_event_id = ? AND status = ?', ['csapi', eventId, 'active']);
+    if (existing) { skipped++; continue; }
+
+    const metadata = JSON.stringify({ match_id: matchId, team_a: teamA, team_b: teamB, league: match?.league?.name || match?.tournament || 'CS2 Pro', logo_a: opponents[0]?.image_url || opponents[0]?.team?.image_url || '', logo_b: opponents[1]?.image_url || opponents[1]?.team?.image_url || '' });
+    const imageUrl = opponents[0]?.image_url || opponents[0]?.team?.image_url || '';
+
+    await dbRun(`
+      INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, api_source, api_event_id, api_event_date, image_url, metadata, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [`Will ${teamA} beat ${teamB}?`, `CS2 match${eventDate ? ' on ' + matchDate : ''}. Yes = ${teamA} wins. No = ${teamB} wins or draw.`, 'esports', `${teamA} wins`, `${teamB} or draw`, 'csapi', eventId, eventDate, imageUrl, metadata, userId]);
+    created++;
+  }
+
+  await logSystemEvent('info', `Seeded esports prediction markets`, `Created ${created}, skipped ${skipped}`);
+  return { created, skipped, total: matches.length };
+}
+
+// API: Admin seed esports prediction markets
+app.post('/api/admin/predictions/esports/seed', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+  try {
+    const result = await seedEsportsMarkets(req.userId);
+    res.json(result);
+  } catch (e) {
+    console.error('Esports seed error:', e);
+    res.status(500).json({ error: 'Failed to seed esports markets' });
+  }
+});
+
+// API: Admin auto-resolve an esports prediction market from CSAPI.de
+app.post('/api/admin/predictions/esports/:id/auto-resolve', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+
+  const market = await dbGet('SELECT * FROM prediction_markets WHERE id = ? AND api_source = ? AND status = ?', [req.params.id, 'csapi', 'active']);
+  if (!market) return res.status(400).json({ error: 'Esports market not active or not from API' });
+
+  let meta = {};
+  try { meta = market.metadata ? JSON.parse(market.metadata) : {}; } catch (e) { meta = {}; }
+  if (!meta.match_id) return res.status(400).json({ error: 'No match ID stored for this market' });
+
+  try {
+    const apiUrl = `https://api.csapi.de/matches/${meta.match_id}/`;
+    const apiRes = await fetch(apiUrl);
+    if (!apiRes.ok) throw new Error(`CSAPI ${apiRes.status}`);
+    const match = await apiRes.json();
+
+    const winnerName = match?.winner?.name || match?.winner?.team?.name || match?.winner_name;
+    let outcome;
+    if (winnerName) {
+      outcome = winnerName.toLowerCase() === (meta.team_a || '').toLowerCase() ? 'yes' : 'no';
+    } else if (match?.status === 'draw' || match?.draw === true || match?.results?.[0]?.score === match?.results?.[1]?.score) {
+      outcome = 'no'; // team A did not win
+    } else {
+      throw new Error('Match result not available yet');
+    }
+
+    const result = await resolvePredictionMarket(market.id, outcome, req.userId);
+    res.json({ ...result, apiOutcome: outcome, winner: winnerName || 'draw', match: `${meta.team_a} vs ${meta.team_b}` });
+  } catch (e) {
+    console.error('Esports auto-resolve error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Auto-seed prediction markets on startup if a category is empty
+async function seedPredictionMarketsIfEmpty() {
+  try {
+    const seedIfEmpty = async (category, seeder) => {
+      const row = await dbGet('SELECT COUNT(*) as c FROM prediction_markets WHERE category = ? AND status = ?', [category, 'active']);
+      if (!row || Number(row.c) === 0) {
+        const result = await seeder(null);
+        console.log(`Auto-seed ${category}: ${result.created} created, ${result.skipped} skipped`);
+      }
+    };
+    await seedIfEmpty('sports', seedFootballMarkets);
+    await seedIfEmpty('crypto', seedCryptoMarkets);
+    await seedIfEmpty('esports', seedEsportsMarkets);
+  } catch (e) {
+    console.error('Auto-seed prediction markets failed:', e.message);
+  }
+}
 
 // ===== CASTLE CRASH =====
 // Three-roll system for Aviator-level unpredictability:
@@ -10637,6 +10840,9 @@ app.post('/api/tickets/:id/reply', authenticateRequest, async (req, res) => {
 
 // Start the HTTP server only after tables and default rates exist.
 databaseInitialization.then(async () => {
+  // Auto-seed prediction market categories in the background if empty so users see soccer, crypto and esports markets
+  seedPredictionMarketsIfEmpty().catch(e => console.error('Auto prediction seed failed:', e.message));
+
   app.listen(PORT, () => {
     console.log(`PixelPulse server running on port ${PORT}`);
     console.log(`BTC wallet address: ${process.env.BTC_WALLET_ADDRESS}`);
