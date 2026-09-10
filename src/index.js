@@ -149,7 +149,33 @@ async function ensureLegacySchema() {
     ['skin_transactions', 'buyer_currency', 'TEXT'],
     ['skin_transactions', 'price_in_buyer_currency', 'REAL'],
     ['token_deposits', 'estimated_usd_value', 'REAL'],
-    ['token_deposits', 'is_high_value', 'INTEGER DEFAULT 0']
+    ['token_deposits', 'is_high_value', 'INTEGER DEFAULT 0'],
+    ['users', 'avatar_svg', "TEXT DEFAULT ''"],
+    ['prediction_bets', 'option', 'TEXT'],
+    ['prediction_bets', 'amount', 'REAL'],
+    ['prediction_bets', 'chosen_option', 'TEXT'],
+    ['prediction_bets', 'stake_amount', 'REAL'],
+    ['prediction_bets', 'stake_currency', "TEXT DEFAULT 'RC'"],
+    ['prediction_bets', 'payout', 'REAL DEFAULT 0'],
+    ['prediction_markets', 'option_yes_label', "TEXT DEFAULT 'Yes'"],
+    ['prediction_markets', 'option_no_label', "TEXT DEFAULT 'No'"],
+    ['prediction_markets', 'total_yes', 'REAL DEFAULT 0'],
+    ['prediction_markets', 'total_no', 'REAL DEFAULT 0'],
+    ['prediction_markets', 'fee_rate', 'REAL DEFAULT 0.02'],
+    ['prediction_markets', 'api_source', 'TEXT'],
+    ['prediction_markets', 'api_event_id', 'TEXT'],
+    ['prediction_markets', 'api_event_date', 'TEXT'],
+    ['prediction_markets', 'image_url', 'TEXT'],
+    ['prediction_markets', 'metadata', 'TEXT'],
+    ['prediction_markets', 'options_json', "TEXT DEFAULT '[]'"],
+    ['prediction_markets', 'source', "TEXT DEFAULT 'reddit'"],
+    ['prediction_markets', 'source_url', 'TEXT'],
+    ['prediction_markets', 'resolves_at', 'TEXT'],
+    ['prediction_markets', 'resolved_option', 'TEXT'],
+    ['prediction_markets', 'created_by', 'INTEGER'],
+    ['prediction_markets', 'resolved_by', 'INTEGER'],
+    ['prediction_markets', 'resolution_value', 'TEXT'],
+    ['prediction_markets', 'resolved_at', 'TEXT']
   ];
 
   for (const [tableName, columnName, definition] of requiredColumns) {
@@ -158,6 +184,36 @@ async function ensureLegacySchema() {
     } catch (error) {
       console.warn(`Schema migration skipped for ${tableName}.${columnName}:`, error.message);
     }
+  }
+}
+
+async function normalizePredictionTables() {
+  // Normalize prediction_bets columns for legacy (chosen_option/stake_amount) vs current (option/amount).
+  const pbColumns = await dbAll('PRAGMA table_info(prediction_bets)');
+  const hasOldOption = pbColumns.some(c => c.name === 'chosen_option');
+  const hasNewOption = pbColumns.some(c => c.name === 'option');
+  const hasOldStake = pbColumns.some(c => c.name === 'stake_amount');
+  const hasNewStake = pbColumns.some(c => c.name === 'amount');
+  if (hasOldOption && !hasNewOption) {
+    try {
+      await dbExec('ALTER TABLE prediction_bets ADD COLUMN option TEXT');
+      await dbExec('UPDATE prediction_bets SET option = chosen_option WHERE option IS NULL');
+      console.log('Migrated prediction_bets.chosen_option to option');
+    } catch (e) { console.warn('prediction_bets option migration:', e.message); }
+  }
+  if (hasOldStake && !hasNewStake) {
+    try {
+      await dbExec('ALTER TABLE prediction_bets ADD COLUMN amount REAL');
+      await dbExec('UPDATE prediction_bets SET amount = stake_amount WHERE amount IS NULL');
+      console.log('Migrated prediction_bets.stake_amount to amount');
+    } catch (e) { console.warn('prediction_bets amount migration:', e.message); }
+  }
+  // Ensure legacy prediction_markets options_json has a usable value before new inserts rely on it.
+  const pmColumns = await dbAll('PRAGMA table_info(prediction_markets)');
+  if (pmColumns.some(c => c.name === 'options_json')) {
+    try {
+      await dbExec("UPDATE prediction_markets SET options_json = '[]' WHERE options_json IS NULL OR options_json = ''");
+    } catch (e) { console.warn('prediction_markets options_json normalization:', e.message); }
   }
 }
 
@@ -922,6 +978,7 @@ async function initSchema() {
       game_points INTEGER DEFAULT 0,
       steam_tokens REAL DEFAULT 0,
       standoff2_tokens REAL DEFAULT 0,
+      avatar_svg TEXT DEFAULT '',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
@@ -1292,6 +1349,11 @@ async function initSchema() {
       api_event_date TEXT,
       image_url TEXT,
       metadata TEXT,
+      options_json TEXT DEFAULT '[]',
+      source TEXT DEFAULT 'reddit',
+      source_url TEXT,
+      resolves_at TEXT,
+      resolved_option TEXT,
       created_by INTEGER,
       resolved_by INTEGER,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -1308,6 +1370,9 @@ async function initSchema() {
       market_id INTEGER,
       option TEXT,
       amount REAL,
+      chosen_option TEXT,
+      stake_amount REAL,
+      stake_currency TEXT DEFAULT 'RC',
       payout REAL DEFAULT 0,
       status TEXT DEFAULT 'pending',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -1840,8 +1905,8 @@ async function initSchema() {
   `);
 }
 async function initDatabaseAndSchema() {
-  await ensureLegacySchema();
   await initSchema();
+  await ensureLegacySchema();
   // Migration: ensure usd_balance column exists in user_balances
   try {
     const cols = await dbAll('PRAGMA table_info(user_balances)');
@@ -1851,6 +1916,7 @@ async function initDatabaseAndSchema() {
       console.log('Migration complete: usd_balance column added.');
     }
   } catch(e) { console.error('Migration check failed:', e.message); }
+  await normalizePredictionTables();
   await initializeExchangeRates();
 }
 
@@ -4926,6 +4992,36 @@ app.get('/api/anime/data', async (req, res) => {
   } catch (error) {
     console.error('Failed to fetch anime data:', error);
     res.status(500).json({ error: 'Failed to fetch anime data' });
+  }
+});
+
+// API: List anime (frontend alias)
+app.get('/api/anime', async (req, res) => {
+  try {
+    const animeData = await fetchAnimeData();
+    res.json(animeData);
+  } catch (error) {
+    console.error('Failed to fetch anime:', error);
+    res.status(500).json({ error: 'Failed to fetch anime' });
+  }
+});
+
+// API: Get anime episodes from Jikan
+app.get('/api/anime/:animeId/episodes', async (req, res) => {
+  try {
+    const animeId = req.params.animeId;
+    const data = await new Promise((resolve, reject) => {
+      const reqJikan = https.get(`https://api.jikan.moe/v4/anime/${encodeURIComponent(animeId)}/episodes`, (r) => {
+        let d = '';
+        r.on('data', chunk => d += chunk);
+        r.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { resolve({}); } });
+      }).on('error', reject);
+      reqJikan.setTimeout(10000, () => { reqJikan.destroy(); reject(new Error('Jikan timeout')); });
+    });
+    res.json(data.data || []);
+  } catch (error) {
+    console.error('Failed to fetch anime episodes:', error);
+    res.status(500).json({ error: 'Failed to fetch anime episodes' });
   }
 });
 
@@ -8508,9 +8604,9 @@ app.post('/api/arcade/predictions/bet', authenticateRequest, async (req, res) =>
 
   const optionLower = String(option).toLowerCase();
   await dbRun(`
-    INSERT INTO prediction_bets (user_id, market_id, option, amount, status)
-    VALUES (?, ?, ?, ?, 'pending')
-  `, [req.userId, marketId, optionLower, betAmount]);
+    INSERT INTO prediction_bets (user_id, market_id, option, amount, chosen_option, stake_amount, stake_currency, status)
+    VALUES (?, ?, ?, ?, ?, ?, 'USD', 'pending')
+  `, [req.userId, marketId, optionLower, betAmount, optionLower, betAmount]);
 
   if (optionLower === 'yes') {
     await dbRun('UPDATE prediction_markets SET total_yes = total_yes + ? WHERE id = ?', [betAmount, marketId]);
@@ -8543,9 +8639,9 @@ app.post('/api/admin/prediction-markets', authenticateRequest, async (req, res) 
   if (!VALID_PREDICTION_CATEGORIES.includes(category)) return res.status(400).json({ error: 'Invalid category' });
 
   const result = await dbRun(`
-    INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, image_url, metadata, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `, [title, description || '', category, option_yes_label || 'Yes', option_no_label || 'No', req.body.image_url || '', req.body.metadata || '', req.userId]);
+    INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, image_url, metadata, created_by, options_json, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [title, description || '', category, option_yes_label || 'Yes', option_no_label || 'No', req.body.image_url || '', req.body.metadata || '', req.userId, '[]', 'active']);
 
   await logSystemEvent('info', `Prediction market created by admin ${req.userId}`, `Market ${result.lastID}: ${title}`);
   res.json({ id: result.lastID, message: 'Market created' });
@@ -8700,9 +8796,9 @@ async function seedFootballMarkets(userId = null) {
     const metadata = JSON.stringify({ home_logo: homeComp.team?.logo || '', away_logo: awayComp.team?.logo || '', home, away, competition: event.competition || 'English Premier League', competition_logo: event.competition_logo || '' });
     const imageUrl = homeComp.team?.logo || '';
     await dbRun(`
-      INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, api_source, api_event_id, api_event_date, image_url, metadata, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [`Will ${home} beat ${away}?`, `English Premier League match on ${matchDate}. Yes = ${home} wins. No = ${away} wins or draw.`, 'sports', `${home} wins`, `${away} or draw`, 'worldcup26', eventId, eventDate, imageUrl, metadata, userId]);
+      INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, api_source, api_event_id, api_event_date, image_url, metadata, created_by, options_json, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [`Will ${home} beat ${away}?`, `English Premier League match on ${matchDate}. Yes = ${home} wins. No = ${away} wins or draw.`, 'sports', `${home} wins`, `${away} or draw`, 'worldcup26', eventId, eventDate, imageUrl, metadata, userId, '[]', 'active']);
     created++;
   }
 
@@ -8743,9 +8839,9 @@ async function seedCryptoMarkets(userId = null) {
     const metadata = JSON.stringify({ coin_id: coin.id, symbol: coin.symbol || '', coin_name: coin.name, current_price: coin.current_price, target_price: targetPrice, currency: 'usd', image: coin.image || '' });
 
     await dbRun(`
-      INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, api_source, api_event_id, api_event_date, image_url, metadata, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [`Will ${coin.name} (${coin.symbol?.toUpperCase() || 'Coin'}) be above $${targetPrice.toLocaleString()} on ${targetDate}?`, `Target price $${targetPrice.toLocaleString()} is 5% above today's $${coin.current_price.toLocaleString()}. Yes = price is strictly higher on ${targetDate}.`, 'crypto', 'Above target', 'At or below target', 'coingecko', eventId, targetDate, coin.image || '', metadata, userId]);
+      INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, api_source, api_event_id, api_event_date, image_url, metadata, created_by, options_json, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [`Will ${coin.name} (${coin.symbol?.toUpperCase() || 'Coin'}) be above $${targetPrice.toLocaleString()} on ${targetDate}?`, `Target price $${targetPrice.toLocaleString()} is 5% above today's $${coin.current_price.toLocaleString()}. Yes = price is strictly higher on ${targetDate}.`, 'crypto', 'Above target', 'At or below target', 'coingecko', eventId, targetDate, coin.image || '', metadata, userId, '[]', 'active']);
     created++;
   }
 
@@ -8819,29 +8915,31 @@ async function seedEsportsMarkets(userId = null) {
   let created = 0;
   let skipped = 0;
 
+  const today = new Date().toISOString().slice(0, 10);
   for (const match of matches) {
-    const opponents = match?.opponents || match?.teams || [];
-    if (opponents.length < 2) { skipped++; continue; }
-    const teamA = opponents[0]?.name || opponents[0]?.team?.name || opponents[0]?.opponent?.name;
-    const teamB = opponents[1]?.name || opponents[1]?.team?.name || opponents[1]?.opponent?.name;
+    const team1 = match?.team1 || match?.opponents?.[0]?.opponent || match?.opponents?.[0]?.team || match?.opponents?.[0] || {};
+    const team2 = match?.team2 || match?.opponents?.[1]?.opponent || match?.opponents?.[1]?.team || match?.opponents?.[1] || {};
+    const teamA = team1?.name || match?.team1?.name;
+    const teamB = team2?.name || match?.team2?.name;
     if (!teamA || !teamB) { skipped++; continue; }
 
     const matchDateRaw = match?.scheduled_at || match?.begin_at || match?.date || match?.start_time;
     const matchDate = matchDateRaw ? new Date(matchDateRaw).toLocaleString() : 'TBD';
     const eventDate = matchDateRaw ? new Date(matchDateRaw).toISOString().slice(0, 10) : '';
+    if (eventDate && eventDate < today) { skipped++; continue; }
     const matchId = String(match?.id || `${teamA}-vs-${teamB}-${eventDate || Date.now()}`);
     const eventId = matchId;
 
     const existing = await dbGet('SELECT id FROM prediction_markets WHERE api_source = ? AND api_event_id = ? AND status = ?', ['csapi', eventId, 'active']);
     if (existing) { skipped++; continue; }
 
-    const metadata = JSON.stringify({ match_id: matchId, team_a: teamA, team_b: teamB, league: match?.league?.name || match?.tournament || 'CS2 Pro', logo_a: opponents[0]?.image_url || opponents[0]?.team?.image_url || '', logo_b: opponents[1]?.image_url || opponents[1]?.team?.image_url || '' });
-    const imageUrl = opponents[0]?.image_url || opponents[0]?.team?.image_url || '';
+    const metadata = JSON.stringify({ match_id: matchId, team_a: teamA, team_b: teamB, league: match?.league?.name || match?.tournament || match?.event || 'CS2 Pro', logo_a: team1?.logo || team1?.image_url || '', logo_b: team2?.logo || team2?.image_url || '' });
+    const imageUrl = team1?.logo || team1?.image_url || '';
 
     await dbRun(`
-      INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, api_source, api_event_id, api_event_date, image_url, metadata, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [`Will ${teamA} beat ${teamB}?`, `CS2 match${eventDate ? ' on ' + matchDate : ''}. Yes = ${teamA} wins. No = ${teamB} wins or draw.`, 'esports', `${teamA} wins`, `${teamB} or draw`, 'csapi', eventId, eventDate, imageUrl, metadata, userId]);
+      INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, api_source, api_event_id, api_event_date, image_url, metadata, created_by, options_json, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [`Will ${teamA} beat ${teamB}?`, `CS2 match${eventDate ? ' on ' + matchDate : ''}. Yes = ${teamA} wins. No = ${teamB} wins or draw.`, 'esports', `${teamA} wins`, `${teamB} or draw`, 'csapi', eventId, eventDate, imageUrl, metadata, userId, '[]', 'active']);
     created++;
   }
 
@@ -9585,7 +9683,7 @@ app.post('/api/predictions/:id/bet', authenticateRequest, async (req, res) => {
   if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
 
   await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stakeAmount, req.userId]);
-  await dbRun(`INSERT INTO prediction_bets (user_id, market_id, chosen_option, stake_amount, stake_currency) VALUES (?, ?, ?, ?, 'USD')`, [req.userId, market.id, chosen_option, stakeAmount]);
+  await dbRun(`INSERT INTO prediction_bets (user_id, market_id, option, amount, chosen_option, stake_amount, stake_currency) VALUES (?, ?, ?, ?, ?, ?, 'USD')`, [req.userId, market.id, chosen_option, stakeAmount, chosen_option, stakeAmount]);
 
   res.json({ message: 'Bet placed', market: market.title, chosen_option, stake: stakeAmount });
 });
