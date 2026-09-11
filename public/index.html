@@ -2103,6 +2103,23 @@
         .ad-slot-inner img { max-width: 100%; height: auto; border-radius: 6px; display: block; margin: 0 auto; }
         .ad-slot-inner a { display: inline-block; }
         .ad-slot-title { font-size: 11px; color: #888; margin-top: 6px; }
+
+        /* === Mobile responsiveness === */
+        @media (max-width: 768px) {
+            .hero { padding: 80px 16px 30px !important; min-height: auto; }
+            .hero-content { padding: 16px; }
+            .hero-title { font-size: 32px !important; }
+            .hero-tagline { font-size: 13px; }
+            .hero-description { font-size: 14px; }
+            .hero-buttons { flex-direction: column; gap: 10px; }
+            .hero-buttons .btn { width: 100%; }
+            .hero-stats { flex-wrap: wrap; gap: 12px; }
+            .hero-stat { min-width: 45%; }
+            #oracleFeedGrid { grid-template-columns: 1fr !important; }
+            .modal-content { width: 95% !important; max-width: 100% !important; margin: 10px !important; max-height: 90vh; overflow-y: auto; }
+            .wallet-container { flex-direction: column; }
+            .balance-card, .your-bets { width: 100%; }
+        }
     </style>
     <script src="https://richinfo.co/richpartners/pops/js/richads-pu-ob.js" data-pubid="1021968" data-siteid="406305" async data-cfasync="false"></script>
     <style>
@@ -2219,7 +2236,7 @@
             <a href="#" onclick="showSection('home')" class="active" id="nav-home">Home</a>
             <a href="#" onclick="showSection('clips')" id="nav-clips">Clips</a>
             <a href="#" onclick="showSection('community')" id="nav-community">Community</a>
-            <a href="#" onclick="showSection('betting')" id="nav-betting">Predictions</a>
+            <a href="#" onclick="openOracle()" id="nav-betting">The Oracle</a>
             <a href="#" onclick="showSection('arcade')" id="nav-arcade">Arcade</a>
             <a href="#" onclick="showSection('marketplace')" id="nav-marketplace">Trades</a>
             <a href="#" onclick="showSection('gold-transfer')" id="nav-gold-transfer">Trade Hub</a>
@@ -2404,43 +2421,65 @@
         </svg>
 
         <div class="hero-content">
-            <div class="hero-tagline">P2P Gaming Marketplace + Arcade</div>
-            <h1 class="hero-title">Trade. Swap. Bet. Win.</h1>
-            <p class="hero-description">Buy and sell skins, game accounts, and gift cards with escrow protection. Swap tokens, predict esports outcomes, and play provably fair arcade games — all in one community.</p>
+            <div class="hero-tagline">🔮 The Oracle — Prediction Markets + Arcade</div>
+            <h1 class="hero-title">Predict. Trade. Win.</h1>
+            <p class="hero-description">Bet on real-world outcomes with a true order-book exchange — sports, crypto, esports, politics. Buy Yes/No shares, set your own price, cash out anytime. Plus provably fair arcade games. Same crypto wallet, one platform.</p>
             <div class="hero-buttons">
-                <button class="btn btn-primary" onclick="showAuthModal(); showRegisterForm();">🚀 Start Trading Free</button>
-                <button class="btn btn-secondary" onclick="showSection('marketplace')">Browse Deals</button>
+                <button class="btn btn-primary" onclick="showAuthModal(); showRegisterForm();">🚀 Get $2 Free to Start</button>
+                <button class="btn btn-secondary" onclick="showSection('predictions')">View The Oracle</button>
             </div>
             <div class="hero-trust-bar">
-                <div class="hero-trust-item">🔒 Escrow Protected</div>
-                <div class="hero-trust-item">🎲 Provably Fair</div>
+                <div class="hero-trust-item">📊 Real Order Book</div>
+                <div class="hero-trust-item">💸 Cash Out Anytime</div>
                 <div class="hero-trust-item">₿ Crypto Payments</div>
                 <div class="hero-trust-item">🔞 18+ Responsible</div>
             </div>
             <div class="hero-stats">
                 <div class="hero-stat">
-                    <div class="hero-stat-num">10+</div>
-                    <div class="hero-stat-label">Games Supported</div>
+                    <div class="hero-stat-num" id="heroStatMarkets">—</div>
+                    <div class="hero-stat-label">Live Markets</div>
                 </div>
                 <div class="hero-stat">
-                    <div class="hero-stat-num">P2P</div>
-                    <div class="hero-stat-label">Skins, Accounts & Gift Cards</div>
+                    <div class="hero-stat-num" id="heroStatVolume">$—</div>
+                    <div class="hero-stat-label">7-Day Volume</div>
                 </div>
                 <div class="hero-stat">
-                    <div class="hero-stat-num">BTC</div>
-                    <div class="hero-stat-label">Crypto Payments</div>
+                    <div class="hero-stat-num" id="heroStatTrades">—</div>
+                    <div class="hero-stat-label">Trades Today</div>
                 </div>
                 <div class="hero-stat">
-                    <div class="hero-stat-num">100%</div>
-                    <div class="hero-stat-label">Escrow Safe</div>
+                    <div class="hero-stat-num">$1</div>
+                    <div class="hero-stat-label">Per Winning Share</div>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="promo-strip">
-        🎮 <span>13 PROVABLY FAIR GAMES</span> — Coin Flip, Slots, Crash, Mines, Dice, Plinko, Roulette, Hi-Lo, Lucky Wheel &amp; more &nbsp;•&nbsp; 🔮 <span>PREDICTION MARKETS</span> — Sports, News, Esports, Politics, Crypto &nbsp;•&nbsp; 🎁 <span>BONUSES:</span> $2.00 signup + $2.00 first deposit + $1.00 per referral + $0.25 daily
+        🔮 <span>THE ORACLE</span> — Buy Yes/No shares on Sports, Esports, Crypto, Politics &amp; News, cash out early anytime &nbsp;•&nbsp; 🎮 <span>13 PROVABLY FAIR GAMES</span> — Coin Flip, Slots, Crash, Mines, Dice, Plinko, Roulette, Hi-Lo, Lucky Wheel &amp; more &nbsp;•&nbsp; 🎁 <span>BONUSES:</span> $2.00 signup + $2.00 first deposit + $1.00 per referral + $0.25 daily
     </div>
+
+    <!-- Live Oracle activity feed — social proof for first-time visitors -->
+    <section id="oracleFeedSection" style="max-width:1200px;margin:20px auto;padding:0 16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
+            <h3 style="font-size:18px;color:#fff;margin:0;">Live Oracle Activity</h3>
+            <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px;" onclick="showSection('predictions')">View All Markets</button>
+        </div>
+        <div id="oracleFeedGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div style="background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:16px;">
+                <div style="color:#888;font-size:12px;text-transform:uppercase;margin-bottom:10px;">Featured Markets</div>
+                <div id="oracleFeaturedMarkets" style="display:flex;flex-direction:column;gap:8px;">
+                    <div style="color:#666;font-size:13px;">Loading live markets...</div>
+                </div>
+            </div>
+            <div style="background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:16px;">
+                <div style="color:#888;font-size:12px;text-transform:uppercase;margin-bottom:10px;">Recent Trades & Resolutions</div>
+                <div id="oracleActivityFeed" style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;">
+                    <div style="color:#666;font-size:13px;">Loading activity...</div>
+                </div>
+            </div>
+        </div>
+    </section>
 
     <section class="module-section" id="explore-modules">
         <h2 class="module-section-title">Explore PixelPulse</h2>
@@ -2456,10 +2495,10 @@
                 <div class="module-card-title">Arcade</div>
                 <div class="module-card-desc">Play provably fair mini-games: Coin Flip, Slots, Crash, Mines, Dice, Plinko.</div>
             </div>
-            <div class="module-card" onclick="showSection('betting')" style="--card-accent:#9B59B6; --card-glow:rgba(155,89,182,0.25);">
-                <div class="module-card-icon"><i class="fas fa-chart-line"></i></div>
-                <div class="module-card-title">Predictions</div>
-                <div class="module-card-desc">Bet on esports, sports, and community events with real odds.</div>
+            <div class="module-card" onclick="openOracle()" style="--card-accent:#9B59B6; --card-glow:rgba(155,89,182,0.25);">
+                <div class="module-card-icon">🔮</div>
+                <div class="module-card-title">The Oracle</div>
+                <div class="module-card-desc">Buy Yes/No shares on sports, esports, crypto &amp; news. Prices move live — cash out early anytime.</div>
             </div>
             <div class="module-card" onclick="showSection('gold-transfer'); switchTradeHubTab('tradetokens')" style="--card-accent:#4CAF50; --card-glow:rgba(76,175,80,0.25);">
                 <div class="module-card-icon"><i class="fas fa-exchange-alt"></i></div>
@@ -2769,9 +2808,9 @@
                 <div class="game-card-tag">3% FEE</div>
             </div>
             <div class="arcade-game-card" id="arcadeTab-predictions" onclick="openArcadeGame('predictions')" style="--card-accent:#9B59B6; --card-glow:rgba(155,89,182,0.25);">
-                <svg class="game-card-icon"><use href="#icon-predictions"/></svg>
-                <div class="game-card-name">PREDICTIONS</div>
-                <div class="game-card-tag">BET ON EVENTS</div>
+                <span class="game-card-icon" style="font-size:28px;">🔮</span>
+                <div class="game-card-name">THE ORACLE</div>
+                <div class="game-card-tag">YES/NO MARKETS</div>
             </div>
             <div class="arcade-game-card" id="arcadeTab-winners" onclick="openArcadeGame('winners')" style="--card-accent:#FFD700; --card-glow:rgba(255,215,0,0.25);">
                 <svg class="game-card-icon"><use href="#icon-winners"/></svg>
@@ -3102,35 +3141,100 @@
             </div>
         </div>
 
-        <!-- Predictions -->
+        <!-- The Oracle: Polymarket-style Yes/No prediction exchange -->
         <div id="arcade-predictions" style="display: none;">
-            <div style="margin-bottom: 20px;">
-                <h3 style="margin-bottom: 12px;">🔮 Prediction Markets</h3>
-                <p style="color: #888; font-size: 13px; margin-bottom: 16px;">Bet on sports, news, esports, politics, and crypto. Admin-created, manually resolved, winner-takes-all pool. 2% house fee.</p>
+            <div style="margin-bottom: 16px;">
+                <h3 style="margin-bottom: 8px;">🔮 THE ORACLE</h3>
+                <p style="color: #888; font-size: 13px; margin-bottom: 12px;">Trade Yes/No shares on sports, esports, crypto, news &amp; politics. Prices move live with the crowd — buy in, watch your side move, and cash out early any time before it resolves.</p>
             </div>
-            <div id="predictionAdminPanel" style="display: none; margin-bottom: 20px; padding: 16px; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 8px;">
-                <h4 style="margin-bottom: 12px;">⚙️ Admin Create Market</h4>
-                <input type="text" id="predAdminTitle" placeholder="Title" class="arcade-input" style="margin-bottom: 8px;">
-                <input type="text" id="predAdminDesc" placeholder="Description" class="arcade-input" style="margin-bottom: 8px;">
-                <select id="predAdminCategory" class="arcade-input" style="margin-bottom: 8px;">
-                    <option value="sports">Sports</option>
-                    <option value="news">News</option>
-                    <option value="esports">Esports</option>
-                    <option value="politics">Politics</option>
-                    <option value="crypto">Crypto</option>
-                    <option value="misc">Misc</option>
-                </select>
-                <input type="text" id="predAdminYes" placeholder="Yes label (default Yes)" class="arcade-input" style="margin-bottom: 8px;">
-                <input type="text" id="predAdminNo" placeholder="No label (default No)" class="arcade-input" style="margin-bottom: 8px;">
-                <button class="arcade-btn" onclick="adminCreatePrediction()">CREATE MARKET</button>
-                <hr style="border: 1px solid #2a2a4a; margin: 16px 0;">
-                <button class="arcade-btn" style="background: rgba(76,175,80,0.2); border-color: #4caf50;" onclick="adminSeedFootballMarkets()">⚽ SEED FREE FOOTBALL MARKETS</button>
-                <button class="arcade-btn" style="background: rgba(255,193,7,0.15); border-color: #ffc107; margin-top: 8px;" onclick="adminSeedCryptoMarkets()">🪙 SEED CRYPTO MARKETS</button>
-                <button class="arcade-btn" style="background: rgba(142,68,173,0.15); border-color: #8e44ad; margin-top: 8px;" onclick="adminSeedEsportsMarkets()">🎮 SEED ESPORTS MARKETS</button>
-                <p style="font-size: 12px; color: #888; margin-top: 6px;">Auto-creates English Premier League, CoinGecko crypto, and CS2 esports markets from free public APIs.</p>
+
+            <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+                <button class="chat-tab active" id="oracleSubTab-markets" onclick="switchOracleSubTab('markets')">MARKETS</button>
+                <button class="chat-tab" id="oracleSubTab-positions" onclick="switchOracleSubTab('positions')">MY POSITIONS</button>
+                <button class="chat-tab" id="oracleSubTab-submit" onclick="switchOracleSubTab('submit')">SUBMIT A MARKET</button>
+                <button class="chat-tab" id="oracleSubTab-admin" onclick="switchOracleSubTab('admin')" style="display:none;">ADMIN QUEUE</button>
             </div>
-            <div id="predictionsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;">
-                <div style="color: #888; text-align: center; padding: 40px;">Loading prediction markets...</div>
+
+            <!-- Category filter -->
+            <div id="oracleCategoryFilter" style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+                <button class="plinko-risk-btn active" onclick="filterOracleCategory('all', this)">ALL</button>
+                <button class="plinko-risk-btn" onclick="filterOracleCategory('sports', this)">⚽ SPORTS</button>
+                <button class="plinko-risk-btn" onclick="filterOracleCategory('esports', this)">🎮 ESPORTS</button>
+                <button class="plinko-risk-btn" onclick="filterOracleCategory('crypto', this)">🪙 CRYPTO</button>
+                <button class="plinko-risk-btn" onclick="filterOracleCategory('politics', this)">🏛️ POLITICS</button>
+                <button class="plinko-risk-btn" onclick="filterOracleCategory('news', this)">📰 NEWS</button>
+                <button class="plinko-risk-btn" onclick="filterOracleCategory('misc', this)">✨ MISC</button>
+            </div>
+
+            <!-- MARKETS TAB -->
+            <div id="oraclePane-markets">
+                <div id="predictionsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;">
+                    <div style="color: #888; text-align: center; padding: 40px;">Loading The Oracle...</div>
+                </div>
+            </div>
+
+            <!-- MY POSITIONS TAB -->
+            <div id="oraclePane-positions" style="display: none;">
+                <div id="oraclePositionsList" style="display: flex; flex-direction: column; gap: 10px;">
+                    <div style="color: #888; text-align: center; padding: 40px;">Loading your positions...</div>
+                </div>
+            </div>
+
+            <!-- SUBMIT A MARKET TAB -->
+            <div id="oraclePane-submit" style="display: none;">
+                <div style="max-width: 480px; margin: 0 auto; padding: 16px; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 8px;">
+                    <h4 style="margin-bottom: 8px;">📝 Submit Your Own Market</h4>
+                    <p style="font-size: 12px; color: #888; margin-bottom: 12px;">Propose any Yes/No question. Our team reviews for clarity and a verifiable resolution source before it goes live.</p>
+                    <input type="text" id="oracleSubmitTitle" placeholder="e.g. Will Team X win the final on Nov 12?" class="arcade-input" style="margin-bottom: 8px;">
+                    <input type="text" id="oracleSubmitDesc" placeholder="Extra detail (optional)" class="arcade-input" style="margin-bottom: 8px;">
+                    <select id="oracleSubmitCategory" class="arcade-input" style="margin-bottom: 8px;">
+                        <option value="sports">Sports</option>
+                        <option value="esports">Esports</option>
+                        <option value="crypto">Crypto</option>
+                        <option value="politics">Politics</option>
+                        <option value="news">News</option>
+                        <option value="misc">Misc</option>
+                    </select>
+                    <input type="text" id="oracleSubmitYes" placeholder="Yes label (default Yes)" class="arcade-input" style="margin-bottom: 8px;">
+                    <input type="text" id="oracleSubmitNo" placeholder="No label (default No)" class="arcade-input" style="margin-bottom: 8px;">
+                    <input type="text" id="oracleSubmitSource" placeholder="Resolution source (e.g. official league site, ESPN box score)" class="arcade-input" style="margin-bottom: 12px;">
+                    <button class="arcade-btn" onclick="submitOracleMarket()">SUBMIT FOR REVIEW</button>
+                    <div id="oracleSubmitResult" class="arcade-payout"></div>
+                    <hr style="border: 1px solid #2a2a4a; margin: 16px 0;">
+                    <h4 style="margin-bottom: 8px; font-size: 13px; color: #aaa;">YOUR SUBMISSIONS</h4>
+                    <div id="oracleMySubmissions" style="display: flex; flex-direction: column; gap: 8px;">
+                        <div style="color: #888; font-size: 12px;">Loading...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ADMIN QUEUE TAB -->
+            <div id="oraclePane-admin" style="display: none;">
+                <div id="predictionAdminPanel" style="margin-bottom: 20px; padding: 16px; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 8px;">
+                    <h4 style="margin-bottom: 12px;">⚙️ Admin Create Market (goes live instantly)</h4>
+                    <input type="text" id="predAdminTitle" placeholder="Title" class="arcade-input" style="margin-bottom: 8px;">
+                    <input type="text" id="predAdminDesc" placeholder="Description" class="arcade-input" style="margin-bottom: 8px;">
+                    <select id="predAdminCategory" class="arcade-input" style="margin-bottom: 8px;">
+                        <option value="sports">Sports</option>
+                        <option value="news">News</option>
+                        <option value="esports">Esports</option>
+                        <option value="politics">Politics</option>
+                        <option value="crypto">Crypto</option>
+                        <option value="misc">Misc</option>
+                    </select>
+                    <input type="text" id="predAdminYes" placeholder="Yes label (default Yes)" class="arcade-input" style="margin-bottom: 8px;">
+                    <input type="text" id="predAdminNo" placeholder="No label (default No)" class="arcade-input" style="margin-bottom: 8px;">
+                    <button class="arcade-btn" onclick="adminCreatePrediction()">CREATE MARKET</button>
+                    <hr style="border: 1px solid #2a2a4a; margin: 16px 0;">
+                    <button class="arcade-btn" style="background: rgba(76,175,80,0.2); border-color: #4caf50;" onclick="adminSeedFootballMarkets()">⚽ SEED FREE FOOTBALL MARKETS</button>
+                    <button class="arcade-btn" style="background: rgba(255,193,7,0.15); border-color: #ffc107; margin-top: 8px;" onclick="adminSeedCryptoMarkets()">🪙 SEED CRYPTO MARKETS</button>
+                    <button class="arcade-btn" style="background: rgba(142,68,173,0.15); border-color: #8e44ad; margin-top: 8px;" onclick="adminSeedEsportsMarkets()">🎮 SEED ESPORTS MARKETS</button>
+                    <p style="font-size: 12px; color: #888; margin-top: 6px;">Auto-creates English Premier League, CoinGecko crypto, and CS2 esports markets from free public APIs.</p>
+                </div>
+                <h4 style="margin-bottom: 12px;">📥 User-Submitted Markets Awaiting Review</h4>
+                <div id="oracleAdminQueue" style="display: flex; flex-direction: column; gap: 10px;">
+                    <div style="color: #888; text-align: center; padding: 20px;">Loading queue...</div>
+                </div>
             </div>
         </div>
 
@@ -3358,6 +3462,8 @@
                     <button class="btn btn-secondary" onclick="showGameAccountModal()">Link Game Accounts</button>
                     <button class="btn btn-secondary" onclick="loadEscrowTrades()">My Escrow Trades</button>
                     <button class="btn btn-secondary" onclick="loadMySkinListings()">My Skin Listings</button>
+                    <button class="btn btn-secondary" onclick="showGiftCardModal()">Redeem Gift Card → BTC</button>
+                    <button class="btn btn-secondary" onclick="showResponsibleGamblingModal()">Responsible Gambling</button>
                 </div>
             </div>
             <div class="your-bets">
@@ -3735,6 +3841,75 @@
         </div>
     </div>
 
+    <!-- Gift Card Liquidation Modal -->
+    <div class="modal" id="giftCardModal">
+        <div class="modal-content" style="max-width:500px;">
+            <div class="modal-header">
+                <h3 class="modal-title">Redeem Gift Card / Game Tokens → BTC</h3>
+                <button class="close-btn" onclick="closeGiftCardModal()">&times;</button>
+            </div>
+            <div style="padding:20px;">
+                <p style="color:#aaa;font-size:13px;margin-bottom:16px;">Submit your gift card or game tokens for liquidation. Our team will review and send you a BTC offer within 24 hours. You can accept or reject the offer.</p>
+                <div style="margin-bottom:12px;">
+                    <label style="color:#888;font-size:12px;display:block;margin-bottom:4px;">Asset Type</label>
+                    <select id="gcAssetType" class="arcade-input" style="width:100%;padding:10px;font-size:14px;">
+                        <option value="">Select asset type...</option>
+                    </select>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="color:#888;font-size:12px;display:block;margin-bottom:4px;">Face Value (USD)</label>
+                    <input type="number" id="gcFaceValue" class="arcade-input" placeholder="e.g. 50" min="1" max="5000" step="0.01" style="width:100%;padding:10px;font-size:14px;">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="color:#888;font-size:12px;display:block;margin-bottom:4px;">Details (card code, receipt, account info, etc.)</label>
+                    <textarea id="gcDetails" class="arcade-input" placeholder="Enter full gift card code, PIN, or game account details..." rows="4" style="width:100%;padding:10px;font-size:14px;resize:vertical;"></textarea>
+                </div>
+                <div id="gcMySubmissions" style="margin-top:16px;border-top:1px solid #333;padding-top:12px;"></div>
+                <button class="btn btn-primary" style="width:100%;margin-top:12px;" onclick="submitGiftCard()">Submit for Liquidation</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Responsible Gambling Modal -->
+    <div class="modal" id="responsibleGamblingModal">
+        <div class="modal-content" style="max-width:500px;">
+            <div class="modal-header">
+                <h3 class="modal-title">Responsible Gambling</h3>
+                <button class="close-btn" onclick="closeResponsibleGamblingModal()">&times;</button>
+            </div>
+            <div style="padding:20px;">
+                <p style="color:#aaa;font-size:13px;margin-bottom:16px;">Set your deposit and loss limits. These help you stay in control. You can self-exclude at any time.</p>
+                <div id="rgStats" style="background:#0d0d0d;border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;color:#aaa;"></div>
+                <div style="margin-bottom:12px;">
+                    <label style="color:#888;font-size:12px;display:block;margin-bottom:4px;">Daily Deposit Limit ($)</label>
+                    <input type="number" id="rgDailyLimit" class="arcade-input" placeholder="0 = no limit" min="0" step="1" style="width:100%;padding:10px;font-size:14px;">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="color:#888;font-size:12px;display:block;margin-bottom:4px;">Weekly Deposit Limit ($)</label>
+                    <input type="number" id="rgWeeklyLimit" class="arcade-input" placeholder="0 = no limit" min="0" step="1" style="width:100%;padding:10px;font-size:14px;">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="color:#888;font-size:12px;display:block;margin-bottom:4px;">Daily Loss Limit ($)</label>
+                    <input type="number" id="rgLossLimit" class="arcade-input" placeholder="0 = no limit" min="0" step="1" style="width:100%;padding:10px;font-size:14px;">
+                </div>
+                <button class="btn btn-primary" style="width:100%;margin-bottom:12px;" onclick="saveRGLimits()">Save Limits</button>
+                <div style="border-top:1px solid #333;padding-top:12px;">
+                    <label style="color:#888;font-size:12px;display:block;margin-bottom:8px;">Self-Exclusion (temporarily block your account)</label>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                        <button class="btn btn-secondary" style="font-size:12px;flex:1;" onclick="selfExclude('24h')">24 Hours</button>
+                        <button class="btn btn-secondary" style="font-size:12px;flex:1;" onclick="selfExclude('7d')">7 Days</button>
+                        <button class="btn btn-secondary" style="font-size:12px;flex:1;" onclick="selfExclude('30d')">30 Days</button>
+                        <button class="btn btn-secondary" style="font-size:12px;flex:1;" onclick="selfExclude('90d')">90 Days</button>
+                        <button class="btn btn-secondary" style="font-size:12px;flex:1;background:rgba(244,67,54,0.15);border-color:#f44336;" onclick="selfExclude('permanent')">Permanent</button>
+                    </div>
+                </div>
+                <div style="margin-top:16px;font-size:11px;color:#666;text-align:center;">
+                    Need help? Visit <a href="https://www.begambleaware.org" target="_blank" style="color:#4caf50;">BeGambleAware.org</a> or call 1-800-GAMBLER. You must be 18+ to use this platform.
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal" id="authModal">
         <div class="modal-content">
             <div class="modal-header">
@@ -3905,7 +4080,7 @@
             <div class="footer-col">
                 <h4>Play</h4>
                 <a onclick="showSection('arcade')">Arcade Games</a>
-                <a onclick="showSection('betting')">Prediction Markets</a>
+                <a onclick="openOracle()">The Oracle</a>
                 <a onclick="showSection('leaderboard')">Leaderboard</a>
                 <a onclick="showSection('chat')">Community Chat</a>
             </div>
@@ -3915,6 +4090,13 @@
                 <a onclick="showSection('profile')">Profile</a>
                 <a onclick="showSection('support')">Support</a>
                 <a href="https://t.me/PixelPulse" target="_blank" rel="noopener">Telegram Bot</a>
+            </div>
+            <div class="footer-col">
+                <h4>Legal</h4>
+                <a href="/terms.html" target="_blank">Terms of Service</a>
+                <a href="/privacy.html" target="_blank">Privacy Policy</a>
+                <a href="/cookies.html" target="_blank">Cookie Policy</a>
+                <a href="/risk.html" target="_blank">Risk Disclosure</a>
             </div>
             <div class="footer-col">
                 <h4>Socials</h4>
@@ -3945,6 +4127,26 @@
         let currentUser = null;
         let currentUserId = null;
         let userPreferredCurrency = 'USD';
+
+        // Capture UTM params and landing page on first visit for ad attribution
+        (function() {
+            if (!localStorage.getItem('pp_utm')) {
+                const params = new URLSearchParams(window.location.search);
+                const utm = {};
+                ['source','medium','campaign','content','term'].forEach(k => {
+                    const v = params.get('utm_' + k);
+                    if (v) utm[k] = v;
+                });
+                localStorage.setItem('pp_utm', JSON.stringify(utm));
+                localStorage.setItem('pp_landing', window.location.href);
+                // Also capture click IDs from common ad networks
+                const clickIds = ['gclid','gbraid','wbraid','msclkid','fbclid','twclid','pcid','clickid','ref'];
+                clickIds.forEach(k => {
+                    const v = params.get(k);
+                    if (v) localStorage.setItem('pp_clickid_' + k, v);
+                });
+            }
+        })();
 
         // Authentication functions
         function showAuthModal() {
@@ -4025,10 +4227,16 @@
             try {
                 const refCode = new URLSearchParams(window.location.search).get('ref') || '';
                 const pcClick = localStorage.getItem('pp_clickid') || '';
+                const utm = JSON.parse(localStorage.getItem('pp_utm') || '{}');
+                const landing = localStorage.getItem('pp_landing') || window.location.pathname + window.location.search;
                 const response = await fetch('/api/auth/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password, username, isAdult, referralCode: refCode, clickid: pcClick })
+                    body: JSON.stringify({
+                        email, password, username, isAdult, referralCode: refCode, clickid: pcClick,
+                        utm_source: utm.source, utm_medium: utm.medium, utm_campaign: utm.campaign,
+                        utm_content: utm.content, utm_term: utm.term, landing_page: landing
+                    })
                 });
                 const data = await response.json();
 
@@ -7831,6 +8039,8 @@
             }
         };
 
+        const ARCADE_SLOW_FACTOR = 1.5;
+
         let coinflipChoice = null;
         let crashState = { active: false, sessionId: null, stake: 0, crashPoint: 0, currentMult: 1.0, cashedOut: false, crashed: false, animInterval: null };
 
@@ -7965,11 +8175,12 @@
             ArcadeSession.setTimeout(() => { target.classList.remove('camera-shake'); target.style.animationDuration = ''; }, durationMs);
         }
 
-        function pixelParticles(x, y, color = '#e50914', requestedCount = 36) {
+        function pixelParticles(x, y, color = '#e50914', requestedCount = 36, slow = false) {
             const container = ArcadeSession.getParticleContainer();
             const count = Math.min(requestedCount, Math.max(8, ArcadeSession.maxParticles - ArcadeSession.particleCount));
             if (count <= 0) return;
 
+            const mult = slow ? ARCADE_SLOW_FACTOR : 1;
             const fragment = document.createDocumentFragment();
             for (let i = 0; i < count; i++) {
                 const p = document.createElement('div');
@@ -7983,7 +8194,7 @@
                 const ty = Math.sin(angle) * speed + 120 + Math.random() * 80;
                 const rot = Math.random() * 1080 - 540;
                 const scale = 0.6 + Math.random() * 1.2;
-                const duration = 0.8 + Math.random() * 0.5;
+                const duration = (0.8 + Math.random() * 0.5) * mult;
                 p.style.width = (6 + Math.random() * 6) + 'px';
                 p.style.height = p.style.width;
                 p.style.transition = `transform ${duration}s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity ${duration}s ease`;
@@ -7999,13 +8210,14 @@
             ArcadeSession.particleCount += count;
         }
 
-        function pixelConfetti() {
+        function pixelConfetti(slow = false) {
             if (ArcadeSession.particleCount >= ArcadeSession.maxParticles) return;
             const colors = ['#e50914', '#4caf50', '#ffd700', '#00d4ff', '#ff00ff', '#ff5722', '#00e676'];
             const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
             const count = Math.min(60, ArcadeSession.maxParticles - ArcadeSession.particleCount);
             if (count <= 0) return;
 
+            const mult = slow ? ARCADE_SLOW_FACTOR : 1;
             const container = ArcadeSession.getParticleContainer();
             const fragment = document.createDocumentFragment();
             for (let i = 0; i < count; i++) {
@@ -8021,7 +8233,7 @@
                 const ty = Math.sin(angle) * speed + 160 + Math.random() * 120;
                 const rot = Math.random() * 1080 - 540;
                 const scale = 0.7 + Math.random() * 1.4;
-                const duration = 1.1 + Math.random() * 0.8;
+                const duration = (1.1 + Math.random() * 0.8) * mult;
                 p.style.width = (5 + Math.random() * 7) + 'px';
                 p.style.height = p.style.width;
                 p.style.transition = `transform ${duration}s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity ${duration}s ease`;
@@ -8037,7 +8249,7 @@
             ArcadeSession.particleCount += count;
         }
 
-        function screenFlash(color = 'rgba(255,255,255,0.25)') {
+        function screenFlash(color = 'rgba(255,255,255,0.25)', slow = false) {
             let flash = document.getElementById('arcadeScreenFlash');
             if (!flash) {
                 flash = document.createElement('div');
@@ -8045,42 +8257,57 @@
                 flash.className = 'screen-flash';
                 document.body.appendChild(flash);
             }
+            const mult = slow ? ARCADE_SLOW_FACTOR : 1;
+            const animDur = 0.55 * mult;
             flash.style.background = color;
+            flash.style.animationDuration = `${animDur}s`;
             flash.classList.remove('active');
             void flash.offsetWidth;
             flash.classList.add('active');
-            ArcadeSession.setTimeout(() => flash.classList.remove('active'), 600);
+            ArcadeSession.setTimeout(() => { flash.classList.remove('active'); flash.style.animationDuration = ''; }, Math.round(animDur * 1000) + 50);
         }
 
-        function floatingScore(text, x, y, color = '#4caf50') {
+        function floatingScore(text, x, y, color = '#4caf50', slow = false) {
             const el = document.createElement('div');
             el.className = 'floating-score';
             el.textContent = text;
             el.style.color = color;
             el.style.left = x + 'px';
             el.style.top = y + 'px';
+            const mult = slow ? ARCADE_SLOW_FACTOR : 1;
+            el.style.animationDuration = `${1.3 * mult}s`;
             document.body.appendChild(el);
-            ArcadeSession.setTimeout(() => { try { el.remove(); } catch(e) {} }, 1300);
+            ArcadeSession.setTimeout(() => { try { el.remove(); } catch(e) {} }, Math.round(1300 * mult));
         }
 
-        function dramaticWin(screenSelector, amount, isJackpot = false) {
+        function dramaticWin(screenSelector, amount, isJackpot = false, slow = false) {
+            const mult = slow ? ARCADE_SLOW_FACTOR : 1;
             playGameSound(isJackpot ? 'jackpot' : 'win');
-            cameraShake(isJackpot ? 720 : 480);
-            pixelConfetti();
-            screenFlash(isJackpot ? 'rgba(255,215,0,0.30)' : 'rgba(76,175,80,0.28)');
+            cameraShake(Math.round((isJackpot ? 720 : 480) * mult));
+            pixelConfetti(slow);
+            screenFlash(isJackpot ? 'rgba(255,215,0,0.30)' : 'rgba(76,175,80,0.28)', slow);
             const screen = document.querySelector(screenSelector);
-            if (screen) { screen.classList.add('big-win-glow'); ArcadeSession.setTimeout(() => screen.classList.remove('big-win-glow'), 2200); }
-            floatingScore('+ $' + amount.toFixed(2), window.innerWidth / 2, window.innerHeight / 2 - 80, isJackpot ? '#ffd700' : '#4caf50');
+            if (screen) {
+                screen.style.animationDuration = `${0.65 * mult}s`;
+                screen.classList.add('big-win-glow');
+                ArcadeSession.setTimeout(() => { screen.classList.remove('big-win-glow'); screen.style.animationDuration = ''; }, Math.round(2200 * mult));
+            }
+            floatingScore('+ $' + amount.toFixed(2), window.innerWidth / 2, window.innerHeight / 2 - 80, isJackpot ? '#ffd700' : '#4caf50', slow);
         }
 
-        function dramaticLoss(screenSelector, amount) {
+        function dramaticLoss(screenSelector, amount, slow = false) {
+            const mult = slow ? ARCADE_SLOW_FACTOR : 1;
             playGameSound('loss');
-            cameraShake(520);
-            pixelParticles(window.innerWidth / 2, window.innerHeight / 2, '#e50914', 48);
-            screenFlash('rgba(244,67,54,0.30)');
+            cameraShake(Math.round(520 * mult));
+            pixelParticles(window.innerWidth / 2, window.innerHeight / 2, '#e50914', 48, slow);
+            screenFlash('rgba(244,67,54,0.30)', slow);
             const screen = document.querySelector(screenSelector);
-            if (screen) { screen.classList.add('loss-glow'); ArcadeSession.setTimeout(() => screen.classList.remove('loss-glow'), 1800); }
-            floatingScore('- $' + amount.toFixed(2), window.innerWidth / 2, window.innerHeight / 2 - 80, '#f44336');
+            if (screen) {
+                screen.style.animationDuration = `${0.6 * mult}s`;
+                screen.classList.add('loss-glow');
+                ArcadeSession.setTimeout(() => { screen.classList.remove('loss-glow'); screen.style.animationDuration = ''; }, Math.round(1800 * mult));
+            }
+            floatingScore('- $' + amount.toFixed(2), window.innerWidth / 2, window.innerHeight / 2 - 80, '#f44336', slow);
         }
 
         function openArcadeGame(tab) {
@@ -8090,6 +8317,11 @@
             document.body.style.overflow = 'hidden';
             playGameSound('open');
             switchArcadeTab(tab);
+        }
+
+        function openOracle() {
+            showSection('arcade');
+            openArcadeGame('predictions');
         }
 
         function exitArcadeGame() {
@@ -8938,17 +9170,17 @@
                 if (!res.ok) { alert(data.error); btn.disabled = false; btn.textContent = 'SPIN'; ArcadeSession.unlock('roulette'); return; }
                 const colorEmoji = data.color === 'red' ? '🔴' : data.color === 'black' ? '⚫' : '🟢';
                 if (data.won) {
-                    dramaticWin('#arcade-roulette .arcade-game', data.payout || 0, false);
+                    dramaticWin('#arcade-roulette .arcade-game', data.payout || 0, false, true);
                     resultEl.innerHTML = `🎉 Rolled ${colorEmoji} ${data.rollNumber} — WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
                     showArcadeToast('win', '🎰', 'YOU WON!', `+$${data.payout.toFixed(2)}`);
                 } else {
-                    dramaticLoss('#arcade-roulette .arcade-game', data.stake || 0);
+                    dramaticLoss('#arcade-roulette .arcade-game', data.stake || 0, true);
                     resultEl.innerHTML = `Rolled ${colorEmoji} ${data.rollNumber} — Lost $${data.stake.toFixed(2)}`;
                     showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
                 }
                 document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
             } catch(e) { console.error('Roulette error:', e); }
-            ArcadeSession.setTimeout(() => { btn.disabled = false; btn.textContent = 'SPIN'; ArcadeSession.unlock('roulette'); }, 2000);
+            ArcadeSession.setTimeout(() => { btn.disabled = false; btn.textContent = 'SPIN'; ArcadeSession.unlock('roulette'); }, 3500);
         }
 
         // ===== HI-LO =====
@@ -8977,17 +9209,17 @@
                 if (!res.ok) { alert(data.error); btn.disabled = false; btn.textContent = 'DRAW CARD'; ArcadeSession.unlock('hilo'); return; }
                 baseEl.textContent = `${CARD_RANKS[data.baseCard - 1]} → ${CARD_RANKS[data.nextCard - 1]}`;
                 if (data.won) {
-                    dramaticWin('#arcade-hilo .arcade-game', data.payout || 0, false);
+                    dramaticWin('#arcade-hilo .arcade-game', data.payout || 0, false, true);
                     resultEl.innerHTML = `🎉 ${data.guess.toUpperCase()} — WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
                     showArcadeToast('win', '🃏', 'YOU WON!', `+$${data.payout.toFixed(2)}`);
                 } else {
-                    dramaticLoss('#arcade-hilo .arcade-game', data.stake || 0);
+                    dramaticLoss('#arcade-hilo .arcade-game', data.stake || 0, true);
                     resultEl.innerHTML = `${data.guess.toUpperCase()} — Lost $${data.stake.toFixed(2)}`;
                     showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
                 }
                 document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
             } catch(e) { console.error('Hi-Lo error:', e); }
-            ArcadeSession.setTimeout(() => { btn.disabled = false; btn.textContent = 'DRAW CARD'; ArcadeSession.unlock('hilo'); }, 2000);
+            ArcadeSession.setTimeout(() => { btn.disabled = false; btn.textContent = 'DRAW CARD'; ArcadeSession.unlock('hilo'); }, 3500);
         }
 
         // ===== LUCKY WHEEL =====
@@ -9008,30 +9240,30 @@
             const spinAnim = ArcadeSession.setInterval(() => {
                 display.textContent = WHEEL_LABELS[ticks % WHEEL_LABELS.length];
                 ticks++;
-            }, 220);
+            }, 350);
             try {
                 const res = await fetch('/api/arcade/wheel', { method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ stake }) });
                 const data = await res.json();
                 if (!res.ok) { alert(data.error); btn.disabled = false; btn.textContent = 'SPIN WHEEL'; clearInterval(spinAnim); ArcadeSession.clearTimer(spinAnim); ArcadeSession.unlock('wheel'); return; }
                 const target = data.segment;
-                // Land after visible spin
+                // Land after a slower, more visible spin
                 ArcadeSession.setTimeout(() => {
                     clearInterval(spinAnim);
                     ArcadeSession.clearTimer(spinAnim);
                     display.textContent = target;
                     if (data.payout > 0) {
-                        dramaticWin('#arcade-wheel .arcade-game', data.payout || 0, false);
+                        dramaticWin('#arcade-wheel .arcade-game', data.payout || 0, false, true);
                         resultEl.innerHTML = `🎉 Landed on <span style="color:#00d4ff;font-weight:700">${target}</span> — WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span>`;
                         showArcadeToast('win', '🎡', 'YOU WON!', `+$${data.payout.toFixed(2)}`);
                     } else {
-                        dramaticLoss('#arcade-wheel .arcade-game', data.stake || 0);
+                        dramaticLoss('#arcade-wheel .arcade-game', data.stake || 0, true);
                         resultEl.innerHTML = `Landed on ${target} — Lost $${data.stake.toFixed(2)}`;
                         showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
                     }
                     document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
-                }, 2500);
+                }, 4000);
             } catch(e) { console.error('Wheel error:', e); clearInterval(spinAnim); ArcadeSession.clearTimer(spinAnim); }
-            ArcadeSession.setTimeout(() => { btn.disabled = false; btn.textContent = 'SPIN WHEEL'; ArcadeSession.unlock('wheel'); }, 4500);
+            ArcadeSession.setTimeout(() => { btn.disabled = false; btn.textContent = 'SPIN WHEEL'; ArcadeSession.unlock('wheel'); }, 7500);
         }
 
         // ===== PVP COLOR CLASH =====
@@ -9258,6 +9490,8 @@
         }
 
         let arcadeAdmin = false;
+        let oracleActiveCategory = 'all';
+        let oracleAllMarkets = [];
 
         const PREDICTION_CATEGORY_ICONS = {
             sports: '⚽',
@@ -9265,17 +9499,54 @@
             crypto: '🪙',
             politics: '🏛️',
             news: '📰',
-            misc: '🔮'
+            misc: '✨'
         };
         const PREDICTION_CATEGORY_ORDER = ['sports', 'crypto', 'esports', 'politics', 'news', 'misc'];
+
+        function escapeOracleText(value) {
+            return String(value || '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+        }
+
+        // Small inline sparkline of the Yes-price history — the "line goes up/down" feedback loop
+        function oracleSparkline(history) {
+            if (!history || history.length < 2) return '<div style="height:28px;"></div>';
+            const w = 100, h = 28;
+            const points = history.map((p, i) => {
+                const x = (i / (history.length - 1)) * w;
+                const y = h - (Math.max(0, Math.min(1, p)) * h);
+                return `${x.toFixed(1)},${y.toFixed(1)}`;
+            }).join(' ');
+            const trendUp = history[history.length - 1] >= history[0];
+            const color = trendUp ? '#4caf50' : '#f44336';
+            return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:28px;display:block;"><polyline points="${points}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+        }
+
+        function oraclePriceBar(m) {
+            const yesPct = Math.round((m.yes_price ?? 0.5) * 100);
+            const noPct = 100 - yesPct;
+            return `
+                <div style="margin-bottom:10px;">
+                    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+                        <span style="color:#4caf50;font-weight:700;">${escapeOracleText(m.option_yes_label || 'Yes')} ${yesPct}%</span>
+                        <span style="color:#f44336;font-weight:700;">${escapeOracleText(m.option_no_label || 'No')} ${noPct}%</span>
+                    </div>
+                    <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;background:#222;">
+                        <div style="width:${yesPct}%;background:#4caf50;transition:width .4s;"></div>
+                        <div style="width:${noPct}%;background:#f44336;transition:width .4s;"></div>
+                    </div>
+                </div>
+            `;
+        }
 
         function renderPredictionMarket(m) {
             let meta = {};
             try { meta = m.metadata ? JSON.parse(m.metadata) : {}; } catch (e) { meta = {}; }
             const hasLogos = meta.home_logo && meta.away_logo;
-            const categoryIcon = PREDICTION_CATEGORY_ICONS[m.category] || '🔮';
+            const categoryIcon = PREDICTION_CATEGORY_ICONS[m.category] || '✨';
+            const yesPct = Math.round((m.yes_price ?? 0.5) * 100);
+            const noPct = 100 - yesPct;
             return `
-                <div style="background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:18px;transition: transform .15s;">
+                <div class="oracle-card" data-category="${m.category || 'misc'}" style="background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:18px;transition: transform .15s;">
                     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;">
                         <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
                             ${hasLogos ? `
@@ -9290,39 +9561,100 @@
                                 <div style="width:40px;height:40px;border-radius:8px;background:#2a2a4a;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">${categoryIcon}</div>
                             `}
                             <div style="min-width:0;">
-                                <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.4px;">${categoryIcon} ${(m.category || 'misc').toUpperCase()}</div>
-                                <h4 style="margin:2px 0 0 0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${m.title.replace(/"/g, '&quot;')}">${m.title}</h4>
+                                <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.4px;">${categoryIcon} ${(m.category || 'misc').toUpperCase()}${m.is_user_created ? ' • COMMUNITY' : ''}</div>
+                                <h4 style="margin:2px 0 0 0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeOracleText(m.title)}">${escapeOracleText(m.title)}</h4>
                             </div>
                         </div>
                         <span style="font-size:10px;color:${m.status === 'active' ? '#4caf50' : m.status === 'resolved' ? '#e50914' : '#888'};border:1px solid currentColor;padding:2px 8px;border-radius:20px;white-space:nowrap;">${m.status.toUpperCase()}</span>
                     </div>
-                    ${m.description ? `<p style="color:#aaa;font-size:12px;margin-bottom:12px">${m.description}</p>` : ''}
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:12px;color:#888;">
-                        <span>Yes: <strong style="color:#4caf50">$${(m.total_yes || 0).toFixed(2)}</strong></span>
-                        <span>No: <strong style="color:#f44336">$${(m.total_no || 0).toFixed(2)}</strong></span>
-                    </div>
-                    <div style="display:flex;flex-direction:column;gap:8px;">
-                        ${m.status === 'active' ? `
-                            <button class="btn btn-secondary" onclick="placePredictionBet(${m.id}, 'yes', '${(m.option_yes_label || 'Yes').replace(/'/g, "\\'")}')" style="text-align:center;justify-content:center;background:rgba(76,175,80,0.15);border-color:#4caf50;">${m.option_yes_label || 'Yes'}</button>
-                            <button class="btn btn-secondary" onclick="placePredictionBet(${m.id}, 'no', '${(m.option_no_label || 'No').replace(/'/g, "\\'")}')" style="text-align:center;justify-content:center;background:rgba(244,67,54,0.15);border-color:#f44336;">${m.option_no_label || 'No'}</button>
-                        ` : `<div style="font-size:13px;color:#aaa;">Resolved: <strong>${(m.option_yes_label || 'Yes')} — ${m.resolution_value || 'n/a'}</strong></div>`}
-                    </div>
+                    ${m.description ? `<p style="color:#aaa;font-size:12px;margin-bottom:10px">${escapeOracleText(m.description)}</p>` : ''}
+                    <div style="margin-bottom:10px;background:#0d0d0d;border-radius:6px;padding:4px 6px;">${oracleSparkline(m.price_history)}</div>
+                    ${oraclePriceBar(m)}
+                    ${m.status === 'active' ? `
+                        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+                            <input type="number" id="oracleAmt-${m.id}" value="2" min="2" step="0.5" class="arcade-input" style="width:64px;padding:8px 6px;font-size:12px;">
+                            <button class="btn btn-secondary" onclick="buyOracleShares(${m.id}, 'yes')" style="flex:1;text-align:center;justify-content:center;background:rgba(76,175,80,0.15);border-color:#4caf50;font-size:12px;">BUY ${escapeOracleText(m.option_yes_label || 'Yes')} ${yesPct}¢</button>
+                            <button class="btn btn-secondary" onclick="buyOracleShares(${m.id}, 'no')" style="flex:1;text-align:center;justify-content:center;background:rgba(244,67,54,0.15);border-color:#f44336;font-size:12px;">BUY ${escapeOracleText(m.option_no_label || 'No')} ${noPct}¢</button>
+                        </div>
+                        <div style="text-align:right;margin-bottom:8px;">
+                            <button onclick="toggleOracleLimitPanel(${m.id})" style="background:none;border:none;color:#888;font-size:11px;text-decoration:underline;cursor:pointer;padding:0;">⚙ Advanced: limit order / order book</button>
+                        </div>
+                        <div id="oracleLimitPanel-${m.id}" style="display:none;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:8px;padding:10px;margin-bottom:10px;">
+                            <div id="oracleBookDisplay-${m.id}" style="margin-bottom:8px;"></div>
+                            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                                <select id="oracleLimitOption-${m.id}" onchange="loadOracleOrderBook(${m.id})" class="arcade-input" style="padding:6px;font-size:11px;flex:1;min-width:70px;">
+                                    <option value="yes">${escapeOracleText(m.option_yes_label || 'Yes')}</option>
+                                    <option value="no">${escapeOracleText(m.option_no_label || 'No')}</option>
+                                </select>
+                                <select id="oracleLimitSide-${m.id}" class="arcade-input" style="padding:6px;font-size:11px;flex:1;min-width:60px;">
+                                    <option value="buy">Buy</option>
+                                    <option value="sell">Sell</option>
+                                </select>
+                                <input type="number" id="oracleLimitPrice-${m.id}" placeholder="price ¢ (0.02-0.98)" min="0.02" max="0.98" step="0.01" value="${(m.yes_price ?? 0.5).toFixed(2)}" class="arcade-input" style="padding:6px;font-size:11px;width:90px;">
+                                <input type="number" id="oracleLimitQty-${m.id}" placeholder="qty" min="1" step="1" value="10" class="arcade-input" style="padding:6px;font-size:11px;width:60px;">
+                                <button class="btn btn-secondary" style="font-size:11px;padding:6px 10px;" onclick="placeOracleLimit(${m.id})">PLACE ORDER</button>
+                            </div>
+                        </div>
+                    ` : `<div style="font-size:13px;color:#aaa;">Resolved: <strong>${escapeOracleText(m.resolution_value === 'yes' ? (m.option_yes_label || 'Yes') : m.resolution_value === 'no' ? (m.option_no_label || 'No') : (m.resolution_value || 'n/a'))}</strong></div>`}
                     ${arcadeAdmin && m.status === 'active' ? `
                         <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
                             <button class="btn" style="font-size:11px;padding:6px;" onclick="adminResolvePrediction(${m.id}, 'yes')">Resolve YES</button>
                             <button class="btn" style="font-size:11px;padding:6px;" onclick="adminResolvePrediction(${m.id}, 'no')">Resolve NO</button>
                             <button class="btn" style="font-size:11px;padding:6px;" onclick="adminResolvePrediction(${m.id}, 'cancel')">Cancel</button>
-                            ${['worldcup26','coingecko','csapi'].includes(m.api_source) ? `<button class="btn" style="font-size:11px;padding:6px;background:rgba(76,175,80,0.15);" onclick="adminAutoResolvePrediction(${m.id}, '${m.api_source}')">🤖 Auto-resolve</button>` : ''}
+                            ${['worldcup26','coingecko','csapi','espn'].includes(m.api_source) ? `<button class="btn" style="font-size:11px;padding:6px;background:rgba(76,175,80,0.15);" onclick="adminAutoResolvePrediction(${m.id}, '${m.api_source}')">🤖 Auto-resolve</button>` : ''}
                         </div>
                     ` : ''}
                 </div>
             `;
         }
 
+        const WEB_MIN_STAKE_JS = 2;
+
+        function renderOracleMarketsGrid() {
+            const grid = document.getElementById('predictionsGrid');
+            if (!grid) return;
+            const filtered = oracleActiveCategory === 'all' ? oracleAllMarkets : oracleAllMarkets.filter(m => (m.category || 'misc') === oracleActiveCategory);
+
+            if (filtered.length === 0) {
+                grid.innerHTML = `
+                    <div style="grid-column:1/-1;color:#888;text-align:center;padding:40px;background:#1a1a1a;border-radius:12px;border:1px dashed #444;">
+                        <div style="font-size:32px;margin-bottom:10px;">🔮</div>
+                        No markets in this category yet.<br>
+                        ${arcadeAdmin ? 'Use the admin queue tab to create or seed markets.' : 'Check back soon, or submit your own market!'}
+                    </div>
+                `;
+                return;
+            }
+
+            const active = filtered.filter(m => m.status === 'active');
+            const resolved = filtered.filter(m => m.status !== 'active');
+            grid.innerHTML = [...active, ...resolved].map(renderPredictionMarket).join('');
+        }
+
+        function filterOracleCategory(cat, btn) {
+            oracleActiveCategory = cat;
+            document.querySelectorAll('#oracleCategoryFilter .plinko-risk-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            renderOracleMarketsGrid();
+        }
+
+        function switchOracleSubTab(tab) {
+            ['markets', 'positions', 'submit', 'admin'].forEach(t => {
+                const pane = document.getElementById('oraclePane-' + t);
+                const btn = document.getElementById('oracleSubTab-' + t);
+                if (pane) pane.style.display = t === tab ? 'block' : 'none';
+                if (btn) btn.classList.toggle('active', t === tab);
+            });
+            document.getElementById('oracleCategoryFilter').style.display = tab === 'markets' ? 'flex' : 'none';
+            if (tab === 'positions') loadOraclePositions();
+            if (tab === 'submit') loadMyOracleSubmissions();
+            if (tab === 'admin') loadOracleAdminQueue();
+        }
+
         async function loadPredictions() {
             if (!sessionToken) { showAuthModal(); return; }
             const grid = document.getElementById('predictionsGrid');
-            grid.innerHTML = '<div style="color:#888;text-align:center;padding:40px;">Loading prediction markets...</div>';
+            grid.innerHTML = '<div style="grid-column:1/-1;color:#888;text-align:center;padding:40px;">Loading The Oracle...</div>';
             try {
                 const [marketsRes, adminRes] = await Promise.all([
                     fetch('/api/arcade/predictions/markets', { headers: { 'Authorization': `Bearer ${sessionToken}` } }),
@@ -9331,78 +9663,286 @@
                 const data = await marketsRes.json();
                 const adminData = await adminRes.json();
                 arcadeAdmin = adminData.isAdmin;
-                document.getElementById('predictionAdminPanel').style.display = arcadeAdmin ? 'block' : 'none';
+                document.getElementById('oracleSubTab-admin').style.display = arcadeAdmin ? 'inline-block' : 'none';
 
-                const active = data.active || [];
-                const resolved = data.resolved || [];
-                const all = [...active, ...resolved];
-
-                if (all.length === 0) {
-                    grid.innerHTML = `
-                        <div style="color:#888;text-align:center;padding:40px;background:#1a1a1a;border-radius:12px;border:1px dashed #444;">
-                            <div style="font-size:32px;margin-bottom:10px;">🔮</div>
-                            No prediction markets yet.<br>
-                            ${arcadeAdmin ? 'Admins can create or seed sports, news, esports, politics, and crypto markets above.' : 'Check back soon — new markets are added daily.'}
-                        </div>
-                    `;
-                    return;
-                }
-
-                // Group active + resolved by category
-                const groups = {};
-                for (const m of all) {
-                    const cat = m.category || 'misc';
-                    if (!groups[cat]) groups[cat] = [];
-                    groups[cat].push(m);
-                }
-
-                let html = '';
-                for (const cat of PREDICTION_CATEGORY_ORDER) {
-                    if (!groups[cat]) continue;
-                    const icon = PREDICTION_CATEGORY_ICONS[cat] || '🔮';
-                    html += `
-                        <div style="grid-column: 1 / -1; margin-top: 22px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #333;">
-                            <h4 style="margin:0; display:flex; align-items:center; gap:8px; font-size:17px; color:#eee;">
-                                <span style="font-size:22px;">${icon}</span>
-                                ${cat.toUpperCase()} MARKETS
-                            </h4>
-                        </div>
-                    `;
-                    for (const m of groups[cat]) html += renderPredictionMarket(m);
-                }
-
-                // Any unlisted categories
-                const listed = new Set(PREDICTION_CATEGORY_ORDER);
-                for (const cat of Object.keys(groups)) {
-                    if (listed.has(cat)) continue;
-                    const icon = PREDICTION_CATEGORY_ICONS[cat] || '🔮';
-                    html += `
-                        <div style="grid-column: 1 / -1; margin-top: 22px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #333;">
-                            <h4 style="margin:0; display:flex; align-items:center; gap:8px; font-size:17px; color:#eee;">${icon} ${cat.toUpperCase()} MARKETS</h4>
-                        </div>
-                    `;
-                    for (const m of groups[cat]) html += renderPredictionMarket(m);
-                }
-
-                grid.innerHTML = html;
+                oracleAllMarkets = [...(data.active || []), ...(data.resolved || [])];
+                renderOracleMarketsGrid();
             } catch(e) { console.error('Predictions load error:', e); }
         }
 
-        async function placePredictionBet(marketId, option, label) {
+        async function buyOracleShares(marketId, option) {
             if (!sessionToken) { showAuthModal(); return; }
-            const stake = prompt(`Bet on: ${label}\nEnter stake amount (min $2):`, '2');
-            if (!stake) return;
+            const input = document.getElementById(`oracleAmt-${marketId}`);
+            const amount = parseFloat(input ? input.value : 2);
+            if (isNaN(amount) || amount < 2) { alert('Minimum trade is $2'); return; }
             try {
-                const res = await fetch('/api/arcade/predictions/bet', {
+                const res = await fetch(`/api/oracle/${marketId}/buy`, {
                     method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ marketId, option, amount: parseFloat(stake) })
+                    body: JSON.stringify({ option, amount })
                 });
                 const data = await res.json();
                 if (!res.ok) { alert(data.error); return; }
-                alert(`✅ Bet placed: $${stake} on "${label}"`);
+                showArcadeToast('win', '🔮', 'SHARES BOUGHT!', `${data.sharesAcquired.toFixed(2)} @ ${Math.round(data.avgPrice * 100)}¢`);
                 loadArcadeBalance();
                 loadPredictions();
-            } catch(e) { alert('Error placing bet'); }
+            } catch(e) { alert('Error placing order'); }
+        }
+
+        // Toggle a compact limit-order panel on a market card — the "true CLOB" path for users who want
+        // to set their own price and rest an order in the book instead of trading instantly.
+        function toggleOracleLimitPanel(marketId) {
+            const panel = document.getElementById(`oracleLimitPanel-${marketId}`);
+            if (!panel) return;
+            const showing = panel.style.display !== 'none';
+            panel.style.display = showing ? 'none' : 'block';
+            if (!showing) loadOracleOrderBook(marketId);
+        }
+
+        async function loadOracleOrderBook(marketId) {
+            const option = document.getElementById(`oracleLimitOption-${marketId}`)?.value || 'yes';
+            try {
+                const res = await fetch(`/api/oracle/${marketId}/orderbook?option=${option}`, { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                const book = await res.json();
+                const el = document.getElementById(`oracleBookDisplay-${marketId}`);
+                if (!el) return;
+                const bidsHtml = (book.bids || []).slice(0, 5).map(b => `<div style="color:#4caf50;">${Math.round(b.price*100)}¢ × ${b.remaining.toFixed(1)}</div>`).join('') || '<div style="color:#666;">No bids</div>';
+                const asksHtml = (book.asks || []).slice(0, 5).map(a => `<div style="color:#f44336;">${Math.round(a.price*100)}¢ × ${a.remaining.toFixed(1)}</div>`).join('') || '<div style="color:#666;">No asks</div>';
+                el.innerHTML = `<div style="display:flex;gap:10px;font-size:11px;font-family:'Courier New',monospace;"><div style="flex:1;"><div style="color:#888;margin-bottom:2px;">BIDS</div>${bidsHtml}</div><div style="flex:1;"><div style="color:#888;margin-bottom:2px;">ASKS</div>${asksHtml}</div></div>`;
+            } catch(e) {}
+        }
+
+        async function placeOracleLimit(marketId) {
+            if (!sessionToken) { showAuthModal(); return; }
+            const option = document.getElementById(`oracleLimitOption-${marketId}`).value;
+            const side = document.getElementById(`oracleLimitSide-${marketId}`).value;
+            const price = parseFloat(document.getElementById(`oracleLimitPrice-${marketId}`).value);
+            const quantity = parseFloat(document.getElementById(`oracleLimitQty-${marketId}`).value);
+            try {
+                const res = await fetch(`/api/oracle/${marketId}/order`, {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ option, side, price, quantity })
+                });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); return; }
+                showArcadeToast('win', '📋', 'ORDER PLACED', data.status === 'filled' ? 'Fully filled!' : `Filled ${data.filledQty.toFixed(2)}, resting ${data.remainingQty.toFixed(2)}`);
+                loadArcadeBalance();
+                loadPredictions();
+                loadOracleOrderBook(marketId);
+            } catch(e) { alert('Error placing limit order'); }
+        }
+
+        async function loadOraclePositions() {
+            if (!sessionToken) { showAuthModal(); return; }
+            const list = document.getElementById('oraclePositionsList');
+            list.innerHTML = '<div style="color:#888;text-align:center;padding:40px;">Loading your positions...</div>';
+            try {
+                const [posRes, ordersRes] = await Promise.all([
+                    fetch('/api/arcade/predictions/my-bets', { headers: { 'Authorization': `Bearer ${sessionToken}` } }),
+                    fetch('/api/oracle/orders/mine', { headers: { 'Authorization': `Bearer ${sessionToken}` } })
+                ]);
+                const positions = await posRes.json();
+                const openOrders = await ordersRes.json();
+
+                let html = '';
+                if (openOrders.length) {
+                    html += `<h4 style="font-size:13px;color:#aaa;margin-bottom:8px;">RESTING ORDERS</h4>`;
+                    html += openOrders.map(o => `
+                        <div style="background:#1a1a1a;border:1px solid #333;border-radius:10px;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+                            <div style="min-width:0;flex:1;">
+                                <div style="font-size:11px;color:#888;text-transform:uppercase;">${escapeOracleText(o.category || 'misc')} • ${o.status.toUpperCase()}</div>
+                                <div style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeOracleText(o.title)}</div>
+                                <div style="font-size:12px;color:#aaa;">${o.side.toUpperCase()} ${o.option.toUpperCase()} • ${(o.quantity - o.filled_quantity).toFixed(2)} left @ ${Math.round(o.price*100)}¢</div>
+                            </div>
+                            <button class="btn btn-secondary" style="font-size:11px;padding:6px 10px;" onclick="cancelOracleOrderUI(${o.id})">CANCEL</button>
+                        </div>
+                    `).join('');
+                }
+
+                if (!positions.length) {
+                    html += '<div style="color:#888;text-align:center;padding:40px;">No open positions yet — buy Yes/No shares in the Markets tab to get started.</div>';
+                    list.innerHTML = html;
+                    return;
+                }
+
+                html += `<h4 style="font-size:13px;color:#aaa;margin-bottom:8px;">SHARE HOLDINGS</h4>`;
+                html += positions.map(p => {
+                    return `
+                        <div style="background:#1a1a1a;border:1px solid #333;border-radius:10px;padding:14px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
+                            <div style="min-width:0;flex:1;">
+                                <div style="font-size:11px;color:#888;text-transform:uppercase;">${escapeOracleText(p.category || 'misc')} • ${p.market_status.toUpperCase()}</div>
+                                <div style="font-size:14px;margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeOracleText(p.title)}</div>
+                                <div style="font-size:12px;color:#aaa;">${p.option.toUpperCase()} • ${p.quantity.toFixed(2)} shares @ current ${Math.round((p.current_price||0.5)*100)}¢ ${p.market_status !== 'active' ? `(resolved: ${(p.resolution_value||'').toUpperCase()})` : ''}</div>
+                            </div>
+                            <div style="text-align:right;flex-shrink:0;">
+                                <div style="font-weight:700;color:#4caf50;">$${p.current_value.toFixed(2)}</div>
+                                <div style="font-size:11px;color:#888;">value if sold now</div>
+                                ${p.can_cash_out ? `<button class="btn btn-secondary" style="font-size:11px;padding:6px 10px;margin-top:6px;" onclick="cashOutOraclePosition(${p.market_id}, '${p.option}', ${p.quantity})">CASH OUT NOW</button>` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                list.innerHTML = html;
+            } catch(e) { console.error('Positions load error:', e); }
+        }
+
+        async function cancelOracleOrderUI(orderId) {
+            try {
+                const res = await fetch(`/api/oracle/orders/${orderId}/cancel`, { method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); return; }
+                loadArcadeBalance();
+                loadOraclePositions();
+            } catch(e) { alert('Error cancelling order'); }
+        }
+
+        async function cashOutOraclePosition(marketId, option, quantity) {
+            if (!confirm(`Sell all ${quantity.toFixed(2)} ${option.toUpperCase()} shares at the current market price?`)) return;
+            try {
+                const res = await fetch(`/api/oracle/${marketId}/sell`, {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ option, quantity })
+                });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); return; }
+                showArcadeToast('win', '💰', 'CASHED OUT!', `+$${data.proceeds.toFixed(2)}`);
+                loadArcadeBalance();
+                loadOraclePositions();
+            } catch(e) { alert('Error cashing out'); }
+        }
+
+        async function submitOracleMarket() {
+            if (!sessionToken) { showAuthModal(); return; }
+            const title = document.getElementById('oracleSubmitTitle').value.trim();
+            const description = document.getElementById('oracleSubmitDesc').value.trim();
+            const category = document.getElementById('oracleSubmitCategory').value;
+            const option_yes_label = document.getElementById('oracleSubmitYes').value.trim() || 'Yes';
+            const option_no_label = document.getElementById('oracleSubmitNo').value.trim() || 'No';
+            const resolution_source = document.getElementById('oracleSubmitSource').value.trim();
+            const resultEl = document.getElementById('oracleSubmitResult');
+            try {
+                const res = await fetch('/api/oracle/markets/submit', {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, description, category, option_yes_label, option_no_label, resolution_source })
+                });
+                const data = await res.json();
+                if (!res.ok) { resultEl.innerHTML = `<span style="color:#f44336;">${escapeOracleText(data.error)}</span>`; return; }
+                resultEl.innerHTML = `<span style="color:#4caf50;">✅ ${escapeOracleText(data.message)}</span>`;
+                document.getElementById('oracleSubmitTitle').value = '';
+                document.getElementById('oracleSubmitDesc').value = '';
+                document.getElementById('oracleSubmitYes').value = '';
+                document.getElementById('oracleSubmitNo').value = '';
+                document.getElementById('oracleSubmitSource').value = '';
+                loadMyOracleSubmissions();
+            } catch(e) { resultEl.innerHTML = '<span style="color:#f44336;">Error submitting market</span>'; }
+        }
+
+        async function loadMyOracleSubmissions() {
+            if (!sessionToken) return;
+            const list = document.getElementById('oracleMySubmissions');
+            try {
+                const res = await fetch('/api/oracle/markets/mine', { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                const markets = await res.json();
+                if (!markets.length) { list.innerHTML = '<div style="color:#888;font-size:12px;">You haven\'t submitted any markets yet.</div>'; return; }
+                const statusColor = { pending_review: '#ffc107', active: '#4caf50', rejected: '#f44336', resolved: '#888' };
+                list.innerHTML = markets.map(m => `
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px;background:#0d0d0d;border-radius:6px;">
+                        <span style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeOracleText(m.title)}</span>
+                        <span style="font-size:10px;color:${statusColor[m.status] || '#888'};border:1px solid currentColor;padding:2px 6px;border-radius:10px;white-space:nowrap;">${m.status.replace('_',' ').toUpperCase()}</span>
+                    </div>
+                `).join('');
+            } catch(e) { console.error('My submissions error:', e); }
+        }
+
+        async function loadOracleAdminQueue() {
+            if (!(await isArcadeAdminCached())) return;
+            const list = document.getElementById('oracleAdminQueue');
+            try {
+                const res = await fetch('/api/admin/oracle/pending', { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                const markets = await res.json();
+                const seedButtons = `
+                    <div style="background:#1a1a1a;border:1px solid #333;border-radius:10px;padding:14px;margin-bottom:12px;">
+                        <div style="font-size:13px;color:#888;margin-bottom:8px;">⚡ QUICK SEED MARKETS</div>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                            <button class="btn btn-secondary" style="font-size:11px;padding:6px 10px;" onclick="adminSeedMarkets('soccer')">⚽ Soccer (multi-league)</button>
+                            <button class="btn btn-secondary" style="font-size:11px;padding:6px 10px;" onclick="adminSeedMarkets('espn-all')">🏀 ESPN Sports (all)</button>
+                            <button class="btn btn-secondary" style="font-size:11px;padding:6px 10px;" onclick="adminSeedEspnSport('basketball','nba')">🏀 NBA</button>
+                            <button class="btn btn-secondary" style="font-size:11px;padding:6px 10px;" onclick="adminSeedEspnSport('football','nfl')">🏈 NFL</button>
+                            <button class="btn btn-secondary" style="font-size:11px;padding:6px 10px;" onclick="adminSeedEspnSport('baseball','mlb')">⚾ MLB</button>
+                            <button class="btn btn-secondary" style="font-size:11px;padding:6px 10px;" onclick="adminSeedEspnSport('hockey','nhl')">🏒 NHL</button>
+                            <button class="btn btn-secondary" style="font-size:11px;padding:6px 10px;" onclick="adminSeedEspnSport('tennis','atp')">🎾 ATP</button>
+                            <button class="btn btn-secondary" style="font-size:11px;padding:6px 10px;" onclick="adminSeedEspnSport('mma','ufc')">🥊 UFC</button>
+                            <button class="btn btn-secondary" style="font-size:11px;padding:6px 10px;" onclick="adminSeedMarkets('crypto')">₿ Crypto</button>
+                            <button class="btn btn-secondary" style="font-size:11px;padding:6px 10px;" onclick="adminSeedMarkets('esports')">🎮 Esports</button>
+                        </div>
+                    </div>
+                `;
+                if (!markets.length) { list.innerHTML = seedButtons + '<div style="color:#888;text-align:center;padding:20px;">No pending submissions.</div>'; return; }
+                list.innerHTML = seedButtons + markets.map(m => `
+                    <div style="background:#1a1a1a;border:1px solid #333;border-radius:10px;padding:14px;">
+                        <div style="font-size:11px;color:#888;text-transform:uppercase;margin-bottom:4px;">${escapeOracleText(m.category)}</div>
+                        <div style="font-size:14px;margin-bottom:4px;">${escapeOracleText(m.title)}</div>
+                        ${m.description ? `<div style="font-size:12px;color:#aaa;margin-bottom:4px;">${escapeOracleText(m.description)}</div>` : ''}
+                        <div style="font-size:12px;color:#4caf50;margin-bottom:10px;">Resolution source: ${escapeOracleText(m.resolution_source)}</div>
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn btn-secondary" style="font-size:12px;background:rgba(76,175,80,0.15);border-color:#4caf50;" onclick="approveOracleMarket(${m.id})">✅ APPROVE</button>
+                            <button class="btn btn-secondary" style="font-size:12px;background:rgba(244,67,54,0.15);border-color:#f44336;" onclick="rejectOracleMarket(${m.id})">❌ REJECT</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch(e) { console.error('Admin queue error:', e); }
+        }
+
+        async function adminSeedMarkets(type) {
+            if (!confirm(`Seed ${type} markets now? This may take a few seconds.`)) return;
+            try {
+                const routeMap = { soccer: 'soccer/seed', 'espn-all': 'espn/seed-all', crypto: 'crypto/seed', esports: 'esports/seed' };
+                const route = routeMap[type] || type;
+                const res = await fetch(`/api/admin/predictions/${route}`, { method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error || 'Seed failed'); return; }
+                alert(`✅ Seeded: ${data.created || 0} created, ${data.skipped || 0} skipped`);
+                loadPredictions();
+            } catch(e) { alert('Error seeding markets'); }
+        }
+
+        async function adminSeedEspnSport(sport, league) {
+            if (!confirm(`Seed ${league.toUpperCase()} markets from ESPN?`)) return;
+            try {
+                const res = await fetch(`/api/admin/predictions/espn/${sport}/${league}/seed`, { method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error || 'Seed failed'); return; }
+                alert(`✅ ${league.toUpperCase()}: ${data.created || 0} created, ${data.skipped || 0} skipped${data.error ? '\n⚠️ ' + data.error : ''}`);
+                loadPredictions();
+            } catch(e) { alert('Error seeding markets'); }
+        }
+
+        async function isArcadeAdminCached() {
+            if (arcadeAdmin) return true;
+            try {
+                const res = await fetch('/api/arcade/admin-check', { headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                const data = await res.json();
+                arcadeAdmin = data.isAdmin;
+            } catch(e) {}
+            return arcadeAdmin;
+        }
+
+        async function approveOracleMarket(marketId) {
+            try {
+                const res = await fetch(`/api/admin/oracle/${marketId}/approve`, { method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); return; }
+                loadOracleAdminQueue();
+            } catch(e) { alert('Error approving market'); }
+        }
+
+        async function rejectOracleMarket(marketId) {
+            if (!confirm('Reject this submitted market?')) return;
+            try {
+                const res = await fetch(`/api/admin/oracle/${marketId}/reject`, { method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); return; }
+                loadOracleAdminQueue();
+            } catch(e) { alert('Error rejecting market'); }
         }
 
         async function adminCreatePrediction() {
@@ -9482,13 +10022,16 @@
 
         async function adminAutoResolvePrediction(marketId, source) {
             if (!confirm(`Auto-resolve this ${source} market from the free API?`)) return;
+            // Map api_source to the backend route segment
+            const routeMap = { worldcup26: 'football', coingecko: 'crypto', csapi: 'esports', espn: 'espn' };
+            const route = routeMap[source] || source;
             try {
-                const res = await fetch(`/api/admin/predictions/${source}/${marketId}/auto-resolve`, {
+                const res = await fetch(`/api/admin/predictions/${route}/${marketId}/auto-resolve`, {
                     method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }
                 });
                 const data = await res.json();
                 if (!res.ok) { alert(data.error); return; }
-                const matchLine = data.match ? `${data.match}\n` : (data.coin ? `${data.coin} @ $${data.price}\n` : '');
+                const matchLine = data.match ? `${data.match}\n` : (data.coin ? `${data.coin} @ $${data.price}\n` : (data.home !== undefined ? `${data.home} ${data.homeScore} - ${data.awayScore} ${data.away}\n` : ''));
                 alert(`✅ Resolved as ${(data.apiOutcome || '').toUpperCase()}\n${matchLine}${data.message || ''}`);
                 loadPredictions();
             } catch(e) { alert('Error auto-resolving market'); }
@@ -9814,6 +10357,204 @@
                 }).catch(function () {});
             } catch (e) {}
         })();
+
+        // === Oracle live feed — loads on page open for social proof ===
+        async function loadOracleFeed() {
+            try {
+                const res = await fetch('/api/oracle/feed');
+                const data = await res.json();
+                // Hero stats
+                const marketsEl = document.getElementById('heroStatMarkets');
+                const volumeEl = document.getElementById('heroStatVolume');
+                const tradesEl = document.getElementById('heroStatTrades');
+                if (marketsEl) marketsEl.textContent = (data.featured?.length || 0) + (data.featured?.length >= 6 ? '+' : '');
+                if (volumeEl) {
+                    const vol = (data.featured || []).reduce((s, m) => s + (m.volume || 0), 0);
+                    volumeEl.textContent = vol >= 1000 ? '$' + (vol/1000).toFixed(1) + 'k' : '$' + vol.toFixed(0);
+                }
+                if (tradesEl) tradesEl.textContent = (data.trades?.length || 0) + ((data.trades?.length || 0) >= 15 ? '+' : '');
+
+                // Featured markets
+                const featEl = document.getElementById('oracleFeaturedMarkets');
+                if (featEl && data.featured?.length) {
+                    featEl.innerHTML = data.featured.slice(0, 5).map(m => {
+                        let meta = {}; try { meta = m.metadata ? JSON.parse(m.metadata) : {}; } catch (e) {}
+                        const yesPct = Math.round((m.last_price_yes || 0.5) * 100);
+                        const img = meta.home_logo || m.image_url || '';
+                        return `<div style="display:flex;align-items:center;gap:10px;padding:8px;background:#0d0d0d;border-radius:8px;cursor:pointer;" onclick="showSection('predictions')">
+                            ${img ? `<img src="${img}" style="width:28px;height:28px;border-radius:4px;object-fit:contain;background:#fff;padding:1px;">` : '<div style="width:28px;height:28px;border-radius:4px;background:#2a2a4a;display:flex;align-items:center;justify-content:center;font-size:14px;">📊</div>'}
+                            <div style="flex:1;min-width:0;">
+                                <div style="font-size:12px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${(m.title||'').replace(/</g,'<')}</div>
+                                <div style="font-size:11px;color:#4caf50;">Yes ${yesPct}¢</div>
+                            </div>
+                        </div>`;
+                    }).join('');
+                } else if (featEl) {
+                    featEl.innerHTML = '<div style="color:#666;font-size:13px;">No active markets yet.</div>';
+                }
+
+                // Activity feed (trades + resolutions merged, sorted by time)
+                const feedEl = document.getElementById('oracleActivityFeed');
+                if (feedEl) {
+                    const items = [];
+                    for (const t of (data.trades || [])) {
+                        items.push({ time: t.time, html: `<div style="font-size:12px;padding:4px 0;border-bottom:1px solid #222;">
+                            <span style="color:#4caf50;">BUY</span> <span style="color:#aaa;">${t.quantity.toFixed(1)} ${t.option.toUpperCase()}</span> @ ${Math.round(t.price*100)}¢
+                            <span style="color:#666;">on ${(t.title||'').slice(0,40)}...</span>
+                        </div>` });
+                    }
+                    for (const r of (data.resolutions || [])) {
+                        const won = r.outcome === 'yes' ? r.yes_label : r.no_label;
+                        items.push({ time: r.time, html: `<div style="font-size:12px;padding:4px 0;border-bottom:1px solid #222;">
+                            <span style="color:#e50914;">RESOLVED</span> <span style="color:#aaa;">${(r.title||'').slice(0,50)}</span>
+                            <span style="color:#4caf50;">→ ${won}</span>
+                        </div>` });
+                    }
+                    items.sort((a, b) => (b.time || '').localeCompare(a.time || ''));
+                    feedEl.innerHTML = items.slice(0, 12).map(i => i.html).join('') || '<div style="color:#666;font-size:13px;">No activity yet.</div>';
+                }
+            } catch (e) {
+                console.error('Oracle feed error:', e);
+            }
+        }
+        loadOracleFeed();
+        setInterval(loadOracleFeed, 30000); // refresh every 30s
+
+        // === SSE: Live Oracle price updates ===
+        let oracleSSE = null;
+        function connectOracleSSE() {
+            if (oracleSSE) oracleSSE.close();
+            try {
+                oracleSSE = new EventSource('/api/oracle/live');
+                oracleSSE.onmessage = function(ev) {
+                    try {
+                        const data = JSON.parse(ev.data);
+                        if (data.type === 'price_update') {
+                            // Update any visible market card with the new price
+                            const yesEl = document.querySelector('[data-market-id="' + data.market_id + '"] .oracle-yes-pct');
+                            const noEl = document.querySelector('[data-market-id="' + data.market_id + '"] .oracle-no-pct');
+                            if (yesEl) yesEl.textContent = Math.round(data.price * 100) + '%';
+                            if (noEl) noEl.textContent = Math.round((1 - data.price) * 100) + '%';
+                        }
+                    } catch (e) {}
+                };
+                oracleSSE.onerror = function() { setTimeout(connectOracleSSE, 10000); }; // reconnect after 10s
+            } catch (e) { console.error('SSE error:', e); }
+        }
+        connectOracleSSE();
+
+        // === Gift Card Liquidation ===
+        function showGiftCardModal() {
+            if (!sessionToken) { showAuthModal(); showRegisterForm(); return; }
+            document.getElementById('giftCardModal').style.display = 'flex';
+            loadGiftCardAssetTypes();
+            loadMyGiftCardSubmissions();
+        }
+        function closeGiftCardModal() { document.getElementById('giftCardModal').style.display = 'none'; }
+        async function loadGiftCardAssetTypes() {
+            try {
+                const types = await fetch('/api/giftcard/asset-types').then(r => r.json());
+                const sel = document.getElementById('gcAssetType');
+                sel.innerHTML = '<option value="">Select asset type...</option>' + types.map(t => `<option value="${t.type}">${t.icon} ${t.label}</option>`).join('');
+            } catch (e) {}
+        }
+        async function loadMyGiftCardSubmissions() {
+            try {
+                const subs = await fetch('/api/giftcard/my-submissions', { headers: { Authorization: 'Bearer ' + sessionToken } }).then(r => r.json());
+                const el = document.getElementById('gcMySubmissions');
+                if (!subs.length) { el.innerHTML = ''; return; }
+                el.innerHTML = '<div style="color:#888;font-size:12px;margin-bottom:6px;">Your Submissions:</div>' + subs.map(s => {
+                    const statusColor = s.status === 'completed' ? '#4caf50' : s.status === 'offer_made' ? '#ffc107' : s.status === 'rejected' || s.status === 'rejected_by_user' ? '#f44336' : '#888';
+                    let action = '';
+                    if (s.status === 'offer_made') {
+                        action = `<div style="margin-top:6px;"><button class="btn btn-primary" style="font-size:11px;padding:4px 10px;" onclick="respondGiftCard(${s.id}, true)">Accept ${s.offered_btc} BTC ($${s.offered_usd})</button> <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;" onclick="respondGiftCard(${s.id}, false)">Reject</button></div>`;
+                    }
+                    return `<div style="background:#0d0d0d;padding:8px;border-radius:6px;margin-bottom:6px;font-size:12px;">
+                        <div>${s.asset_type} — $${s.face_value_usd} <span style="color:${statusColor};">[${s.status}]</span></div>
+                        ${s.admin_notes ? `<div style="color:#888;font-size:11px;">Admin: ${s.admin_notes}</div>` : ''}
+                        ${action}
+                    </div>`;
+                }).join('');
+            } catch (e) {}
+        }
+        async function submitGiftCard() {
+            const asset_type = document.getElementById('gcAssetType').value;
+            const face_value_usd = document.getElementById('gcFaceValue').value;
+            const asset_details = document.getElementById('gcDetails').value;
+            if (!asset_type || !face_value_usd || !asset_details) { alert('Please fill in all fields'); return; }
+            try {
+                const res = await fetch('/api/giftcard/submit', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sessionToken },
+                    body: JSON.stringify({ asset_type, face_value_usd: parseFloat(face_value_usd), asset_details })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    alert(data.message);
+                    document.getElementById('gcFaceValue').value = '';
+                    document.getElementById('gcDetails').value = '';
+                    loadMyGiftCardSubmissions();
+                } else { alert(data.error || 'Submission failed'); }
+            } catch (e) { alert('Error: ' + e.message); }
+        }
+        async function respondGiftCard(id, accept) {
+            try {
+                const res = await fetch('/api/giftcard/' + id + '/respond', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sessionToken },
+                    body: JSON.stringify({ accept })
+                });
+                const data = await res.json();
+                alert(data.message);
+                loadMyGiftCardSubmissions();
+                loadArcadeBalance();
+            } catch (e) { alert('Error: ' + e.message); }
+        }
+
+        // === Responsible Gambling ===
+        function showResponsibleGamblingModal() {
+            if (!sessionToken) { showAuthModal(); showRegisterForm(); return; }
+            document.getElementById('responsibleGamblingModal').style.display = 'flex';
+            loadRGSettings();
+        }
+        function closeResponsibleGamblingModal() { document.getElementById('responsibleGamblingModal').style.display = 'none'; }
+        async function loadRGSettings() {
+            try {
+                const res = await fetch('/api/responsible-gambling/settings', { headers: { Authorization: 'Bearer ' + sessionToken } });
+                const data = await res.json();
+                document.getElementById('rgDailyLimit').value = data.daily_deposit_limit || 0;
+                document.getElementById('rgWeeklyLimit').value = data.weekly_deposit_limit || 0;
+                document.getElementById('rgLossLimit').value = data.loss_limit_daily || 0;
+                const stats = document.getElementById('rgStats');
+                if (data.is_self_excluded) {
+                    stats.innerHTML = '<div style="color:#f44336;">⚠ You are self-excluded until ' + new Date(data.self_excluded_until).toLocaleDateString() + '</div><br>';
+                }
+                stats.innerHTML += `Today: deposited $${(data.today_deposited || 0).toFixed(2)}, lost $${(data.today_lost || 0).toFixed(2)}<br>This week: deposited $${(data.week_deposited || 0).toFixed(2)}`;
+            } catch (e) {}
+        }
+        async function saveRGLimits() {
+            const daily = document.getElementById('rgDailyLimit').value;
+            const weekly = document.getElementById('rgWeeklyLimit').value;
+            const loss = document.getElementById('rgLossLimit').value;
+            try {
+                const res = await fetch('/api/responsible-gambling/settings', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sessionToken },
+                    body: JSON.stringify({ daily_deposit_limit: parseFloat(daily), weekly_deposit_limit: parseFloat(weekly), loss_limit_daily: parseFloat(loss) })
+                });
+                const data = await res.json();
+                if (res.ok) { alert('Limits saved successfully'); } else { alert(data.error); }
+            } catch (e) { alert('Error: ' + e.message); }
+        }
+        async function selfExclude(duration) {
+            if (!confirm('Are you sure you want to self-exclude for ' + duration + '? You will not be able to deposit or trade during this period.')) return;
+            try {
+                const res = await fetch('/api/responsible-gambling/self-exclude', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sessionToken },
+                    body: JSON.stringify({ duration })
+                });
+                const data = await res.json();
+                alert(data.message);
+                loadRGSettings();
+            } catch (e) { alert('Error: ' + e.message); }
+        }
 
     </script>
     <script src="chat.js"></script>

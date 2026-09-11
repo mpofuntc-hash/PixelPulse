@@ -66,6 +66,22 @@ function dbAll(sql, params = []) {
   });
 }
 
+// Run a series of dbRun/dbGet/dbAll calls inside a single SQLite transaction.
+// SQLite serializes writes under BEGIN IMMEDIATE, so concurrent orders can't
+// interleave their balance/share updates. If `fn` throws, the transaction is
+// rolled back and the error propagates.
+async function dbTransaction(fn) {
+  await dbRun('BEGIN IMMEDIATE TRANSACTION');
+  try {
+    const result = await fn({ dbRun, dbGet, dbAll });
+    await dbRun('COMMIT');
+    return result;
+  } catch (err) {
+    try { await dbRun('ROLLBACK'); } catch (_) {}
+    throw err;
+  }
+}
+
 async function ensureSchemaColumn(tableName, columnName, definition) {
   const columns = await dbAll(`PRAGMA table_info(${tableName})`);
   if (columns.some((column) => column.name === columnName)) {
@@ -96,6 +112,12 @@ async function ensureLegacySchema() {
     ['users', 'referral_code', 'TEXT'],
     ['users', 'referred_by_user_id', 'INTEGER'],
     ['users', 'popcash_clickid', 'TEXT'],
+    ['users', 'utm_source', 'TEXT'],
+    ['users', 'utm_medium', 'TEXT'],
+    ['users', 'utm_campaign', 'TEXT'],
+    ['users', 'utm_content', 'TEXT'],
+    ['users', 'utm_term', 'TEXT'],
+    ['users', 'first_landing_page', 'TEXT'],
     ['chat_messages', 'source', "TEXT DEFAULT 'webapp'"],
     ['chat_messages', 'reply_to_id', 'INTEGER'],
     ['skins', 'price_fiat', 'REAL DEFAULT 0'],
@@ -175,7 +197,19 @@ async function ensureLegacySchema() {
     ['prediction_markets', 'created_by', 'INTEGER'],
     ['prediction_markets', 'resolved_by', 'INTEGER'],
     ['prediction_markets', 'resolution_value', 'TEXT'],
-    ['prediction_markets', 'resolved_at', 'TEXT']
+    ['prediction_markets', 'resolved_at', 'TEXT'],
+    ['prediction_bets', 'entry_price', 'REAL DEFAULT 0.5'],
+    ['prediction_markets', 'is_user_created', 'INTEGER DEFAULT 0'],
+    ['prediction_markets', 'resolution_source', 'TEXT'],
+    ['prediction_markets', 'last_price_yes', 'REAL DEFAULT 0.5'],
+    ['prediction_markets', 'last_price_no', 'REAL DEFAULT 0.5'],
+    // Responsible gambling
+    ['users', 'self_excluded_until', 'TEXT'],
+    ['users', 'daily_deposit_limit', 'REAL DEFAULT 0'],
+    ['users', 'weekly_deposit_limit', 'REAL DEFAULT 0'],
+    ['users', 'loss_limit_daily', 'REAL DEFAULT 0'],
+    ['users', 'reality_check_last_shown', 'TEXT'],
+    ['users', 'rg_settings_set', 'INTEGER DEFAULT 0']
   ];
 
   for (const [tableName, columnName, definition] of requiredColumns) {
@@ -1378,6 +1412,129 @@ async function initSchema() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id),
       FOREIGN KEY (market_id) REFERENCES prediction_markets(id)
+    );
+  `);
+
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS prediction_price_history (
+      id INTEGER PRIMARY KEY,
+      market_id INTEGER NOT NULL,
+      yes_price REAL NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (market_id) REFERENCES prediction_markets(id)
+    );
+  `);
+
+  // ===== THE ORACLE: real order-book share ledger (Polymarket-style, $1/$0 fixed redemption) =====
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS oracle_shares (
+      id INTEGER PRIMARY KEY,
+      market_id INTEGER NOT NULL,
+      user_id INTEGER,
+      is_house INTEGER DEFAULT 0,
+      option TEXT NOT NULL,
+      quantity REAL DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (market_id) REFERENCES prediction_markets(id)
+    );
+  `);
+  await dbExec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_oracle_shares_unique ON oracle_shares (market_id, option, COALESCE(user_id, 0), is_house);`);
+
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS oracle_orders (
+      id INTEGER PRIMARY KEY,
+      market_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      option TEXT NOT NULL,
+      side TEXT NOT NULL,
+      price REAL NOT NULL,
+      quantity REAL NOT NULL,
+      filled_quantity REAL DEFAULT 0,
+      status TEXT DEFAULT 'open',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (market_id) REFERENCES prediction_markets(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  `);
+
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS oracle_trades (
+      id INTEGER PRIMARY KEY,
+      market_id INTEGER NOT NULL,
+      option TEXT NOT NULL,
+      price REAL NOT NULL,
+      quantity REAL NOT NULL,
+      is_house_fill INTEGER DEFAULT 0,
+      buy_user_id INTEGER,
+      sell_user_id INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (market_id) REFERENCES prediction_markets(id)
+    );
+  `);
+
+  // Gift card / game token liquidation → BTC pipeline
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS giftcard_liquidations (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      asset_type TEXT NOT NULL,
+      asset_details TEXT NOT NULL,
+      face_value_usd REAL DEFAULT 0,
+      offered_usd REAL DEFAULT 0,
+      offered_btc REAL DEFAULT 0,
+      status TEXT DEFAULT 'pending_review',
+      admin_notes TEXT,
+      reviewed_by INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      reviewed_at TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  `);
+
+  // Responsible gambling: daily tracking of deposits and losses
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS rg_daily_tracker (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      deposited_usd REAL DEFAULT 0,
+      lost_usd REAL DEFAULT 0,
+      UNIQUE(user_id, date),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  `);
+
+  // Ad conversion tracking: UTM-attributed events (signup, deposit, trade, giftcard)
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS conversion_events (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER,
+      event_type TEXT NOT NULL,
+      value_usd REAL DEFAULT 0,
+      value_btc REAL DEFAULT 0,
+      utm_source TEXT,
+      utm_medium TEXT,
+      utm_campaign TEXT,
+      utm_content TEXT,
+      utm_term TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  `);
+
+  // Email notification queue
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS email_queue (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER,
+      to_email TEXT,
+      subject TEXT,
+      body TEXT,
+      status TEXT DEFAULT 'pending',
+      sent_at TEXT,
+      error TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
@@ -3446,6 +3603,77 @@ async function logSystemEvent(logType, message, details = null, severity = 'info
   `, [logType, message, details, severity]);
 }
 
+// ===== EMAIL NOTIFICATIONS =====
+// Sends email via SMTP if configured; otherwise queues it for later. Safe to call even without SMTP set up.
+let emailTransporter = null;
+function getEmailTransporter() {
+  if (emailTransporter) return emailTransporter;
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  const smtpFrom = process.env.SMTP_FROM || smtpUser;
+  if (!smtpHost || !smtpUser || !smtpPass) return null;
+  try {
+    const nodemailer = require('nodemailer');
+    emailTransporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      auth: { user: smtpUser, pass: smtpPass }
+    });
+    return emailTransporter;
+  } catch (e) {
+    console.error('Email transporter init error:', e.message);
+    return null;
+  }
+}
+
+async function sendEmail(to, subject, body) {
+  const transporter = getEmailTransporter();
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@pixelpulse.zentriva-clubsync.online';
+  const result = await dbRun('INSERT INTO email_queue (to_email, subject, body, status) VALUES (?, ?, ?, ?)', [to, subject, body, 'pending']);
+  const queuedId = result.lastID;
+
+  if (!transporter) {
+    console.log(`Email queued (no SMTP configured): [${queuedId}] ${subject} -> ${to}`);
+    return { queued: true, sent: false };
+  }
+
+  try {
+    await transporter.sendMail({ from, to, subject, html: body, text: body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() });
+    await dbRun('UPDATE email_queue SET status = ?, sent_at = CURRENT_TIMESTAMP WHERE id = ?', ['sent', queuedId]);
+    return { queued: true, sent: true };
+  } catch (err) {
+    console.error('Email send failed:', err.message);
+    await dbRun('UPDATE email_queue SET status = ?, error = ? WHERE id = ?', ['failed', err.message, queuedId]);
+    return { queued: true, sent: false, error: err.message };
+  }
+}
+
+async function notifyUserByEmail(userId, subject, body) {
+  const user = await dbGet('SELECT email FROM users WHERE id = ?', [userId]);
+  if (!user || !user.email) return;
+  await sendEmail(user.email, subject, body);
+}
+
+async function emailDepositConfirmed(userId, btcAmount, usdAmount) {
+  await notifyUserByEmail(userId, 'PixelPulse: BTC Deposit Confirmed',
+    `<p>Hi,</p><p>Your deposit of <strong>${btcAmount} BTC</strong> has been confirmed and <strong>$${usdAmount.toFixed(2)}</strong> has been credited to your PixelPulse balance.</p><p>You can start trading on The Oracle or playing arcade games now.</p><p>Play responsibly. 18+ only.</p>`);
+}
+
+async function emailGiftCardStatus(userId, status, assetType, usdValue, btcValue) {
+  let body = '';
+  if (status === 'offer_made') {
+    body = `<p>Hi,</p><p>We have reviewed your <strong>${assetType}</strong> submission. We are offering <strong>${btcValue} BTC</strong> (≈ $${usdValue.toFixed(2)} USD). Please log in and visit Wallet → Redeem Gift Card to accept or reject this offer.</p>`;
+  } else if (status === 'completed') {
+    body = `<p>Hi,</p><p>Your <strong>${assetType}</strong> liquidation has been completed. <strong>${btcValue} BTC</strong> has been credited to your PixelPulse balance.</p>`;
+  } else if (status === 'rejected') {
+    body = `<p>Hi,</p><p>We were unable to accept your <strong>${assetType}</strong> submission. Please check your PixelPulse account for more details.</p>`;
+  }
+  await notifyUserByEmail(userId, `PixelPulse: Gift Card Update — ${status.replace(/_/g, ' ').toUpperCase()}`, body);
+}
+
 // IT TICKET SYSTEM
 
 // Create IT ticket
@@ -4335,7 +4563,7 @@ function ensureOwnsResource(req, res, resourceUserId, label = 'resource') {
 
 // API: Register user
 app.post('/api/auth/register', rateLimit({ windowMs: 60 * 1000, max: 5, key: req => `register:${req.ip || 'unknown'}` }), async (req, res) => {
-  const { email, password, username, isAdult, referralCode, clickid } = req.body;
+  const { email, password, username, isAdult, referralCode, clickid, utm_source, utm_medium, utm_campaign, utm_content, utm_term, landing_page } = req.body;
 
   if (!validateEmail(email) || !validateText(password, { maxLength: 128, required: true }) || !validateText(username, { maxLength: 50, required: true })) {
     return res.status(400).json({ error: 'Invalid email, password, or username.' });
@@ -4372,11 +4600,21 @@ app.post('/api/auth/register', rateLimit({ windowMs: 60 * 1000, max: 5, key: req
   }
 
   const popcashClickId = (clickid && String(clickid).trim().length > 0) ? String(clickid).trim().slice(0, 128) : null;
+  const utmFields = {
+    source: (utm_source && String(utm_source).trim().slice(0, 64)) || null,
+    medium: (utm_medium && String(utm_medium).trim().slice(0, 64)) || null,
+    campaign: (utm_campaign && String(utm_campaign).trim().slice(0, 128)) || null,
+    content: (utm_content && String(utm_content).trim().slice(0, 128)) || null,
+    term: (utm_term && String(utm_term).trim().slice(0, 128)) || null,
+    landing: (landing_page && String(landing_page).trim().slice(0, 255)) || null
+  };
 
   const result = await dbRun(`
-    INSERT INTO users (email, password_hash, username, is_adult, referred_by, referred_by_user_id, popcash_clickid)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `, [normalizedEmail, passwordHash, String(username).trim(), 1, validReferralCode, referringUserId, popcashClickId]);
+    INSERT INTO users (email, password_hash, username, is_adult, referred_by, referred_by_user_id, popcash_clickid,
+                       utm_source, utm_medium, utm_campaign, utm_content, utm_term, first_landing_page)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [normalizedEmail, passwordHash, String(username).trim(), 1, validReferralCode, referringUserId, popcashClickId,
+      utmFields.source, utmFields.medium, utmFields.campaign, utmFields.content, utmFields.term, utmFields.landing]);
 
   const userId = result.lastID;
   // Generate the new user's personal referral code
@@ -4391,6 +4629,7 @@ app.post('/api/auth/register', rateLimit({ windowMs: 60 * 1000, max: 5, key: req
   const SIGNUP_BONUS_USD = 2.00;
   await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [SIGNUP_BONUS_USD, userId]);
   await logSystemEvent('info', `Signup bonus $${SIGNUP_BONUS_USD} credited to user ${userId}`, 'Welcome signup bonus');
+  await logConversionEvent(userId, 'signup', 0, 0);
 
   // Create referral tracking record if valid referral code was used
   if (validReferralCode) {
@@ -5993,8 +6232,9 @@ const CONVERTIBLE_CURRENCIES = ['BTC', 'ETH', 'USDT'];
 app.post('/api/convert', authenticateRequest, async (req, res) => {
   const { tokenType, amount, targetCurrency, walletAddress } = req.body;
   
-  if (!tokenType || !['steam', 'standoff2'].includes(tokenType)) {
-    return res.status(400).json({ error: 'Invalid token type. Must be steam or standoff2' });
+  const supportedTokens = ['steam', 'standoff2', 'robux', 'vbucks', 'pubg_uc', 'valorant_vp', 'genshin_crystals', 'freefire_diamonds'];
+  if (!tokenType || !supportedTokens.includes(tokenType)) {
+    return res.status(400).json({ error: `Invalid token type. Supported: ${supportedTokens.join(', ')}` });
   }
   
   if (!amount || amount <= 0) {
@@ -7891,7 +8131,7 @@ app.get('/api/arcade/deposit-address', authenticateRequest, async (req, res) => 
 });
 
 // API: Claim a BTC deposit by providing tx hash
-app.post('/api/arcade/claim-deposit', authenticateRequest, async (req, res) => {
+app.post('/api/arcade/claim-deposit', rateLimit({ windowMs: 60 * 60 * 1000, max: 10, key: req => `claim-deposit:${req.userId || req.ip}` }), authenticateRequest, async (req, res) => {
   try {
     const { txHash } = req.body;
     if (!txHash) return res.status(400).json({ error: 'Transaction hash required' });
@@ -7912,13 +8152,22 @@ app.post('/api/arcade/claim-deposit', authenticateRequest, async (req, res) => {
     const isFirstDeposit = !firstDeposit || firstDeposit.count === 0;
     const bonusUsd = isFirstDeposit ? 5.0 : 0.0;
     if (bonusUsd > 0) usdAmount += bonusUsd;
-    
+
+    // Responsible gambling: check deposit limits before crediting
+    try {
+      await checkAndTrackDeposit(req.userId, grossUsd);
+    } catch (rgErr) {
+      return res.status(400).json({ error: rgErr.message });
+    }
+
     await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_deposited = total_deposited + ? WHERE user_id = ?', [usdAmount, grossUsd, req.userId]);
     await dbRun('UPDATE crypto_deposits SET user_id = ?, status = ?, usd_credited = ?, credited_at = CURRENT_TIMESTAMP WHERE id = ?', 
       [req.userId, 'confirmed', usdAmount, deposit.id]);
     // Credit net deposit to pool and fee as house revenue
     await creditPoolDeposit(usdAmount);
     await creditHouseRevenue(feeUsd);
+    await logConversionEvent(req.userId, 'deposit', grossUsd, deposit.btc_amount);
+    await emailDepositConfirmed(req.userId, deposit.btc_amount, usdAmount);
     
     const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
     const bonusMsg = isFirstDeposit ? ` + $${bonusUsd.toFixed(2)} first-deposit bonus` : '';
@@ -8170,6 +8419,342 @@ app.get('/api/arcade/winners', async (req, res) => {
     username: w.username, game: w.game_type, stake: w.stake_amount,
     multiplier: w.multiplier, payout: w.payout, time: w.created_at
   })));
+});
+
+// API: Oracle activity feed — recent big trades and resolutions for social proof on the landing page
+app.get('/api/oracle/feed', async (req, res) => {
+  try {
+    // Recent large Oracle trades (peer or house)
+    const trades = await dbAll(`
+      SELECT t.*, m.title, m.option_yes_label, m.option_no_label,
+             bu.username AS buyer_name, su.username AS seller_name
+      FROM oracle_trades t
+      JOIN prediction_markets m ON t.market_id = m.id
+      LEFT JOIN users bu ON t.buy_user_id = bu.id
+      LEFT JOIN users su ON t.sell_user_id = su.id
+      ORDER BY t.created_at DESC LIMIT 15
+    `);
+    const tradeFeed = trades.map(t => ({
+      type: 'trade',
+      title: m_title(t),
+      option: t.option,
+      price: t.price,
+      quantity: t.quantity,
+      value: Math.round(t.price * t.quantity * 100) / 100,
+      buyer: t.buyer_name || (t.is_house_fill ? 'House' : null),
+      seller: t.seller_name || (t.is_house_fill ? 'House' : null),
+      is_house_fill: !!t.is_house_fill,
+      time: t.created_at
+    }));
+
+    // Recent resolved markets
+    const resolved = await dbAll(`
+      SELECT id, title, resolution_value, option_yes_label, option_no_label, resolved_at
+      FROM prediction_markets
+      WHERE status = 'resolved' AND resolved_at IS NOT NULL
+      ORDER BY resolved_at DESC LIMIT 10
+    `);
+    const resolveFeed = resolved.map(m => ({
+      type: 'resolution',
+      title: m.title,
+      outcome: m.resolution_value,
+      yes_label: m.option_yes_label,
+      no_label: m.option_no_label,
+      time: m.resolved_at
+    }));
+
+    // Top active markets by trade volume (last 7 days)
+    const featured = await dbAll(`
+      SELECT m.id, m.title, m.category, m.option_yes_label, m.option_no_label,
+             m.last_price_yes, m.last_price_no, m.image_url, m.metadata,
+             COUNT(t.id) AS trade_count,
+             COALESCE(SUM(t.price * t.quantity), 0) AS volume
+      FROM prediction_markets m
+      LEFT JOIN oracle_trades t ON t.market_id = m.id AND t.created_at > datetime('now', '-7 days')
+      WHERE m.status = 'active'
+      GROUP BY m.id
+      ORDER BY volume DESC, trade_count DESC
+      LIMIT 6
+    `);
+
+    res.json({ trades: tradeFeed, resolutions: resolveFeed, featured });
+  } catch (e) {
+    console.error('Oracle feed error:', e);
+    res.json({ trades: [], resolutions: [], featured: [] });
+  }
+});
+
+function m_title(t) { return t.title; }
+
+// ===== AD CONVERSION TRACKING =====
+// Log an attributed conversion event (signup, deposit, trade, giftcard). Stores UTM values from the user's first landing.
+async function logConversionEvent(userId, eventType, valueUsd = 0, valueBtc = 0) {
+  try {
+    const user = await dbGet('SELECT utm_source, utm_medium, utm_campaign, utm_content, utm_term FROM users WHERE id = ?', [userId]);
+    if (!user) return;
+    await dbRun(`
+      INSERT INTO conversion_events (user_id, event_type, value_usd, value_btc, utm_source, utm_medium, utm_campaign, utm_content, utm_term)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [userId, eventType, valueUsd, valueBtc, user.utm_source, user.utm_medium, user.utm_campaign, user.utm_content, user.utm_term]);
+  } catch (e) { console.error('Conversion tracking error:', e.message); }
+}
+
+// API: Admin report of signups and revenue by UTM source/medium
+app.get('/api/admin/conversions/report', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+  const { days } = req.query;
+  const lookback = Math.min(90, Math.max(1, parseInt(days) || 30));
+  const since = new Date(Date.now() - lookback * 24 * 60 * 60 * 1000).toISOString();
+
+  const summary = await dbAll(`
+    SELECT
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      COUNT(DISTINCT CASE WHEN event_type = 'signup' THEN user_id END) AS signups,
+      COUNT(DISTINCT CASE WHEN event_type = 'deposit' THEN user_id END) AS depositors,
+      SUM(CASE WHEN event_type = 'deposit' THEN value_usd ELSE 0 END) AS deposit_volume_usd,
+      SUM(CASE WHEN event_type = 'trade' THEN value_usd ELSE 0 END) AS trade_volume_usd,
+      SUM(CASE WHEN event_type = 'giftcard' THEN value_usd ELSE 0 END) AS giftcard_volume_usd
+    FROM conversion_events
+    WHERE created_at >= ?
+    GROUP BY utm_source, utm_medium, utm_campaign
+    ORDER BY deposit_volume_usd DESC
+  `, [since]);
+
+  const totals = await dbGet(`
+    SELECT
+      COUNT(DISTINCT CASE WHEN event_type = 'signup' THEN user_id END) AS total_signups,
+      SUM(CASE WHEN event_type = 'deposit' THEN value_usd ELSE 0 END) AS total_deposits,
+      SUM(CASE WHEN event_type = 'trade' THEN value_usd ELSE 0 END) AS total_trades
+    FROM conversion_events
+    WHERE created_at >= ?
+  `, [since]);
+
+  res.json({ lookback_days: lookback, since, summary, totals });
+});
+
+// ===== RESPONSIBLE GAMBLING =====
+// Check if user is currently self-excluded
+async function isUserSelfExcluded(userId) {
+  const user = await dbGet('SELECT self_excluded_until FROM users WHERE id = ?', [userId]);
+  if (!user || !user.self_excluded_until) return false;
+  return new Date(user.self_excluded_until) > new Date();
+}
+
+// Check deposit limits and track daily deposits. Throws if limit exceeded.
+async function checkAndTrackDeposit(userId, usdAmount) {
+  if (await isUserSelfExcluded(userId)) {
+    throw new Error('Your account is self-excluded. Please wait until your exclusion period ends.');
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const user = await dbGet('SELECT daily_deposit_limit, weekly_deposit_limit FROM users WHERE id = ?', [userId]);
+  if (!user) return; // no limits set
+
+  // Daily check
+  if (user.daily_deposit_limit > 0) {
+    const todayRow = await dbGet('SELECT deposited_usd FROM rg_daily_tracker WHERE user_id = ? AND date = ?', [userId, today]);
+    const todayDeposited = todayRow?.deposited_usd || 0;
+    if (todayDeposited + usdAmount > user.daily_deposit_limit) {
+      throw new Error(`Daily deposit limit of $${user.daily_deposit_limit} would be exceeded. You have deposited $${todayDeposited.toFixed(2)} today.`);
+    }
+  }
+
+  // Weekly check
+  if (user.weekly_deposit_limit > 0) {
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const weekRow = await dbGet('SELECT SUM(deposited_usd) as total FROM rg_daily_tracker WHERE user_id = ? AND date >= ?', [userId, weekAgo]);
+    const weekDeposited = weekRow?.total || 0;
+    if (weekDeposited + usdAmount > user.weekly_deposit_limit) {
+      throw new Error(`Weekly deposit limit of $${user.weekly_deposit_limit} would be exceeded. You have deposited $${weekDeposited.toFixed(2)} this week.`);
+    }
+  }
+
+  // Track the deposit
+  await dbRun('INSERT OR IGNORE INTO rg_daily_tracker (user_id, date, deposited_usd, lost_usd) VALUES (?, ?, 0, 0)', [userId, today]);
+  await dbRun('UPDATE rg_daily_tracker SET deposited_usd = deposited_usd + ? WHERE user_id = ? AND date = ?', [usdAmount, userId, today]);
+}
+
+// Track daily losses for loss-limit checks
+async function trackDailyLoss(userId, usdAmount) {
+  const today = new Date().toISOString().slice(0, 10);
+  await dbRun('INSERT OR IGNORE INTO rg_daily_tracker (user_id, date, deposited_usd, lost_usd) VALUES (?, ?, 0, 0)', [userId, today]);
+  await dbRun('UPDATE rg_daily_tracker SET lost_usd = lost_usd + ? WHERE user_id = ? AND date = ?', [usdAmount, userId, today]);
+}
+
+// Check if user has exceeded their daily loss limit
+async function checkLossLimit(userId, potentialLoss) {
+  const user = await dbGet('SELECT loss_limit_daily FROM users WHERE id = ?', [userId]);
+  if (!user || !user.loss_limit_daily || user.loss_limit_daily <= 0) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const todayRow = await dbGet('SELECT lost_usd FROM rg_daily_tracker WHERE user_id = ? AND date = ?', [userId, today]);
+  const todayLost = todayRow?.lost_usd || 0;
+  if (todayLost + potentialLoss > user.loss_limit_daily) {
+    throw new Error(`Daily loss limit of $${user.loss_limit_daily} would be exceeded. You have lost $${todayLost.toFixed(2)} today. Please set responsible limits or take a break.`);
+  }
+}
+
+// API: Get responsible gambling settings
+app.get('/api/responsible-gambling/settings', authenticateRequest, async (req, res) => {
+  const user = await dbGet('SELECT daily_deposit_limit, weekly_deposit_limit, loss_limit_daily, self_excluded_until, rg_settings_set FROM users WHERE id = ?', [req.userId]);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  const today = new Date().toISOString().slice(0, 10);
+  const todayRow = await dbGet('SELECT deposited_usd, lost_usd FROM rg_daily_tracker WHERE user_id = ? AND date = ?', [req.userId, today]);
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const weekRow = await dbGet('SELECT SUM(deposited_usd) as total FROM rg_daily_tracker WHERE user_id = ? AND date >= ?', [req.userId, weekAgo]);
+  res.json({
+    ...user,
+    today_deposited: todayRow?.deposited_usd || 0,
+    today_lost: todayRow?.lost_usd || 0,
+    week_deposited: weekRow?.total || 0,
+    is_self_excluded: user.self_excluded_until ? new Date(user.self_excluded_until) > new Date() : false
+  });
+});
+
+// API: Update responsible gambling limits
+app.post('/api/responsible-gambling/settings', authenticateRequest, async (req, res) => {
+  const { daily_deposit_limit, weekly_deposit_limit, loss_limit_daily } = req.body;
+  const daily = parseFloat(daily_deposit_limit) || 0;
+  const weekly = parseFloat(weekly_deposit_limit) || 0;
+  const loss = parseFloat(loss_limit_daily) || 0;
+  if (daily < 0 || weekly < 0 || loss < 0) return res.status(400).json({ error: 'Limits cannot be negative' });
+  if (daily > 10000 || weekly > 50000 || loss > 10000) return res.status(400).json({ error: 'Limits too high. Please contact support for higher limits.' });
+  await dbRun('UPDATE users SET daily_deposit_limit = ?, weekly_deposit_limit = ?, loss_limit_daily = ?, rg_settings_set = 1 WHERE id = ?',
+    [daily, weekly, loss, req.userId]);
+  await logSystemEvent('info', `RG limits updated by user ${req.userId}`, `Daily: $${daily}, Weekly: $${weekly}, Loss: $${loss}`);
+  res.json({ message: 'Limits updated successfully', daily_deposit_limit: daily, weekly_deposit_limit: weekly, loss_limit_daily: loss });
+});
+
+// API: Self-exclude (24h, 7d, 30d, 90d, or permanent)
+app.post('/api/responsible-gambling/self-exclude', authenticateRequest, async (req, res) => {
+  const { duration } = req.body;
+  const durations = { '24h': 1, '7d': 7, '30d': 30, '90d': 90, 'permanent': 3650 };
+  const days = durations[duration];
+  if (!days) return res.status(400).json({ error: 'Invalid duration. Use: 24h, 7d, 30d, 90d, or permanent' });
+  const until = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  await dbRun('UPDATE users SET self_excluded_until = ? WHERE id = ?', [until, req.userId]);
+  await logSystemEvent('warn', `User ${req.userId} self-excluded until ${until}`, `Duration: ${duration}`);
+  res.json({ message: `You have been self-excluded until ${new Date(until).toLocaleDateString()}. During this time you cannot deposit or trade.`, self_excluded_until: until });
+});
+
+// ===== GIFT CARD / GAME TOKEN LIQUIDATION → BTC =====
+// Users submit gift cards or game tokens for liquidation. Admin reviews, offers BTC, and credits on acceptance.
+// This is a manual flow now — upgradeable to a third-party API (e.g. Paxful, Bitrefill) later by replacing the admin review step.
+
+// Supported asset types for liquidation
+const LIQUIDATION_ASSET_TYPES = [
+  { type: 'steam_giftcard', label: 'Steam Gift Card', icon: '🎮' },
+  { type: 'amazon_giftcard', label: 'Amazon Gift Card', icon: '📦' },
+  { type: 'googleplay_giftcard', label: 'Google Play Gift Card', icon: '📱' },
+  { type: 'itunes_giftcard', label: 'iTunes Gift Card', icon: '🎵' },
+  { type: 'psn_giftcard', label: 'PlayStation Gift Card', icon: '🎮' },
+  { type: 'xbox_giftcard', label: 'Xbox Gift Card', icon: '🎮' },
+  { type: 'robux', label: 'Roblox Robux', icon: '🟢' },
+  { type: 'vbucks', label: 'Fortnite V-Bucks', icon: '🔵' },
+  { type: 'pubg_uc', label: 'PUBG Mobile UC', icon: '🔫' },
+  { type: 'valorant_vp', label: 'Valorant VP', icon: '🎯' },
+  { type: 'genshin_crystals', label: 'Genshin Crystals', icon: '⚔️' },
+  { type: 'freefire_diamonds', label: 'Free Fire Diamonds', icon: '💎' },
+  { type: 'steam_tokens', label: 'Steam CS2 Skins/Tokens', icon: '🔫' },
+  { type: 'standoff2_tokens', label: 'Standoff 2 Gold', icon: '🔫' },
+  { type: 'other', label: 'Other (describe in details)', icon: '🎁' },
+];
+
+// API: Submit a gift card / game token for liquidation
+app.post('/api/giftcard/submit', rateLimit({ windowMs: 60 * 60 * 1000, max: 5, key: req => `giftcard:${req.userId || req.ip}` }), authenticateRequest, async (req, res) => {
+  if (await isUserSelfExcluded(req.userId)) return res.status(403).json({ error: 'Your account is self-excluded.' });
+  const { asset_type, asset_details, face_value_usd } = req.body;
+  if (!asset_type || !LIQUIDATION_ASSET_TYPES.find(a => a.type === asset_type)) {
+    return res.status(400).json({ error: 'Invalid asset type' });
+  }
+  if (!asset_details || String(asset_details).trim().length < 5) {
+    return res.status(400).json({ error: 'Please provide full details (card code, receipt, account info, etc.)' });
+  }
+  const faceValue = parseFloat(face_value_usd) || 0;
+  if (faceValue < 1) return res.status(400).json({ error: 'Face value must be at least $1' });
+  if (faceValue > 5000) return res.status(400).json({ error: 'Face value too high. Contact support for large liquidations.' });
+
+  const result = await dbRun(
+    'INSERT INTO giftcard_liquidations (user_id, asset_type, asset_details, face_value_usd, status) VALUES (?, ?, ?, ?, ?)',
+    [req.userId, asset_type, String(asset_details).trim(), faceValue, 'pending_review']
+  );
+  await logSystemEvent('info', `Gift card liquidation submitted by user ${req.userId}`, `Type: ${asset_type}, Face value: $${faceValue}`);
+  res.json({ id: result.lastID, message: 'Your gift card has been submitted for review. You will receive a BTC offer within 24 hours.' });
+});
+
+// API: Get user's own liquidation history
+app.get('/api/giftcard/my-submissions', authenticateRequest, async (req, res) => {
+  const submissions = await dbAll('SELECT * FROM giftcard_liquidations WHERE user_id = ? ORDER BY created_at DESC LIMIT 50', [req.userId]);
+  res.json(submissions);
+});
+
+// API: Admin — get pending gift card liquidations
+app.get('/api/admin/giftcards/pending', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+  const pending = await dbAll(`
+    SELECT g.*, u.username, u.email FROM giftcard_liquidations g
+    JOIN users u ON g.user_id = u.id
+    WHERE g.status = 'pending_review' ORDER BY g.created_at ASC
+  `);
+  res.json(pending);
+});
+
+// API: Admin — approve a liquidation with a BTC offer
+app.post('/api/admin/giftcards/:id/approve', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+  const { offered_usd, admin_notes } = req.body;
+  const offered = parseFloat(offered_usd) || 0;
+  if (offered <= 0) return res.status(400).json({ error: 'Must offer a positive amount' });
+
+  const submission = await dbGet('SELECT * FROM giftcard_liquidations WHERE id = ? AND status = ?', [req.params.id, 'pending_review']);
+  if (!submission) return res.status(404).json({ error: 'Submission not found or already processed' });
+
+  const btcPrice = await getBtcPriceUsd();
+  const offeredBtc = btcPrice > 0 ? Math.round((offered / btcPrice) * 100000000) / 100000000 : 0;
+
+  await dbRun('UPDATE giftcard_liquidations SET status = ?, offered_usd = ?, offered_btc = ?, admin_notes = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?',
+    ['offer_made', offered, offeredBtc, admin_notes || '', req.userId, submission.id]);
+  await emailGiftCardStatus(submission.user_id, 'offer_made', submission.asset_type, offered, offeredBtc);
+  await logSystemEvent('info', `Gift card liquidation ${submission.id} approved`, `Offered $${offered} (${offeredBtc} BTC) to user ${submission.user_id}`);
+  res.json({ message: 'Offer sent to user', offered_usd: offered, offered_btc: offeredBtc });
+});
+
+// API: User — accept or reject an offer
+app.post('/api/giftcard/:id/respond', authenticateRequest, async (req, res) => {
+  const { accept } = req.body;
+  const submission = await dbGet('SELECT * FROM giftcard_liquidations WHERE id = ? AND user_id = ? AND status = ?', [req.params.id, req.userId, 'offer_made']);
+  if (!submission) return res.status(404).json({ error: 'No pending offer found' });
+
+  if (accept) {
+    // Credit BTC to user balance
+    await dbRun('UPDATE user_balances SET btc_balance = btc_balance + ?, total_deposited = total_deposited + ? WHERE user_id = ?',
+      [submission.offered_btc, submission.offered_usd, req.userId]);
+    await dbRun('UPDATE giftcard_liquidations SET status = ? WHERE id = ?', ['completed', submission.id]);
+    await logConversionEvent(req.userId, 'giftcard', submission.offered_usd, submission.offered_btc);
+    await emailGiftCardStatus(req.userId, 'completed', submission.asset_type, submission.offered_usd, submission.offered_btc);
+    await logSystemEvent('info', `Gift card liquidation ${submission.id} completed`, `User ${req.userId} credited ${submission.offered_btc} BTC ($${submission.offered_usd})`);
+    res.json({ message: `Offer accepted! ${submission.offered_btc} BTC ($${submission.offered_usd}) credited to your balance.`, credited_btc: submission.offered_btc });
+  } else {
+    await dbRun('UPDATE giftcard_liquidations SET status = ? WHERE id = ?', ['rejected_by_user', submission.id]);
+    res.json({ message: 'Offer rejected. Your gift card details have been discarded.' });
+  }
+});
+
+// API: Admin — reject a liquidation outright
+app.post('/api/admin/giftcards/:id/reject', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+  const { admin_notes } = req.body;
+  const submission = await dbGet('SELECT * FROM giftcard_liquidations WHERE id = ? AND status = ?', [req.params.id, 'pending_review']);
+  if (!submission) return res.status(404).json({ error: 'Submission not found or already processed' });
+  await dbRun('UPDATE giftcard_liquidations SET status = ?, admin_notes = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?',
+    ['rejected', admin_notes || 'Rejected by admin', req.userId, submission.id]);
+  await emailGiftCardStatus(submission.user_id, 'rejected', submission.asset_type, 0, 0);
+  res.json({ message: 'Liquidation rejected' });
+});
+
+// API: Get supported liquidation asset types (public — for the frontend form)
+app.get('/api/giftcard/asset-types', (req, res) => {
+  res.json(LIQUIDATION_ASSET_TYPES);
 });
 
 // API: Gambler Rankings — top users by total staked
@@ -8567,71 +9152,513 @@ app.post('/api/arcade/wheel', authenticateRequest, async (req, res) => {
   res.json({ segment: segment.label, multiplier: segment.multiplier, payout, stake: stakeAmount, newBalance });
 });
 
-// ===== PREDICTION MARKETS (manual, no paid APIs) =====
+// ===== THE ORACLE — Polymarket-style Yes/No exchange: real order book, fixed $1/$0 share redemption =====
+// Every market always has 1 Yes + 1 No share worth exactly $1 combined (mint/merge), matching Polymarket's
+// conditional-token model. Users can place real limit orders (resting in the book) or trade instantly via
+// a market order; when there's no resting counterparty, the house acts as an automatic market maker —
+// minting a Yes+No pair on demand and taking the other side as inventory, so markets are never dead.
 const VALID_PREDICTION_CATEGORIES = ['sports', 'news', 'esports', 'politics', 'crypto', 'misc'];
+const ORACLE_MIN_PRICE = 0.02;
+const ORACLE_MAX_PRICE = 0.98;
+const ORACLE_PRICE_IMPACT_PER_SHARE = 0.015; // house-quoted price moves ~1.5c per share it fills — the AMM "spread"
 
-// API: List active + recently resolved prediction markets
+function clampOraclePrice(p) {
+  return Math.max(ORACLE_MIN_PRICE, Math.min(ORACLE_MAX_PRICE, Math.round(p * 1000) / 1000));
+}
+
+async function getSharePrice(marketId, option) {
+  const market = await dbGet('SELECT last_price_yes, last_price_no FROM prediction_markets WHERE id = ?', [marketId]);
+  if (!market) return 0.5;
+  return option === 'yes' ? (market.last_price_yes ?? 0.5) : (market.last_price_no ?? 0.5);
+}
+
+async function setSharePrice(marketId, option, price) {
+  const clamped = clampOraclePrice(price);
+  const complement = Math.round((1 - clamped) * 1000) / 1000;
+  if (option === 'yes') {
+    await dbRun('UPDATE prediction_markets SET last_price_yes = ?, last_price_no = ? WHERE id = ?', [clamped, complement, marketId]);
+  } else {
+    await dbRun('UPDATE prediction_markets SET last_price_no = ?, last_price_yes = ? WHERE id = ?', [clamped, complement, marketId]);
+  }
+  const yesPriceNow = option === 'yes' ? clamped : complement;
+  await dbRun('INSERT INTO prediction_price_history (market_id, yes_price) VALUES (?, ?)', [marketId, yesPriceNow]);
+  // Push live update to SSE clients
+  if (typeof broadcastOraclePriceUpdate === 'function') {
+    broadcastOraclePriceUpdate(marketId, option, clamped);
+  }
+}
+
+// House-quoted fill price for `quantity` shares, moving the price like a simple AMM (up on buys, down on sells).
+function computeHouseFill(currentPrice, side, quantity) {
+  const impact = Math.min(0.6, quantity * ORACLE_PRICE_IMPACT_PER_SHARE);
+  const direction = side === 'buy' ? 1 : -1;
+  const newPrice = clampOraclePrice(currentPrice + direction * impact);
+  const avgPrice = Math.round(((currentPrice + newPrice) / 2) * 1000) / 1000;
+  return { avgPrice, newPrice };
+}
+
+async function getShareQty(marketId, option, userId, isHouse) {
+  const row = isHouse
+    ? await dbGet('SELECT quantity FROM oracle_shares WHERE market_id = ? AND option = ? AND is_house = 1', [marketId, option])
+    : await dbGet('SELECT quantity FROM oracle_shares WHERE market_id = ? AND option = ? AND user_id = ? AND is_house = 0', [marketId, option, userId]);
+  return row ? row.quantity : 0;
+}
+
+async function adjustShareQty(marketId, option, userId, isHouse, delta) {
+  const existing = isHouse
+    ? await dbGet('SELECT id FROM oracle_shares WHERE market_id = ? AND option = ? AND is_house = 1', [marketId, option])
+    : await dbGet('SELECT id FROM oracle_shares WHERE market_id = ? AND option = ? AND user_id = ? AND is_house = 0', [marketId, option, userId]);
+  if (existing) {
+    await dbRun('UPDATE oracle_shares SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [delta, existing.id]);
+  } else {
+    await dbRun('INSERT INTO oracle_shares (market_id, user_id, is_house, option, quantity) VALUES (?, ?, ?, ?, ?)',
+      [marketId, isHouse ? null : userId, isHouse ? 1 : 0, option, delta]);
+  }
+}
+
+async function recordOracleTrade(marketId, option, price, quantity, isHouseFill, buyUserId, sellUserId) {
+  await dbRun('INSERT INTO oracle_trades (market_id, option, price, quantity, is_house_fill, buy_user_id, sell_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [marketId, option, price, quantity, isHouseFill ? 1 : 0, buyUserId || null, sellUserId || null]);
+}
+
+// Opportunistically closes out the house's own matched Yes+No inventory back into pool cash, reducing house risk.
+async function houseAutoMerge(marketId) {
+  const yesQty = await getShareQty(marketId, 'yes', null, true);
+  const noQty = await getShareQty(marketId, 'no', null, true);
+  const mergeQty = Math.round(Math.min(yesQty, noQty) * 100) / 100;
+  if (mergeQty > 0.01) {
+    await adjustShareQty(marketId, 'yes', null, true, -mergeQty);
+    await adjustShareQty(marketId, 'no', null, true, -mergeQty);
+    await creditPoolDeposit(mergeQty);
+  }
+}
+
+// Matches a taker order (limit or market, price=null means "take at any price") against resting opposite
+// orders in price-time priority. Executes the cash/share transfer for every matched portion directly between
+// the two users (no house involvement — pure peer trade), taking a small market fee_rate cut from the maker.
+async function matchAgainstBook(marketId, option, side, price, quantity, takerUserId, feeRate) {
+  let remaining = quantity;
+  const oppositeSide = side === 'buy' ? 'sell' : 'buy';
+
+  while (remaining > 0.009) {
+    const priceFilter = price === null ? '' : (side === 'buy' ? 'AND price <= ?' : 'AND price >= ?');
+    const orderBy = side === 'buy' ? 'price ASC, created_at ASC' : 'price DESC, created_at ASC';
+    const params = price === null ? [marketId, option, oppositeSide] : [marketId, option, oppositeSide, price];
+    const resting = await dbGet(
+      `SELECT * FROM oracle_orders WHERE market_id = ? AND option = ? AND side = ? AND status IN ('open','partial') ${priceFilter} ORDER BY ${orderBy} LIMIT 1`,
+      params
+    );
+    if (!resting) break;
+
+    const restingRemaining = Math.round((resting.quantity - resting.filled_quantity) * 100) / 100;
+    const fillQty = Math.round(Math.min(remaining, restingRemaining) * 100) / 100;
+    if (fillQty <= 0.001) break;
+    const fillPrice = resting.price; // resting order (the "maker") sets the trade price
+    const grossValue = Math.round(fillQty * fillPrice * 100) / 100;
+    const fee = Math.round(grossValue * (feeRate || 0) * 100) / 100;
+
+    if (side === 'buy') {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [grossValue - fee, resting.user_id]);
+      await adjustShareQty(marketId, option, takerUserId, false, fillQty);
+      await recordOracleTrade(marketId, option, fillPrice, fillQty, false, takerUserId, resting.user_id);
+    } else {
+      await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [grossValue - fee, takerUserId]);
+      await adjustShareQty(marketId, option, resting.user_id, false, fillQty);
+      await recordOracleTrade(marketId, option, fillPrice, fillQty, false, resting.user_id, takerUserId);
+    }
+    if (fee > 0) await creditHouseRevenue(fee);
+
+    await dbRun('UPDATE oracle_orders SET filled_quantity = filled_quantity + ?, status = ? WHERE id = ?',
+      [fillQty, (resting.filled_quantity + fillQty >= resting.quantity - 0.001) ? 'filled' : 'partial', resting.id]);
+    await setSharePrice(marketId, option, fillPrice);
+
+    remaining = Math.round((remaining - fillQty) * 100) / 100;
+  }
+
+  return { filledQty: Math.round((quantity - remaining) * 100) / 100, remainingQty: Math.max(0, remaining) };
+}
+
+// Places a real resting limit order. Aggressively matches whatever it can immediately, rests the remainder.
+async function placeOracleLimitOrder(marketId, userId, option, side, price, quantity) {
+  if (!['yes', 'no'].includes(option)) throw new Error('Invalid option');
+  if (!['buy', 'sell'].includes(side)) throw new Error('Invalid side');
+  price = clampOraclePrice(Number(price));
+  quantity = Math.round(Number(quantity) * 100) / 100;
+  if (isNaN(quantity) || quantity <= 0) throw new Error('Invalid quantity');
+  if (quantity > 100000) throw new Error('Quantity too large');
+  if (price < 0.02 || price > 0.98) throw new Error('Price must be between 2¢ and 98¢');
+
+  return await dbTransaction(async (tx) => {
+    const market = await tx.dbGet('SELECT * FROM prediction_markets WHERE id = ? AND status = ?', [marketId, 'active']);
+    if (!market) throw new Error('Market not open for trading');
+
+    if (side === 'buy') {
+      const cost = Math.round(price * quantity * 100) / 100;
+      if (cost < WEB_MIN_STAKE) throw new Error(`Order value must be at least $${WEB_MIN_STAKE}`);
+      const bal = await tx.dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [userId]);
+      if (!bal || bal.usd_balance < cost) throw new Error('Insufficient USD balance to place this order');
+      await tx.dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [cost, userId]);
+    } else {
+      const held = await getShareQty(marketId, option, userId, false);
+      if (held < quantity - 0.001) throw new Error(`You only hold ${held.toFixed(2)} ${option.toUpperCase()} shares`);
+      await adjustShareQty(marketId, option, userId, false, -quantity);
+    }
+
+    const { filledQty, remainingQty } = await matchAgainstBook(marketId, option, side, price, quantity, userId, market.fee_rate);
+    const status = remainingQty <= 0.001 ? 'filled' : (filledQty > 0.001 ? 'partial' : 'open');
+
+    const result = await tx.dbRun(
+      'INSERT INTO oracle_orders (market_id, user_id, option, side, price, quantity, filled_quantity, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [marketId, userId, option, side, price, quantity, filledQty, status]
+    );
+
+    await logSystemEvent('info', `Oracle limit order placed by user ${userId}`, `Market ${marketId}, ${side} ${option} ${quantity}@${price}, filled ${filledQty}`);
+    return { orderId: result.lastID, filledQty, remainingQty, status };
+  });
+}
+
+async function cancelOracleOrder(orderId, userId) {
+  return await dbTransaction(async (tx) => {
+    const order = await tx.dbGet(`SELECT * FROM oracle_orders WHERE id = ? AND user_id = ? AND status IN ('open','partial')`, [orderId, userId]);
+    if (!order) throw new Error('Order not found or already closed');
+    const remaining = Math.round((order.quantity - order.filled_quantity) * 100) / 100;
+    if (order.side === 'buy') {
+      await tx.dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [Math.round(remaining * order.price * 100) / 100, userId]);
+    } else {
+      await adjustShareQty(order.market_id, order.option, userId, false, remaining);
+    }
+    await tx.dbRun('UPDATE oracle_orders SET status = ? WHERE id = ?', ['cancelled', order.id]);
+    return { message: 'Order cancelled', refunded: remaining };
+  });
+}
+
+// Market buy: spend `usdAmount` acquiring `option` shares — fills against the book first, then tops up via
+// the house auto-market-maker so the trade always completes.
+async function oracleMarketBuy(marketId, userId, option, usdAmount) {
+  if (!['yes', 'no'].includes(option)) throw new Error('Invalid option');
+  usdAmount = Math.round(Number(usdAmount) * 100) / 100;
+  if (isNaN(usdAmount) || usdAmount < WEB_MIN_STAKE) throw new Error(`Minimum trade is $${WEB_MIN_STAKE}`);
+  if (usdAmount > 100000) throw new Error('Amount too large');
+
+  return await dbTransaction(async (tx) => {
+    const market = await tx.dbGet('SELECT * FROM prediction_markets WHERE id = ? AND status = ?', [marketId, 'active']);
+    if (!market) throw new Error('Market not available for trading');
+
+    const bal = await tx.dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [userId]);
+    if (!bal || bal.usd_balance < usdAmount) throw new Error('Insufficient USD balance');
+
+    let budget = usdAmount;
+    let sharesAcquired = 0;
+    const feeRate = market.fee_rate || 0;
+
+    // 1) Consume resting sell orders, best price first (real peer-to-peer trades)
+    while (budget > 0.01) {
+      const resting = await tx.dbGet(
+        `SELECT * FROM oracle_orders WHERE market_id = ? AND option = ? AND side = 'sell' AND status IN ('open','partial') ORDER BY price ASC, created_at ASC LIMIT 1`,
+        [marketId, option]
+      );
+      if (!resting) break;
+      const restingRemaining = Math.round((resting.quantity - resting.filled_quantity) * 100) / 100;
+      const maxAffordableQty = budget / resting.price;
+      const fillQty = Math.round(Math.min(restingRemaining, maxAffordableQty) * 100) / 100;
+      if (fillQty <= 0.001) break;
+      const cost = Math.round(fillQty * resting.price * 100) / 100;
+      const fee = Math.round(cost * feeRate * 100) / 100;
+
+      await tx.dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [cost - fee, resting.user_id]);
+      if (fee > 0) await creditHouseRevenue(fee);
+      await adjustShareQty(marketId, option, userId, false, fillQty);
+      await recordOracleTrade(marketId, option, resting.price, fillQty, false, userId, resting.user_id);
+      await tx.dbRun('UPDATE oracle_orders SET filled_quantity = filled_quantity + ?, status = ? WHERE id = ?',
+        [fillQty, (resting.filled_quantity + fillQty >= resting.quantity - 0.001) ? 'filled' : 'partial', resting.id]);
+      await setSharePrice(marketId, option, resting.price);
+
+      budget = Math.round((budget - cost) * 100) / 100;
+      sharesAcquired += fillQty;
+    }
+
+    // 2) Top up remaining budget via the house auto-market-maker (mints a Yes+No pair, sells the requested side)
+    if (budget > 0.01) {
+      const currentPrice = await getSharePrice(marketId, option);
+      const approxQty = budget / currentPrice;
+      const { avgPrice, newPrice } = computeHouseFill(currentPrice, 'buy', approxQty);
+      const qty = Math.round((budget / avgPrice) * 100) / 100;
+
+      if (qty > 0.001) {
+        const coverage = await checkPoolCoverage(qty); // house's worst-case liability if the side it now holds wins
+        if (coverage.allowed) {
+          await debitPoolPayout(qty);       // mint cost: $1 per pair, from the pool
+          await creditPoolDeposit(budget);  // sale proceeds: buyer's cash, into the pool
+          await adjustShareQty(marketId, option, userId, false, qty);
+          const complementOption = option === 'yes' ? 'no' : 'yes';
+          await adjustShareQty(marketId, complementOption, null, true, qty); // house keeps the other side
+          await recordOracleTrade(marketId, option, avgPrice, qty, true, userId, null);
+          await setSharePrice(marketId, option, newPrice);
+          await houseAutoMerge(marketId);
+          sharesAcquired += qty;
+          budget = 0;
+        }
+      }
+    }
+
+    const spent = Math.round((usdAmount - budget) * 100) / 100;
+    if (spent <= 0 || sharesAcquired <= 0) throw new Error('Unable to fill this order right now (house pool insufficient). Try a smaller amount.');
+    await tx.dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [spent, spent, userId]);
+
+    const finalShares = Math.round(sharesAcquired * 100) / 100;
+    return { sharesAcquired: finalShares, spent, avgPrice: Math.round((spent / finalShares) * 1000) / 1000 };
+  });
+}
+
+// Market sell: liquidate `quantity` shares the user holds — sells into the book first, then to the house.
+// This is the exact mechanism behind "cash out early": no approximation, real trade at real prices.
+async function oracleMarketSell(marketId, userId, option, quantity) {
+  if (!['yes', 'no'].includes(option)) throw new Error('Invalid option');
+  quantity = Math.round(Number(quantity) * 100) / 100;
+  if (isNaN(quantity) || quantity <= 0) throw new Error('Invalid quantity');
+  if (quantity > 100000) throw new Error('Quantity too large');
+
+  return await dbTransaction(async (tx) => {
+    const market = await tx.dbGet('SELECT * FROM prediction_markets WHERE id = ? AND status = ?', [marketId, 'active']);
+    if (!market) throw new Error('Market is not open for trading');
+
+    const held = await getShareQty(marketId, option, userId, false);
+    if (held < quantity - 0.001) throw new Error(`You only hold ${held.toFixed(2)} shares`);
+
+    const feeRate = market.fee_rate || 0;
+    let remaining = quantity;
+    let proceeds = 0;
+
+    // 1) Sell into resting buy orders, best price first
+    while (remaining > 0.01) {
+      const resting = await tx.dbGet(
+        `SELECT * FROM oracle_orders WHERE market_id = ? AND option = ? AND side = 'buy' AND status IN ('open','partial') ORDER BY price DESC, created_at ASC LIMIT 1`,
+        [marketId, option]
+      );
+      if (!resting) break;
+      const restingRemaining = Math.round((resting.quantity - resting.filled_quantity) * 100) / 100;
+      const fillQty = Math.round(Math.min(restingRemaining, remaining) * 100) / 100;
+      if (fillQty <= 0.001) break;
+      const grossValue = Math.round(fillQty * resting.price * 100) / 100;
+      const fee = Math.round(grossValue * feeRate * 100) / 100;
+
+      await adjustShareQty(marketId, option, resting.user_id, false, fillQty);
+      await recordOracleTrade(marketId, option, resting.price, fillQty, false, resting.user_id, userId);
+      await tx.dbRun('UPDATE oracle_orders SET filled_quantity = filled_quantity + ?, status = ? WHERE id = ?',
+        [fillQty, (resting.filled_quantity + fillQty >= resting.quantity - 0.001) ? 'filled' : 'partial', resting.id]);
+      await setSharePrice(marketId, option, resting.price);
+      if (fee > 0) await creditHouseRevenue(fee);
+
+      proceeds += grossValue - fee;
+      remaining = Math.round((remaining - fillQty) * 100) / 100;
+    }
+
+    // 2) Sell whatever's left straight to the house at its quoted price
+    if (remaining > 0.01) {
+      const currentPrice = await getSharePrice(marketId, option);
+      const { avgPrice, newPrice } = computeHouseFill(currentPrice, 'sell', remaining);
+      const proceedsThisFill = Math.round(remaining * avgPrice * 100) / 100;
+      const coverage = await checkPoolCoverage(proceedsThisFill);
+
+      if (coverage.allowed) {
+        await debitPoolPayout(proceedsThisFill);
+        await adjustShareQty(marketId, option, null, true, remaining);
+        await recordOracleTrade(marketId, option, avgPrice, remaining, true, null, userId);
+        await setSharePrice(marketId, option, newPrice);
+        await houseAutoMerge(marketId);
+        proceeds += proceedsThisFill;
+        remaining = 0;
+      }
+    }
+
+    const sold = Math.round((quantity - remaining) * 100) / 100;
+    if (sold <= 0) throw new Error('House pool cannot cover this sale right now. Try a smaller amount or again later.');
+
+    await adjustShareQty(marketId, option, userId, false, -sold);
+    proceeds = Math.round(proceeds * 100) / 100;
+    await tx.dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [proceeds, proceeds, userId]);
+
+    return { sold, proceeds, avgPrice: Math.round((proceeds / sold) * 1000) / 1000, remaining };
+  });
+}
+
+// Resolution: every Yes share pays exactly $1 if Yes wins (else $0), every No share pays $1 if No wins (else $0).
+// Fixed redemption — no pool splitting, no approximation. House holdings settle through the pool the same way.
+async function resolveOracleMarket(marketId, outcome, resolverUserId) {
+  const outcomeLower = String(outcome || '').toLowerCase();
+  if (!['yes', 'no', 'cancel'].includes(outcomeLower)) throw new Error('Outcome must be yes, no, or cancel');
+
+  return await dbTransaction(async (tx) => {
+    const market = await tx.dbGet('SELECT * FROM prediction_markets WHERE id = ?', [marketId]);
+    if (!market || market.status !== 'active') throw new Error('Market not active');
+
+    // Cancel all resting orders first and refund whatever they had escrowed
+    const openOrders = await tx.dbAll(`SELECT * FROM oracle_orders WHERE market_id = ? AND status IN ('open','partial')`, [marketId]);
+    for (const order of openOrders) {
+      const remaining = Math.round((order.quantity - order.filled_quantity) * 100) / 100;
+      if (order.side === 'buy') {
+        await tx.dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [Math.round(remaining * order.price * 100) / 100, order.user_id]);
+      } else {
+        await adjustShareQty(order.market_id, order.option, order.user_id, false, remaining);
+      }
+      await tx.dbRun('UPDATE oracle_orders SET status = ? WHERE id = ?', ['cancelled', order.id]);
+    }
+
+    if (outcomeLower === 'cancel') {
+      const holders = await tx.dbAll(`SELECT * FROM oracle_shares WHERE market_id = ? AND quantity > 0.001`, [marketId]);
+      let refunded = 0;
+      for (const h of holders) {
+        const refund = Math.round(h.quantity * 0.5 * 100) / 100;
+        if (!h.is_house && refund > 0) {
+          await tx.dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [refund, h.user_id]);
+          await debitPoolPayout(refund);
+          refunded += refund;
+        }
+      }
+      await tx.dbRun('UPDATE oracle_shares SET quantity = 0 WHERE market_id = ?', [marketId]);
+      await tx.dbRun(`UPDATE prediction_markets SET status = 'cancelled', resolution_value = 'cancel', resolved_by = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [resolverUserId, marketId]);
+      await logSystemEvent('info', `Oracle market ${marketId} cancelled`, `Refunded $${refunded.toFixed(2)} to shareholders at $0.50/share`);
+      return { message: 'Market cancelled. All shares redeemed at $0.50 each.', refunded };
+    }
+
+    const winningOption = outcomeLower;
+    const winners = await tx.dbAll(`SELECT * FROM oracle_shares WHERE market_id = ? AND option = ? AND quantity > 0.001`, [marketId, winningOption]);
+    let totalPaid = 0;
+    let userPaid = 0;
+    for (const h of winners) {
+      const payout = Math.round(h.quantity * 100) / 100; // fixed $1 per winning share
+      if (h.is_house) {
+        await creditPoolDeposit(payout);
+      } else if (payout > 0) {
+        await tx.dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, h.user_id]);
+        await debitPoolPayout(payout);
+        userPaid += payout;
+      }
+      totalPaid += payout;
+    }
+    // Losing shares (user and house) are simply worthless — no cash movement needed.
+    await tx.dbRun('UPDATE oracle_shares SET quantity = 0 WHERE market_id = ?', [marketId]);
+
+    await tx.dbRun(`UPDATE prediction_markets SET status = 'resolved', resolution_value = ?, resolved_by = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      [winningOption, resolverUserId, marketId]);
+
+    await logSystemEvent('info', `Oracle market ${marketId} resolved`, `Outcome: ${winningOption}, paid $${totalPaid.toFixed(2)} total ($${userPaid.toFixed(2)} to users)`);
+    return { message: `Resolved as ${winningOption}`, winnersCount: winners.length, totalPaid };
+  });
+}
+
+// API: List active + recently resolved markets, with live order-book prices + sparkline history
 app.get('/api/arcade/predictions/markets', authenticateRequest, async (req, res) => {
   const active = await dbAll(`
     SELECT id, title, description, category, option_yes_label, option_no_label, status, resolution_value,
-           total_yes, total_no, fee_rate, created_at, resolved_at,
+           last_price_yes, last_price_no, fee_rate, created_at, resolved_at, resolution_source, is_user_created,
            image_url, metadata, api_source, api_event_id, api_event_date
     FROM prediction_markets WHERE status = ?
     ORDER BY created_at DESC LIMIT 50`, ['active']);
   const resolved = await dbAll(`
     SELECT id, title, description, category, option_yes_label, option_no_label, status, resolution_value,
-           total_yes, total_no, fee_rate, created_at, resolved_at,
+           last_price_yes, last_price_no, fee_rate, created_at, resolved_at, resolution_source, is_user_created,
            image_url, metadata, api_source, api_event_id, api_event_date
     FROM prediction_markets WHERE status IN (?, ?)
     ORDER BY resolved_at DESC LIMIT 20`, ['resolved', 'cancelled']);
-  res.json({ active, resolved });
+
+  const withPricing = async (markets) => {
+    for (const m of markets) {
+      m.yes_price = m.last_price_yes ?? 0.5;
+      m.no_price = m.last_price_no ?? 0.5;
+      const history = await dbAll('SELECT yes_price FROM prediction_price_history WHERE market_id = ? ORDER BY created_at ASC LIMIT 50', [m.id]);
+      m.price_history = history.map(h => h.yes_price);
+    }
+    return markets;
+  };
+
+  res.json({ active: await withPricing(active), resolved: await withPricing(resolved) });
 });
 
-// API: Place a prediction bet with USD
-app.post('/api/arcade/predictions/bet', authenticateRequest, async (req, res) => {
-  const { marketId, option, amount } = req.body;
-  const betAmount = parseFloat(amount);
-  if (!marketId || !option || !['yes', 'no'].includes(String(option).toLowerCase())) return res.status(400).json({ error: 'Choose Yes or No' });
-  if (isNaN(betAmount) || betAmount < WEB_MIN_STAKE) return res.status(400).json({ error: `Minimum bet is $${WEB_MIN_STAKE}` });
+// API: Order book depth for a market (top resting bids/asks per option)
+app.get('/api/oracle/:marketId/orderbook', authenticateRequest, async (req, res) => {
+  const option = req.query.option === 'no' ? 'no' : 'yes';
+  const bids = await dbAll(`SELECT price, quantity - filled_quantity as remaining FROM oracle_orders WHERE market_id = ? AND option = ? AND side = 'buy' AND status IN ('open','partial') ORDER BY price DESC LIMIT 10`, [req.params.marketId, option]);
+  const asks = await dbAll(`SELECT price, quantity - filled_quantity as remaining FROM oracle_orders WHERE market_id = ? AND option = ? AND side = 'sell' AND status IN ('open','partial') ORDER BY price ASC LIMIT 10`, [req.params.marketId, option]);
+  res.json({ bids, asks });
+});
 
-  const market = await dbGet('SELECT * FROM prediction_markets WHERE id = ? AND status = ?', [marketId, 'active']);
-  if (!market) return res.status(400).json({ error: 'Market not available for betting' });
-
-  const bal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
-  if (!bal || bal.usd_balance < betAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
-
-  await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [betAmount, betAmount, req.userId]);
-
-  const optionLower = String(option).toLowerCase();
-  await dbRun(`
-    INSERT INTO prediction_bets (user_id, market_id, option, amount, chosen_option, stake_amount, stake_currency, status)
-    VALUES (?, ?, ?, ?, ?, ?, 'USD', 'pending')
-  `, [req.userId, marketId, optionLower, betAmount, optionLower, betAmount]);
-
-  if (optionLower === 'yes') {
-    await dbRun('UPDATE prediction_markets SET total_yes = total_yes + ? WHERE id = ?', [betAmount, marketId]);
-  } else {
-    await dbRun('UPDATE prediction_markets SET total_no = total_no + ? WHERE id = ?', [betAmount, marketId]);
+// API: Market buy — spend USD acquiring Yes/No shares instantly (book + house auto-market-maker)
+app.post('/api/oracle/:marketId/buy', rateLimit({ windowMs: 60 * 1000, max: 20, key: req => `oracle-buy:${req.userId || req.ip}` }), authenticateRequest, async (req, res) => {
+  try {
+    const result = await oracleMarketBuy(req.params.marketId, req.userId, String(req.body.option || '').toLowerCase(), req.body.amount);
+    await logSystemEvent('info', `Oracle market buy by user ${req.userId}`, `Market ${req.params.marketId}, ${result.sharesAcquired} ${req.body.option} shares @ ${result.avgPrice}`);
+    await logConversionEvent(req.userId, 'trade', result.spent, 0);
+    const newBal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    res.json({ ...result, newBalance: newBal.usd_balance });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
   }
-
-  await logSystemEvent('info', `Prediction bet placed by user ${req.userId}`, `Market ${marketId}, option ${optionLower}, amount ${betAmount}`);
-  const newBal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
-  res.json({ message: 'Bet placed', newBalance: newBal.usd_balance });
 });
 
-// API: User's prediction bets
-app.get('/api/arcade/predictions/my-bets', authenticateRequest, async (req, res) => {
-  const bets = await dbAll(`
-    SELECT pb.*, pm.title, pm.status as market_status, pm.resolution_value, pm.category
-    FROM prediction_bets pb
-    JOIN prediction_markets pm ON pb.market_id = pm.id
-    WHERE pb.user_id = ?
-    ORDER BY pb.created_at DESC LIMIT 50
+// API: Market sell — liquidate held shares instantly (this is "cash out early")
+app.post('/api/oracle/:marketId/sell', rateLimit({ windowMs: 60 * 1000, max: 20, key: req => `oracle-sell:${req.userId || req.ip}` }), authenticateRequest, async (req, res) => {
+  try {
+    const result = await oracleMarketSell(req.params.marketId, req.userId, String(req.body.option || '').toLowerCase(), req.body.quantity);
+    await logSystemEvent('info', `Oracle market sell by user ${req.userId}`, `Market ${req.params.marketId}, sold ${result.sold} ${req.body.option} shares @ ${result.avgPrice}`);
+    const newBal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    res.json({ ...result, newBalance: newBal.usd_balance });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// API: Place a real resting limit order (true CLOB — sets your own price, waits for a match)
+app.post('/api/oracle/:marketId/order', rateLimit({ windowMs: 60 * 1000, max: 20, key: req => `oracle-order:${req.userId || req.ip}` }), authenticateRequest, async (req, res) => {
+  try {
+    const result = await placeOracleLimitOrder(req.params.marketId, req.userId, String(req.body.option || '').toLowerCase(), String(req.body.side || '').toLowerCase(), req.body.price, req.body.quantity);
+    const newBal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    res.json({ ...result, newBalance: newBal.usd_balance });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// API: Cancel a resting limit order and refund escrow
+app.post('/api/oracle/orders/:orderId/cancel', authenticateRequest, async (req, res) => {
+  try {
+    const result = await cancelOracleOrder(req.params.orderId, req.userId);
+    res.json(result);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// API: User's open orders (resting in the book)
+app.get('/api/oracle/orders/mine', authenticateRequest, async (req, res) => {
+  const orders = await dbAll(`
+    SELECT o.*, m.title, m.category FROM oracle_orders o
+    JOIN prediction_markets m ON o.market_id = m.id
+    WHERE o.user_id = ? AND o.status IN ('open','partial')
+    ORDER BY o.created_at DESC LIMIT 50
   `, [req.userId]);
-  res.json(bets);
+  res.json(orders);
 });
 
-// API: Admin create prediction market
+// API: User's share positions (holdings) with live mark-to-market value
+app.get('/api/arcade/predictions/my-bets', authenticateRequest, async (req, res) => {
+  const positions = await dbAll(`
+    SELECT s.*, m.title, m.status as market_status, m.resolution_value, m.category, m.last_price_yes, m.last_price_no
+    FROM oracle_shares s
+    JOIN prediction_markets m ON s.market_id = m.id
+    WHERE s.user_id = ? AND s.is_house = 0 AND s.quantity > 0.005
+    ORDER BY s.updated_at DESC LIMIT 50
+  `, [req.userId]);
+  for (const p of positions) {
+    p.current_price = p.option === 'yes' ? p.last_price_yes : p.last_price_no;
+    p.current_value = Math.round(p.quantity * p.current_price * 100) / 100;
+    p.can_cash_out = p.market_status === 'active';
+  }
+  res.json(positions);
+});
+
+// API: Admin create prediction market (goes live immediately)
 app.post('/api/admin/prediction-markets', authenticateRequest, async (req, res) => {
   if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
   const { title, description, category, option_yes_label, option_no_label } = req.body;
@@ -8639,76 +9666,95 @@ app.post('/api/admin/prediction-markets', authenticateRequest, async (req, res) 
   if (!VALID_PREDICTION_CATEGORIES.includes(category)) return res.status(400).json({ error: 'Invalid category' });
 
   const result = await dbRun(`
-    INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, image_url, metadata, created_by, options_json, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [title, description || '', category, option_yes_label || 'Yes', option_no_label || 'No', req.body.image_url || '', req.body.metadata || '', req.userId, '[]', 'active']);
+    INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, image_url, metadata, created_by, options_json, status, resolution_source)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [title, description || '', category, option_yes_label || 'Yes', option_no_label || 'No', req.body.image_url || '', req.body.metadata || '', req.userId, '[]', 'active', req.body.resolution_source || '']);
 
   await logSystemEvent('info', `Prediction market created by admin ${req.userId}`, `Market ${result.lastID}: ${title}`);
   res.json({ id: result.lastID, message: 'Market created' });
 });
 
-// Core: resolve a prediction market and distribute the pool
-async function resolvePredictionMarket(marketId, outcome, resolverUserId) {
-  if (!outcome || !['yes', 'no', 'cancel'].includes(String(outcome).toLowerCase())) throw new Error('Outcome must be yes, no, or cancel');
+// API: Any logged-in user submits a market for The Oracle — goes to a review queue, not live yet
+app.post('/api/oracle/markets/submit', authenticateRequest, async (req, res) => {
+  const { title, description, category, option_yes_label, option_no_label, resolution_source } = req.body;
+  if (!title || title.trim().length < 8) return res.status(400).json({ error: 'Give your market a clear, specific title (min 8 characters)' });
+  if (!VALID_PREDICTION_CATEGORIES.includes(category)) return res.status(400).json({ error: 'Invalid category' });
+  if (!resolution_source || resolution_source.trim().length < 4) return res.status(400).json({ error: 'Describe how/where this will be resolved (e.g. a specific site or official result)' });
 
-  const market = await dbGet('SELECT * FROM prediction_markets WHERE id = ?', [marketId]);
-  if (!market || market.status !== 'active') throw new Error('Market not active');
+  const result = await dbRun(`
+    INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, created_by, options_json, status, resolution_source, is_user_created)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+  `, [title.trim(), description || '', category, option_yes_label || 'Yes', option_no_label || 'No', req.userId, '[]', 'pending_review', resolution_source.trim()]);
 
-  const outcomeLower = String(outcome).toLowerCase();
-  if (outcomeLower === 'cancel') {
-    const bets = await dbAll('SELECT * FROM prediction_bets WHERE market_id = ? AND status = ?', [market.id, 'pending']);
-    for (const bet of bets) {
-      await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [bet.amount, bet.user_id]);
-      await dbRun('UPDATE prediction_bets SET status = ? WHERE id = ?', ['refunded', bet.id]);
-    }
-    await dbRun(`UPDATE prediction_markets SET status = ?, resolution_value = ?, resolved_by = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      ['cancelled', 'cancel', resolverUserId, market.id]);
-    return { message: 'Market cancelled and bets refunded' };
+  await logSystemEvent('info', `User market submitted by ${req.userId}`, `Market ${result.lastID}: ${title}`);
+  res.json({ id: result.lastID, message: 'Market submitted for review. It will go live once approved.' });
+});
+
+// API: List the current user's submitted markets (any status) so they can track review progress
+app.get('/api/oracle/markets/mine', authenticateRequest, async (req, res) => {
+  const markets = await dbAll('SELECT * FROM prediction_markets WHERE created_by = ? AND is_user_created = 1 ORDER BY created_at DESC LIMIT 50', [req.userId]);
+  res.json(markets);
+});
+
+// SSE: Live Oracle price updates — pushes price changes to all connected clients
+// Clients connect with: new EventSource('/api/oracle/live')
+const oracleSSEClients = new Set();
+app.get('/api/oracle/live', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*'
+  });
+  res.write('data: ' + JSON.stringify({ type: 'connected', message: 'Oracle live feed connected' }) + '\n\n');
+
+  const client = { res, userId: null };
+  oracleSSEClients.add(client);
+
+  req.on('close', () => { oracleSSEClients.delete(client); });
+});
+
+// Broadcast a price update to all SSE clients (called after every trade)
+async function broadcastOraclePriceUpdate(marketId, option, price) {
+  const payload = JSON.stringify({ type: 'price_update', market_id: marketId, option, price, timestamp: Date.now() });
+  for (const client of oracleSSEClients) {
+    try { client.res.write('data: ' + payload + '\n\n'); } catch (e) { oracleSSEClients.delete(client); }
   }
-
-  const winningOption = outcomeLower;
-  const losingOption = winningOption === 'yes' ? 'no' : 'yes';
-  const losingPool = losingOption === 'yes' ? market.total_yes : market.total_no;
-  const winningPool = winningOption === 'yes' ? market.total_yes : market.total_no;
-
-  if (winningPool <= 0) {
-    await dbRun(`UPDATE prediction_markets SET status = ?, resolution_value = ?, resolved_by = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      ['resolved', winningOption, resolverUserId, market.id]);
-    return { message: 'Market resolved. No winning bets to pay.' };
-  }
-
-  const feeRate = market.fee_rate || 0;
-  const poolAfterFee = losingPool * (1 - feeRate);
-
-  const winningBets = await dbAll('SELECT * FROM prediction_bets WHERE market_id = ? AND option = ? AND status = ?', [market.id, winningOption, 'pending']);
-  for (const bet of winningBets) {
-    const share = bet.amount / winningPool;
-    const payout = Math.floor((bet.amount + (poolAfterFee * share)) * 100) / 100;
-    await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, bet.user_id]);
-    await dbRun('UPDATE prediction_bets SET status = ?, payout = ? WHERE id = ?', ['won', payout, bet.id]);
-  }
-
-  const losingBets = await dbAll('SELECT * FROM prediction_bets WHERE market_id = ? AND option = ? AND status = ?', [market.id, losingOption, 'pending']);
-  for (const bet of losingBets) {
-    await dbRun('UPDATE prediction_bets SET status = ? WHERE id = ?', ['lost', bet.id]);
-  }
-
-  if (feeRate > 0) {
-    await creditHouseRevenue(losingPool * feeRate);
-  }
-
-  await dbRun(`UPDATE prediction_markets SET status = ?, resolution_value = ?, resolved_by = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?`,
-    ['resolved', winningOption, resolverUserId, market.id]);
-
-  await logSystemEvent('info', `Prediction market ${market.id} resolved`, `Outcome: ${winningOption}`);
-  return { message: `Resolved as ${winningOption}`, winners: winningBets.length, paid: poolAfterFee };
 }
 
-// API: Admin resolve prediction market (parimutuel payout)
+// API: Admin queue of user-submitted markets awaiting review
+app.get('/api/admin/oracle/pending', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+  const markets = await dbAll('SELECT * FROM prediction_markets WHERE status = ? ORDER BY created_at ASC LIMIT 100', ['pending_review']);
+  res.json(markets);
+});
+
+// API: Admin approves a user-submitted market — it goes live
+app.post('/api/admin/oracle/:id/approve', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+  const market = await dbGet('SELECT * FROM prediction_markets WHERE id = ? AND status = ?', [req.params.id, 'pending_review']);
+  if (!market) return res.status(400).json({ error: 'Market not pending review' });
+  await dbRun('UPDATE prediction_markets SET status = ? WHERE id = ?', ['active', market.id]);
+  await dbRun('INSERT INTO prediction_price_history (market_id, yes_price) VALUES (?, 0.5)', [market.id]);
+  await logSystemEvent('info', `User market approved by admin ${req.userId}`, `Market ${market.id}: ${market.title}`);
+  res.json({ message: 'Market approved and live' });
+});
+
+// API: Admin rejects a user-submitted market
+app.post('/api/admin/oracle/:id/reject', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+  const market = await dbGet('SELECT * FROM prediction_markets WHERE id = ? AND status = ?', [req.params.id, 'pending_review']);
+  if (!market) return res.status(400).json({ error: 'Market not pending review' });
+  await dbRun('UPDATE prediction_markets SET status = ? WHERE id = ?', ['rejected', market.id]);
+  await logSystemEvent('info', `User market rejected by admin ${req.userId}`, `Market ${market.id}: ${market.title}`);
+  res.json({ message: 'Market rejected' });
+});
+
+// API: Admin resolve prediction market — fixed $1/$0 redemption per share
 app.post('/api/admin/prediction-markets/:id/resolve', authenticateRequest, async (req, res) => {
   if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
   try {
-    const result = await resolvePredictionMarket(req.params.id, req.body.outcome, req.userId);
+    const result = await resolveOracleMarket(req.params.id, req.body.outcome, req.userId);
     res.json(result);
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -8722,14 +9768,20 @@ app.post('/api/admin/predictions/football/:id/auto-resolve', authenticateRequest
   const market = await dbGet('SELECT * FROM prediction_markets WHERE id = ? AND api_source = ? AND status = ?', [req.params.id, 'worldcup26', 'active']);
   if (!market) return res.status(400).json({ error: 'Football market not active or not from API' });
 
+  let meta = {};
+  try { meta = market.metadata ? JSON.parse(market.metadata) : {}; } catch (e) { meta = {}; }
+  const leagueCode = meta.league_code || 'eng.1';
+
   try {
     if (!market.api_event_date) throw new Error('No match date stored for this market');
     const date = market.api_event_date.replace(/-/g, '');
-    const apiRes = await fetch(`https://worldcup26.ir/get/soccer/eng.1/scoreboard?dates=${date}`);
+    const apiRes = await fetch(`https://worldcup26.ir/get/soccer/${leagueCode}/scoreboard?dates=${date}`);
     if (!apiRes.ok) throw new Error(`Scoreboard API returned ${apiRes.status}`);
 
     const data = await apiRes.json();
-    const event = (data?.events || []).find(e => String(e.id) === String(market.api_event_id));
+    // For totals markets, api_event_id is `${eventId}-ou25`; strip the suffix to find the base event
+    const baseEventId = String(market.api_event_id).replace(/-ou25$/, '');
+    const event = (data?.events || []).find(e => String(e.id) === baseEventId);
     if (!event) throw new Error('Match not found on this date');
 
     const status = event?.status?.type?.name || '';
@@ -8743,10 +9795,20 @@ app.post('/api/admin/predictions/football/:id/auto-resolve', authenticateRequest
 
     const homeScore = parseInt(home.score, 10);
     const awayScore = parseInt(away.score, 10);
-    const outcome = homeScore > awayScore ? 'yes' : 'no';
+    const totalGoals = homeScore + awayScore;
 
-    const result = await resolvePredictionMarket(market.id, outcome, req.userId);
-    res.json({ ...result, apiOutcome: outcome, homeScore, awayScore, match: `${home.team?.displayName || ''} ${homeScore} - ${awayScore} ${away.team?.displayName || ''}` });
+    // Determine outcome based on market type
+    let outcome;
+    if (meta.market_type === 'totals' && meta.line) {
+      // Over/Under: Yes = over the line, No = under or exactly on the line
+      outcome = totalGoals > meta.line ? 'yes' : 'no';
+    } else {
+      // Moneyline: Yes = home wins, No = away wins or draw
+      outcome = homeScore > awayScore ? 'yes' : 'no';
+    }
+
+    const result = await resolveOracleMarket(market.id, outcome, req.userId);
+    res.json({ ...result, apiOutcome: outcome, homeScore, awayScore, totalGoals, match: `${home.team?.displayName || ''} ${homeScore} - ${awayScore} ${away.team?.displayName || ''}` });
   } catch (e) {
     console.error('Football auto-resolve error:', e);
     res.status(500).json({ error: e.message });
@@ -8896,7 +9958,7 @@ app.post('/api/admin/predictions/crypto/:id/auto-resolve', authenticateRequest, 
     if (typeof price !== 'number') throw new Error('Unable to retrieve price for this coin');
 
     const outcome = price > meta.target_price ? 'yes' : 'no';
-    const result = await resolvePredictionMarket(market.id, outcome, req.userId);
+    const result = await resolveOracleMarket(market.id, outcome, req.userId);
     res.json({ ...result, apiOutcome: outcome, price, target: meta.target_price, coin: meta.coin_name || meta.coin_id });
   } catch (e) {
     console.error('Crypto auto-resolve error:', e);
@@ -8986,11 +10048,287 @@ app.post('/api/admin/predictions/esports/:id/auto-resolve', authenticateRequest,
       throw new Error('Match result not available yet');
     }
 
-    const result = await resolvePredictionMarket(market.id, outcome, req.userId);
+    const result = await resolveOracleMarket(market.id, outcome, req.userId);
     res.json({ ...result, apiOutcome: outcome, winner: winnerName || 'draw', match: `${meta.team_a} vs ${meta.team_b}` });
   } catch (e) {
     console.error('Esports auto-resolve error:', e);
     res.status(500).json({ error: e.message });
+  }
+});
+
+// ===== MULTI-SPORT EXPANSION =====
+// worldcup26.ir supports multiple soccer leagues; ESPN public scoreboard covers NBA, NFL, MLB, NHL, tennis.
+// All seeders are resilient: if an API is unreachable, they log a warning and return {created:0, skipped:0, total:0}.
+
+// Soccer leagues supported by worldcup26.ir (confirmed: eng.1, esp.1; others may or may not have current fixtures)
+const WORLD_CUP_26_SOCCER_LEAGUES = [
+  { code: 'eng.1', name: 'English Premier League', short: 'EPL' },
+  { code: 'esp.1', name: 'La Liga', short: 'La Liga' },
+  { code: 'ita.1', name: 'Serie A', short: 'Serie A' },
+  { code: 'ger.1', name: 'Bundesliga', short: 'Bundesliga' },
+  { code: 'fra.1', name: 'Ligue 1', short: 'Ligue 1' },
+  { code: 'ned.1', name: 'Eredivisie', short: 'Eredivisie' },
+  { code: 'por.1', name: 'Primeira Liga', short: 'Primeira Liga' },
+  { code: 'uefa.champions', name: 'UEFA Champions League', short: 'UCL' },
+  { code: 'uefa.europa', name: 'UEFA Europa League', short: 'Europa' },
+  { code: 'usa.1', name: 'MLS', short: 'MLS' },
+];
+
+// ESPN public scoreboard config for non-soccer sports
+const ESPN_SPORTS = [
+  { sport: 'basketball', league: 'nba', label: 'NBA', category: 'sports' },
+  { sport: 'basketball', league: 'wnba', label: 'WNBA', category: 'sports' },
+  { sport: 'basketball', league: 'mens-college-basketball', label: 'NCAAB', category: 'sports' },
+  { sport: 'football', league: 'nfl', label: 'NFL', category: 'sports' },
+  { sport: 'football', league: 'college-football', label: 'NCAAF', category: 'sports' },
+  { sport: 'baseball', league: 'mlb', label: 'MLB', category: 'sports' },
+  { sport: 'hockey', league: 'nhl', label: 'NHL', category: 'sports' },
+  { sport: 'tennis', league: 'atp', label: 'ATP', category: 'sports' },
+  { sport: 'tennis', league: 'wta', label: 'WTA', category: 'sports' },
+  { sport: 'mma', league: 'ufc', label: 'UFC', category: 'sports' },
+  { sport: 'golf', league: 'pga', label: 'PGA', category: 'sports' },
+];
+
+// Generic fetch helper with timeout — returns null on failure (never throws)
+async function fetchWithTimeout(url, ms = 10000) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), ms);
+    const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'PixelPulse/1.0' } });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+// Expand the existing football seeder to cover multiple soccer leagues
+async function seedAllSoccerMarkets(userId = null) {
+  const today = new Date();
+  const toDate = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const fmt = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');
+  const fromStr = fmt(today);
+  const toStr = fmt(toDate);
+
+  let totalCreated = 0;
+  let totalSkipped = 0;
+
+  for (const league of WORLD_CUP_26_SOCCER_LEAGUES) {
+    const apiUrl = `https://worldcup26.ir/get/soccer/${league.code}/fixtures?status=all&from=${fromStr}&to=${toStr}`;
+    const apiData = await fetchWithTimeout(apiUrl, 8000);
+    if (!apiData) { continue; } // league not supported or no data — skip silently
+    const events = apiData?.events || [];
+
+    for (const event of events.slice(0, 20)) {
+      if (event?.status?.type?.name !== 'STATUS_SCHEDULED') { totalSkipped++; continue; }
+      const comp = event?.competitions?.[0];
+      if (!comp?.competitors || comp.competitors.length < 2) { totalSkipped++; continue; }
+
+      const homeComp = comp.competitors.find(c => c.homeAway === 'home');
+      const awayComp = comp.competitors.find(c => c.homeAway === 'away');
+      if (!homeComp?.team?.displayName || !awayComp?.team?.displayName) { totalSkipped++; continue; }
+
+      const home = homeComp.team.displayName;
+      const away = awayComp.team.displayName;
+      const matchDate = new Date(event.date).toLocaleString();
+      const eventId = String(event.id);
+
+      const existing = await dbGet('SELECT id FROM prediction_markets WHERE api_source = ? AND api_event_id = ? AND status = ?', ['worldcup26', eventId]);
+      if (existing) { totalSkipped++; continue; }
+
+      const eventDate = event.date?.slice(0, 10);
+      const metadata = JSON.stringify({
+        home_logo: homeComp.team?.logo || '', away_logo: awayComp.team?.logo || '',
+        home, away, competition: league.name, competition_logo: event.competition_logo || '',
+        league_code: league.code, sport_type: 'soccer'
+      });
+      const imageUrl = homeComp.team?.logo || '';
+      await dbRun(`
+        INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, api_source, api_event_id, api_event_date, image_url, metadata, created_by, options_json, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        `Will ${home} beat ${away}?`,
+        `${league.name} match on ${matchDate}. Yes = ${home} wins. No = ${away} wins or draw.`,
+        'sports', `${home} wins`, `${away} or draw`, 'worldcup26', eventId, eventDate, imageUrl, metadata, userId, '[]', 'active'
+      ]);
+      totalCreated++;
+
+      // Over/Under 2.5 goals market (the most common soccer totals line)
+      const totalsEventId = `${eventId}-ou25`;
+      const totalsExisting = await dbGet('SELECT id FROM prediction_markets WHERE api_source = ? AND api_event_id = ? AND status = ?', ['worldcup26', totalsEventId]);
+      if (!totalsExisting) {
+        const totalsMetadata = JSON.stringify({
+          home_logo: homeComp.team?.logo || '', away_logo: awayComp.team?.logo || '',
+          home, away, competition: league.name, competition_logo: event.competition_logo || '',
+          league_code: league.code, sport_type: 'soccer', market_type: 'totals', line: 2.5
+        });
+        await dbRun(`
+          INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, api_source, api_event_id, api_event_date, image_url, metadata, created_by, options_json, status)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          `${home} vs ${away}: Over 2.5 goals?`,
+          `${league.name} match on ${matchDate}. Yes = 3+ total goals scored. No = 2 or fewer goals.`,
+          'sports', 'Over 2.5', 'Under 2.5', 'worldcup26', totalsEventId, eventDate, imageUrl, totalsMetadata, userId, '[]', 'active'
+        ]);
+        totalCreated++;
+      }
+    }
+  }
+
+  await logSystemEvent('info', `Seeded multi-league soccer markets`, `Created ${totalCreated}, skipped ${totalSkipped}`);
+  return { created: totalCreated, skipped: totalSkipped, total: 0 };
+}
+
+// Generic ESPN scoreboard seeder for non-soccer sports (NBA, NFL, MLB, NHL, tennis, UFC, etc.)
+async function seedEspnSportMarkets(espnConfig, userId = null) {
+  const { sport, league, label, category } = espnConfig;
+  const apiUrl = `https://site.api.espn.com/apis/site/v2/sports/${sport}/${league}/scoreboard`;
+  const data = await fetchWithTimeout(apiUrl, 10000);
+  if (!data) {
+    console.log(`ESPN ${label}: API unreachable, skipping`);
+    return { created: 0, skipped: 0, total: 0, error: 'API unreachable' };
+  }
+
+  const events = data.events || [];
+  let created = 0;
+  let skipped = 0;
+
+  for (const event of events.slice(0, 30)) {
+    // Only create markets for scheduled/upcoming events
+    const state = event?.status?.type?.state;
+    if (state !== 'pre') { skipped++; continue; }
+
+    const comp = event?.competitions?.[0];
+    if (!comp?.competitors || comp.competitors.length < 2) { skipped++; continue; }
+
+    const homeComp = comp.competitors.find(c => c.homeAway === 'home');
+    const awayComp = comp.competitors.find(c => c.homeAway === 'away');
+    if (!homeComp?.team?.displayName || !awayComp?.team?.displayName) { skipped++; continue; }
+
+    const home = homeComp.team.displayName;
+    const away = awayComp.team.displayName;
+    const matchDate = event.date ? new Date(event.date).toLocaleString() : 'TBD';
+    const eventId = String(event.id);
+    const eventDate = event.date?.slice(0, 10) || '';
+
+    const existing = await dbGet('SELECT id FROM prediction_markets WHERE api_source = ? AND api_event_id = ? AND status = ?', ['espn', eventId]);
+    if (existing) { skipped++; continue; }
+
+    const metadata = JSON.stringify({
+      home_logo: homeComp.team?.logo || '', away_logo: awayComp.team?.logo || '',
+      home, away, competition: label, sport_type: sport, league,
+      espn_event_id: eventId, espn_sport: sport, espn_league: league
+    });
+    const imageUrl = homeComp.team?.logo || '';
+
+    // Moneyline market: "Will X beat Y?"
+    await dbRun(`
+      INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, api_source, api_event_id, api_event_date, image_url, metadata, created_by, options_json, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      `Will ${home} beat ${away}?`,
+      `${label} match${eventDate ? ' on ' + matchDate : ''}. Yes = ${home} wins. No = ${away} wins or draw.`,
+      category, `${home} wins`, `${away} or draw`, 'espn', eventId, eventDate, imageUrl, metadata, userId, '[]', 'active'
+    ]);
+    created++;
+  }
+
+  await logSystemEvent('info', `Seeded ${label} markets from ESPN`, `Created ${created}, skipped ${skipped}`);
+  return { created, skipped, total: events.length };
+}
+
+// Seed all ESPN sports in one pass
+async function seedAllEspnMarkets(userId = null) {
+  let totalCreated = 0;
+  let totalSkipped = 0;
+  for (const config of ESPN_SPORTS) {
+    const result = await seedEspnSportMarkets(config, userId);
+    totalCreated += result.created;
+    totalSkipped += result.skipped;
+  }
+  await logSystemEvent('info', `Seeded all ESPN sports markets`, `Created ${totalCreated}, skipped ${totalSkipped}`);
+  return { created: totalCreated, skipped: totalSkipped, total: 0 };
+}
+
+// Auto-resolve an ESPN-sourced market from the final score
+app.post('/api/admin/predictions/espn/:id/auto-resolve', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+
+  const market = await dbGet('SELECT * FROM prediction_markets WHERE id = ? AND api_source = ? AND status = ?', [req.params.id, 'espn', 'active']);
+  if (!market) return res.status(400).json({ error: 'Market not active or not from ESPN' });
+
+  let meta = {};
+  try { meta = market.metadata ? JSON.parse(market.metadata) : {}; } catch (e) { meta = {}; }
+  if (!meta.espn_sport || !meta.espn_league || !meta.espn_event_id) {
+    return res.status(400).json({ error: 'No ESPN event ID stored for this market' });
+  }
+
+  try {
+    const apiUrl = `https://site.api.espn.com/apis/site/v2/sports/${meta.espn_sport}/${meta.espn_league}/summary/${meta.espn_event_id}`;
+    const data = await fetchWithTimeout(apiUrl, 10000);
+    if (!data) throw new Error('ESPN API unreachable');
+
+    const comp = data?.header?.competitions?.[0] || data?.competitions?.[0];
+    if (!comp?.competitors) throw new Error('No competition data available');
+
+    const homeComp = comp.competitors.find(c => c.homeAway === 'home');
+    const awayComp = comp.competitors.find(c => c.homeAway === 'away');
+    const homeScore = parseInt(homeComp?.score || '0', 10);
+    const awayScore = parseInt(awayComp?.score || '0', 10);
+
+    if (comp?.status?.type?.state !== 'post') {
+      return res.status(400).json({ error: 'Match has not finished yet' });
+    }
+
+    // Yes = home wins. Home wins if homeScore > awayScore (most sports). For soccer, draw = No.
+    let outcome;
+    if (homeScore > awayScore) outcome = 'yes';
+    else outcome = 'no'; // away wins or draw
+
+    const result = await resolveOracleMarket(market.id, outcome, req.userId);
+    res.json({ ...result, apiOutcome: outcome, homeScore, awayScore, home: meta.home, away: meta.away });
+  } catch (e) {
+    console.error('ESPN auto-resolve error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// API: Admin seed all soccer leagues
+app.post('/api/admin/predictions/soccer/seed', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+  try {
+    const result = await seedAllSoccerMarkets(req.userId);
+    res.json(result);
+  } catch (e) {
+    console.error('Soccer seed error:', e);
+    res.status(500).json({ error: 'Failed to seed soccer markets' });
+  }
+});
+
+// API: Admin seed a specific ESPN sport
+app.post('/api/admin/predictions/espn/:sport/:league/seed', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+  const config = ESPN_SPORTS.find(s => s.sport === req.params.sport && s.league === req.params.league);
+  if (!config) return res.status(400).json({ error: 'Unknown ESPN sport/league' });
+  try {
+    const result = await seedEspnSportMarkets(config, req.userId);
+    res.json(result);
+  } catch (e) {
+    console.error('ESPN seed error:', e);
+    res.status(500).json({ error: 'Failed to seed markets' });
+  }
+});
+
+// API: Admin seed all ESPN sports at once
+app.post('/api/admin/predictions/espn/seed-all', authenticateRequest, async (req, res) => {
+  if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
+  try {
+    const result = await seedAllEspnMarkets(req.userId);
+    res.json(result);
+  } catch (e) {
+    console.error('ESPN seed-all error:', e);
+    res.status(500).json({ error: 'Failed to seed ESPN markets' });
   }
 });
 
@@ -9004,7 +10342,15 @@ async function seedPredictionMarketsIfEmpty() {
         console.log(`Auto-seed ${category}: ${result.created} created, ${result.skipped} skipped`);
       }
     };
-    await seedIfEmpty('sports', seedFootballMarkets);
+    // Sports: seed multi-league soccer first, then ESPN sports
+    const sportsEmpty = await dbGet('SELECT COUNT(*) as c FROM prediction_markets WHERE category = ? AND status = ?', ['sports', 'active']);
+    if (!sportsEmpty || Number(sportsEmpty.c) === 0) {
+      console.log('Auto-seed sports: soccer + ESPN...');
+      const soccerResult = await seedAllSoccerMarkets(null);
+      console.log(`Auto-seed soccer: ${soccerResult.created} created, ${soccerResult.skipped} skipped`);
+      const espnResult = await seedAllEspnMarkets(null);
+      console.log(`Auto-seed ESPN sports: ${espnResult.created} created, ${espnResult.skipped} skipped`);
+    }
     await seedIfEmpty('crypto', seedCryptoMarkets);
     await seedIfEmpty('esports', seedEsportsMarkets);
   } catch (e) {
