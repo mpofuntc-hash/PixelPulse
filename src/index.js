@@ -10948,8 +10948,13 @@ app.post('/api/tickets/:id/reply', authenticateRequest, async (req, res) => {
 
 // Start the HTTP server only after tables and default rates exist.
 databaseInitialization.then(async () => {
-  // Auto-seed prediction market categories in the background if empty so users see soccer, crypto and esports markets
-  seedPredictionMarketsIfEmpty().catch(e => console.error('Auto prediction seed failed:', e.message));
+  // Auto-seed prediction market categories in the background (with 15s cap) so users see soccer, crypto and esports markets
+  Promise.race([
+    seedPredictionMarketsIfEmpty(),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Prediction seed timeout')), 15000))
+  ])
+    .then(() => console.log('Auto prediction seed complete'))
+    .catch(e => console.error('Auto prediction seed failed:', e.message));
 
   app.listen(PORT, () => {
     console.log(`PixelPulse server running on port ${PORT}`);

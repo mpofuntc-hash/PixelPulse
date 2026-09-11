@@ -8180,14 +8180,14 @@
                     const flipLabel = flips % 2 === 0 ? 'HEADS' : 'TAILS';
                     resultEl.innerHTML = `<div class="arcade-coin-inner"><span>${flipIcon}</span><span class="coin-label">${flipLabel}</span></div>`;
                     flips++;
-                    if (flips > 8) {
+                    if (flips > 10) {
                         clearInterval(flipAnim);
                         ArcadeSession.clearTimer(flipAnim);
                         resultEl.classList.remove('flipping');
                         const finalIcon = data.result === 'heads' ? '👑' : '👸';
                         const finalLabel = data.result === 'heads' ? 'HEADS' : 'TAILS';
                         resultEl.innerHTML = `<div class="arcade-coin-inner coin-blast"><span>${finalIcon}</span><span class="coin-label">${finalLabel}</span></div>`;
-                        ArcadeSession.setTimeout(() => { resultEl.querySelector('.coin-blast')?.classList.remove('coin-blast'); }, 800);
+                        ArcadeSession.setTimeout(() => { resultEl.querySelector('.coin-blast')?.classList.remove('coin-blast'); }, 1200);
                         if (data.won) {
                             dramaticWin('#arcade-coinflip .arcade-screen', data.payout, false);
                             payoutEl.innerHTML = `🎉 WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span> (${data.multiplier.toFixed(2)}x)`;
@@ -8201,7 +8201,7 @@
                         btn.disabled = false; btn.textContent = 'FLIP COIN';
                         ArcadeSession.unlock('coinflip');
                     }
-                }, 180);
+                }, 350);
             } catch(e) { console.error('Coinflip error:', e); alert('Error playing coinflip: ' + (e.message || 'unknown')); btn.disabled = false; btn.textContent = 'FLIP COIN'; resultEl.classList.remove('flipping'); ArcadeSession.unlock('coinflip'); }
         }
 
@@ -8224,7 +8224,7 @@
                 reelsEl.innerHTML = symbols.map(() => `<span>${symbols[Math.floor(Math.random()*symbols.length)]}</span>`).join('');
                 spins++;
                 if (spins % 3 === 0) playGameSound('tick');
-                if (spins > 12) {
+                if (spins > 16) {
                     clearInterval(spinAnim);
                     ArcadeSession.clearTimer(spinAnim);
                     reelsEl.classList.remove('reel-blur');
@@ -8237,7 +8237,7 @@
                         if (data.payout > 0) {
                             if (data.result === 'jackpot') {
                                 reelsEl.classList.add('jackpot-blast');
-                                ArcadeSession.setTimeout(() => reelsEl.classList.remove('jackpot-blast'), 2200);
+                                ArcadeSession.setTimeout(() => reelsEl.classList.remove('jackpot-blast'), 3000);
                             }
                             dramaticWin('#arcade-slots .arcade-screen', data.payout, data.result === 'jackpot');
                             const profit = Math.max(0, data.payout - stake);
@@ -8247,16 +8247,16 @@
                         } else {
                             dramaticLoss('#arcade-slots .arcade-screen', data.stake);
                             payoutEl.className = 'slots-result loss';
-                            payoutEl.innerHTML = `<div class="big">- $${data.stake.toFixed(2)}</div><div class="small">STAKE $${data.stake.toFixed(2)} • MULTIPLIER 0.00x</div>`;
+                            payoutEl.innerHTML = `<div class="big">- $${data.stake.toFixed(2)}</div><div class="small">STAKE $${stake.toFixed(2)} • MULTIPLIER 0.00x</div>`;
                             showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
                         }
                         document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
-                        // Keep results on screen for 2.5s before re-enabling spin
-                        ArcadeSession.setTimeout(() => { btn.disabled = false; btn.textContent = 'SPIN'; ArcadeSession.unlock('slots'); }, 2500);
+                        // Keep results on screen for 3.5s before re-enabling spin
+                        ArcadeSession.setTimeout(() => { btn.disabled = false; btn.textContent = 'SPIN'; ArcadeSession.unlock('slots'); }, 3500);
                     }).catch((e) => { console.error('Slots error:', e); alert('Error: ' + (e.message || 'unknown')); btn.disabled=false; btn.textContent='SPIN'; ArcadeSession.unlock('slots'); });
                     ArcadeSession.trackFetch(fetchPromise);
                 }
-            }, 140);
+            }, 320);
         }
 
         async function startCrash() {
@@ -8426,10 +8426,10 @@
                     robberEl.textContent = runSteps[Math.floor(elapsed * runSpeed) % runSteps.length];
                     
                     // Police car siren flash — flashes faster as tension rises
-                    const policeSpeed = 3 + Math.floor(tension * 5);
+                    const policeSpeed = 2 + Math.floor(tension * 3);
                     const policeSteps = ['🚔', '🚓', '🚔'];
                     policeEl.textContent = policeSteps[Math.floor(elapsed * policeSpeed) % policeSteps.length];
-                }, 180);
+                }, 450);
             } catch(e) { console.error('Crash start error:', e); alert('Error starting crash: ' + (e.message || 'unknown')); startBtn.disabled = false; ArcadeSession.unlock('crash'); }
         }
 
@@ -8767,7 +8767,7 @@
                 if (diceMode !== 'single') die2El.textContent = Math.floor(Math.random() * 6) + 1;
                 spins++;
                 if (spins % 3 === 0) playGameSound('tick');
-                if (spins > 15) {
+                if (spins > 18) {
                     clearInterval(rollAnim);
                     ArcadeSession.clearTimer(rollAnim);
                     die1El.classList.remove('rolling');
@@ -8790,11 +8790,11 @@
                             showArcadeToast('loss', '❌', 'YOU LOST!', `-$${(data.stake || 0).toFixed(2)}`);
                         }
                         document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
-                        ArcadeSession.setTimeout(() => { btn.disabled = false; btn.textContent = 'ROLL DICE'; ArcadeSession.unlock('dice'); }, 2500);
+                        ArcadeSession.setTimeout(() => { btn.disabled = false; btn.textContent = 'ROLL DICE'; ArcadeSession.unlock('dice'); }, 4000);
                     }).catch(e => { console.error('Dice error:', e); btn.disabled=false; btn.textContent='ROLL DICE'; ArcadeSession.unlock('dice'); });
                     ArcadeSession.trackFetch(fetchPromise);
                 }
-            }, 140);
+            }, 320);
         }
 
         // ===== PLINKO =====
@@ -8899,7 +8899,7 @@
                             btn.disabled = false; btn.textContent = 'DROP BALL';
                             if (slots[data.slotIndex]) { slots[data.slotIndex].style.transform = ''; slots[data.slotIndex].style.boxShadow = ''; }
                             ArcadeSession.unlock('plinko');
-                        }, 2500);
+                        }, 4000);
                         return;
                     }
                     // Move ball using percentage to avoid forced reflow on every tick
@@ -8909,7 +8909,7 @@
                     ball.style.left = `${pctX}%`;
                     ball.style.top = `${pctY}%`;
                     step++;
-                }, 180);
+                }, 400);
             } catch(e) { console.error('Plinko error:', e); btn.disabled=false; btn.textContent='DROP BALL'; ball.style.display='none'; ArcadeSession.unlock('plinko'); }
         }
 
@@ -8999,26 +8999,39 @@
             const btn = document.getElementById('wheelPlayBtn');
             const resultEl = document.getElementById('wheelResult');
             const display = document.getElementById('wheelDisplay');
+            const WHEEL_LABELS = ['0x','0.5x','1x','1.5x','2x','3x','5x','10x','25x'];
             btn.disabled = true; btn.textContent = 'SPINNING...';
             resultEl.textContent = '';
             display.textContent = '🎡';
+            let ticks = 0;
+            playGameSound('spin');
+            const spinAnim = ArcadeSession.setInterval(() => {
+                display.textContent = WHEEL_LABELS[ticks % WHEEL_LABELS.length];
+                ticks++;
+            }, 220);
             try {
                 const res = await fetch('/api/arcade/wheel', { method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ stake }) });
                 const data = await res.json();
-                if (!res.ok) { alert(data.error); btn.disabled = false; btn.textContent = 'SPIN WHEEL'; ArcadeSession.unlock('wheel'); return; }
-                display.textContent = data.segment;
-                if (data.payout > 0) {
-                    dramaticWin('#arcade-wheel .arcade-game', data.payout || 0, false);
-                    resultEl.innerHTML = `🎉 Landed on <span style="color:#00d4ff;font-weight:700">${data.segment}</span> — WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span>`;
-                    showArcadeToast('win', '🎡', 'YOU WON!', `+$${data.payout.toFixed(2)}`);
-                } else {
-                    dramaticLoss('#arcade-wheel .arcade-game', data.stake || 0);
-                    resultEl.innerHTML = `Landed on ${data.segment} — Lost $${data.stake.toFixed(2)}`;
-                    showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
-                }
-                document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
-            } catch(e) { console.error('Wheel error:', e); }
-            ArcadeSession.setTimeout(() => { btn.disabled = false; btn.textContent = 'SPIN WHEEL'; ArcadeSession.unlock('wheel'); }, 2000);
+                if (!res.ok) { alert(data.error); btn.disabled = false; btn.textContent = 'SPIN WHEEL'; clearInterval(spinAnim); ArcadeSession.clearTimer(spinAnim); ArcadeSession.unlock('wheel'); return; }
+                const target = data.segment;
+                // Land after visible spin
+                ArcadeSession.setTimeout(() => {
+                    clearInterval(spinAnim);
+                    ArcadeSession.clearTimer(spinAnim);
+                    display.textContent = target;
+                    if (data.payout > 0) {
+                        dramaticWin('#arcade-wheel .arcade-game', data.payout || 0, false);
+                        resultEl.innerHTML = `🎉 Landed on <span style="color:#00d4ff;font-weight:700">${target}</span> — WON <span style="color:#4caf50;font-weight:700">$${data.payout.toFixed(2)}</span>`;
+                        showArcadeToast('win', '🎡', 'YOU WON!', `+$${data.payout.toFixed(2)}`);
+                    } else {
+                        dramaticLoss('#arcade-wheel .arcade-game', data.stake || 0);
+                        resultEl.innerHTML = `Landed on ${target} — Lost $${data.stake.toFixed(2)}`;
+                        showArcadeToast('loss', '❌', 'YOU LOST!', `-$${data.stake.toFixed(2)}`);
+                    }
+                    document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
+                }, 2500);
+            } catch(e) { console.error('Wheel error:', e); clearInterval(spinAnim); ArcadeSession.clearTimer(spinAnim); }
+            ArcadeSession.setTimeout(() => { btn.disabled = false; btn.textContent = 'SPIN WHEEL'; ArcadeSession.unlock('wheel'); }, 4500);
         }
 
         // ===== PVP COLOR CLASH =====
