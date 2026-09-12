@@ -1,0 +1,29 @@
+name: Deploy to Live Server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Oracle Cloud VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USERNAME }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          port: ${{ secrets.ORACLE_SSH_PORT || '22' }}
+          script: |
+            set -e
+            cd ${{ secrets.PROJECT_PATH }}
+            pm2 stop PixelPulse 2>/dev/null || pkill -f "node src/index.js" || true
+            cp data/pixelpulse.db "data/pixelpulse.db.bak.$(date +%Y%m%d%H%M%S)" || true
+            git reset --hard HEAD
+            git pull origin main
+            npm install
+            nohup npm start > server_out.log 2> server_err.log &
+            sleep 5
+            curl -s -o /dev/null -w "%{http_code}" http://localhost:3000
