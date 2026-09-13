@@ -7425,6 +7425,18 @@
                     </select>
                 </div>
 
+                <!-- Security / Change Password -->
+                <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; border: 1px solid #333; margin-bottom: 20px;">
+                    <div style="font-weight: bold; color: #fff; margin-bottom: 4px;">🔒 Change Password</div>
+                    <div style="color: #999; font-size: 12px; margin-bottom: 12px;">You'll stay logged in on this device; other sessions are signed out.</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                        <input type="password" id="cpCurrent" class="arcade-input" placeholder="Current password" autocomplete="current-password" style="padding: 10px; font-size: 14px;">
+                        <input type="password" id="cpNew" class="arcade-input" placeholder="New password (min 8 chars)" autocomplete="new-password" style="padding: 10px; font-size: 14px;">
+                    </div>
+                    <div id="cpMsg" style="font-size: 12px; margin-bottom: 8px; min-height: 14px;"></div>
+                    <button class="btn btn-primary" id="cpBtn" onclick="changePassword()">Update Password</button>
+                </div>
+
                 <!-- Analytics -->
                 <div id="profileAnalyticsSection" style="margin-bottom: 20px;">
                     <div class="loading">Loading analytics...</div>
@@ -7489,6 +7501,33 @@
             `;
 
             document.getElementById('profileContent').innerHTML = html;
+        }
+
+        async function changePassword() {
+            const current = document.getElementById('cpCurrent').value;
+            const next = document.getElementById('cpNew').value;
+            const msg = document.getElementById('cpMsg');
+            const btn = document.getElementById('cpBtn');
+            msg.style.color = '#f44336'; msg.textContent = '';
+            if (!current || !next) { msg.textContent = 'Enter your current and new password.'; return; }
+            if (next.length < 8) { msg.textContent = 'New password must be at least 8 characters.'; return; }
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/auth/change-password', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ currentPassword: current, newPassword: next })
+                });
+                const data = await res.json();
+                if (!res.ok) { msg.textContent = data.error || 'Failed to change password.'; }
+                else {
+                    msg.style.color = '#4caf50';
+                    msg.textContent = '✅ Password changed! Other devices have been signed out.';
+                    document.getElementById('cpCurrent').value = '';
+                    document.getElementById('cpNew').value = '';
+                }
+            } catch (e) { msg.textContent = 'Network error. Please try again.'; }
+            btn.disabled = false;
         }
 
         async function updatePreferredCurrency(currency) {

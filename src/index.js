@@ -4705,6 +4705,31 @@ app.post('/api/auth/logout', async (req, res) => {
   res.json({ message: 'Logout successful' });
 });
 
+// API: Change own password (authenticated)
+app.post('/api/auth/change-password', rateLimit({ windowMs: 60 * 1000, max: 5, key: req => `changepw:${req.userId || req.ip || 'unknown'}` }), authenticateRequest, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  if (!validateText(currentPassword, { maxLength: 128, required: true }) || !validateText(newPassword, { maxLength: 128, required: true })) {
+    return res.status(400).json({ error: 'Current password and new password are required' });
+  }
+  if (String(newPassword).length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  }
+
+  const user = await dbGet('SELECT password_hash FROM users WHERE id = ?', [req.userId]);
+  if (!user || !(await verifyPassword(String(currentPassword), user.password_hash))) {
+    return res.status(401).json({ error: 'Current password is incorrect' });
+  }
+
+  await dbRun('UPDATE users SET password_hash = ? WHERE id = ?', [await hashPassword(String(newPassword)), req.userId]);
+
+  // Keep the current session alive, sign out every other device
+  const currentToken = req.headers.authorization?.replace('Bearer ', '');
+  await dbRun('DELETE FROM sessions WHERE user_id = ? AND session_token != ?', [req.userId, currentToken]);
+
+  res.json({ message: 'Password changed successfully' });
+});
+
 // API: Get current user
 app.get('/api/auth/me', async (req, res) => {
   const sessionToken = req.headers.authorization?.replace('Bearer ', '');
