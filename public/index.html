@@ -2721,33 +2721,34 @@
     <!-- Bet Slip Panel (Betway-style accumulator) -->
     <div id="betSlipPanel" style="position: fixed; right: 20px; top: 100px; width: 340px; background: #1a1a1a; border: 1px solid #333; border-radius: 12px; z-index: 999; box-shadow: 0 8px 24px rgba(0,0,0,0.6); display: none; max-height: 80vh; overflow-y: auto;">
         <div style="background: #e50914; padding: 15px; border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center;">
-            <div style="font-weight: bold; font-size: 16px; color: #fff;">🎫 Prediction Slip</div>
+            <div style="font-weight: bold; font-size: 16px; color: #fff;">🎫 Oracle Slip</div>
             <div style="display: flex; gap: 10px; align-items: center;">
                 <span id="slipCount" style="background: #fff; color: #e50914; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;">0</span>
                 <button onclick="toggleSlip()" style="background: none; border: none; color: #fff; font-size: 18px; cursor: pointer;">×</button>
             </div>
         </div>
         <div id="slipSelections" style="padding: 15px; min-height: 60px;">
-            <div style="color: #999; text-align: center; padding: 20px;">Add 2+ selections to build your slip</div>
+            <div style="color: #999; text-align: center; padding: 20px;">Tap <strong>+ SLIP</strong> on any Yes/No to build a slip.<br><span style="font-size:11px;">2-6 picks · odds multiply · all must hit</span></div>
         </div>
         <div id="slipSummary" style="padding: 0 15px 15px; display: none;">
             <div style="display: flex; justify-content: space-between; padding: 10px 0; border-top: 1px solid #333;">
-                <span style="color: #999;">Total Odds:</span>
-                <span id="slipTotalOdds" style="font-weight: bold; color: #4caf50;">1.00x</span>
+                <span style="color: #999;">Combined Odds:</span>
+                <span id="slipTotalOdds" style="font-weight: bold; color: #4caf50;">—</span>
             </div>
             <div style="display: flex; justify-content: space-between; padding: 5px 0;">
-                <span style="color: #999;">Bonus:</span>
+                <span style="color: #999;">Parlay Bonus:</span>
                 <span id="slipBonus" style="color: #4caf50;">0%</span>
             </div>
             <div style="margin-top: 10px;">
-                <label style="color: #999; font-size: 12px; display: block; margin-bottom: 5px;">Stake (BTC):</label>
-                <input type="number" id="slipStake" placeholder="0.001" min="0.0001" step="0.0001" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;" oninput="updateSlipPayout()">
+                <label style="color: #999; font-size: 12px; display: block; margin-bottom: 5px;">Stake (USD, min $2):</label>
+                <input type="number" id="slipStake" value="2" min="2" step="0.5" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;" oninput="updateSlipPayout()">
             </div>
             <div style="display: flex; justify-content: space-between; padding: 10px 0; border-top: 1px solid #333; margin-top: 10px;">
-                <span style="color: #999;">Potential Payout:</span>
-                <span id="slipPayout" style="font-weight: bold; color: #4caf50; font-size: 16px;">0.00000000 BTC</span>
+                <span style="color: #999;">Potential Win:</span>
+                <span id="slipPayout" style="font-weight: bold; color: #4caf50; font-size: 16px;">—</span>
             </div>
-            <button class="btn btn-primary" onclick="submitSlip()" style="width: 100%; margin-top: 10px; padding: 12px; font-size: 14px; font-weight: bold;">Place Slip 🎫</button>
+            <button class="btn btn-primary" id="slipPlaceBtn" onclick="submitSlip()" style="width: 100%; margin-top: 10px; padding: 12px; font-size: 14px; font-weight: bold;">Place Slip 🎫</button>
+            <div style="font-size: 10px; color: #777; margin-top: 8px; text-align: center;">All picks must win. Cash out early any time from My Positions. Max win $500 per slip.</div>
         </div>
     </div>
 
@@ -4939,6 +4940,12 @@
             document.getElementById('wallet').style.display = 'none';
             document.getElementById('profile').style.display = 'none';
             document.getElementById('support').style.display = 'none';
+            // The Oracle slip only lives on The Oracle page
+            const slipPanel = document.getElementById('betSlipPanel'), slipBtn = document.getElementById('slipToggleBtn');
+            if (slipPanel && slipBtn) {
+                if (section === 'betting') { slipBtn.style.display = (typeof oracleSlip !== 'undefined' && oracleSlip.length && slipPanel.style.display !== 'block') ? 'flex' : 'none'; }
+                else { slipPanel.style.display = 'none'; slipBtn.style.display = 'none'; }
+            }
             
             // Remove active class from all nav links
             document.getElementById('nav-clips').classList.remove('active');
@@ -5414,103 +5421,94 @@
             loadBettingMarkets();
         }
 
-        // ===== BET SLIP (Accumulator) FUNCTIONS =====
-        let slipSelections = [];
+        // ===== ORACLE SLIP (Parlay / Accumulator) =====
+        // Users stack 2-6 Yes/No outcomes into one house-backed slip. Odds come from live Oracle prices;
+        // the server is the source of truth for the multiplier (quote endpoint), we just mirror it here.
+        let oracleSlip = [];
+        let oracleSlipQuoteTimer = null;
 
-        function addToSlip(marketId, marketTitle, option) {
-            // Check if already in slip
-            const existing = slipSelections.find(s => s.marketId === marketId);
+        function addOracleSlipLeg(marketId, option) {
+            const m = (oracleAllMarkets || []).find(x => x.id === marketId);
+            if (!m) return;
+            const existing = oracleSlip.find(s => s.market_id === marketId);
             if (existing) {
-                if (existing.option === option) {
-                    alert('This selection is already in your slip');
-                    return;
-                }
-                // Replace the option for this market
+                if (existing.option === option) { removeOracleSlipLeg(marketId); return; }
                 existing.option = option;
             } else {
-                if (slipSelections.length >= 10) {
-                    alert('Maximum 10 selections per slip');
-                    return;
-                }
-                slipSelections.push({ marketId, marketTitle, option });
+                if (oracleSlip.length >= 6) { showArcadeToast('loss', '🎫', 'SLIP FULL', 'Maximum 6 selections per slip'); return; }
+                oracleSlip.push({ market_id: marketId, option });
             }
-            renderSlip();
-            showSlipPanel();
+            oracleSlip.forEach(s => { const mk = oracleAllMarkets.find(x => x.id === s.market_id); if (mk) { s.title = mk.title; s.label = s.option === 'yes' ? (mk.option_yes_label || 'Yes') : (mk.option_no_label || 'No'); } });
+            renderOracleSlip();
+            document.getElementById('betSlipPanel').style.display = 'block';
+            document.getElementById('slipToggleBtn').style.display = 'none';
+            renderOracleMarketsGrid();
         }
 
-        function removeFromSlip(marketId) {
-            slipSelections = slipSelections.filter(s => s.marketId !== marketId);
-            renderSlip();
+        function removeOracleSlipLeg(marketId) {
+            oracleSlip = oracleSlip.filter(s => s.market_id !== marketId);
+            renderOracleSlip();
+            renderOracleMarketsGrid();
         }
 
-        function renderSlip() {
-            const count = slipSelections.length;
+        function oracleSlipHas(marketId, option) {
+            return oracleSlip.some(s => s.market_id === marketId && s.option === option);
+        }
+
+        function renderOracleSlip() {
+            const count = oracleSlip.length;
             document.getElementById('slipCount').textContent = count;
             document.getElementById('slipBadge').textContent = count;
-            document.getElementById('slipToggleBtn').style.display = count > 0 ? 'flex' : 'none';
+            const panelOpen = document.getElementById('betSlipPanel').style.display === 'block';
+            document.getElementById('slipToggleBtn').style.display = count > 0 && !panelOpen ? 'flex' : 'none';
 
             const container = document.getElementById('slipSelections');
             if (count === 0) {
-                container.innerHTML = '<div style="color: #999; text-align: center; padding: 20px;">Add 2+ selections to build your slip</div>';
+                container.innerHTML = '<div style="color: #999; text-align: center; padding: 20px;">Tap <strong>+ SLIP</strong> on any Yes/No to build a slip.<br><span style="font-size:11px;">2-6 picks · odds multiply · all must hit</span></div>';
                 document.getElementById('slipSummary').style.display = 'none';
                 return;
             }
-
-            container.innerHTML = slipSelections.map(s => `
-                <div style="background: #2f2f2f; padding: 10px; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: start;">
-                    <div style="flex: 1;">
-                        <div style="font-size: 12px; color: #999;">${s.marketTitle}</div>
-                        <div style="font-weight: bold; color: #fff; margin-top: 3px;">${s.option}</div>
+            container.innerHTML = oracleSlip.map(s => `
+                <div style="background: #2f2f2f; padding: 10px; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: start; gap: 8px;">
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-size: 12px; color: #999; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeOracleText(s.title || '')}</div>
+                        <div style="font-weight: bold; color: ${s.option === 'yes' ? '#4caf50' : '#f44336'}; margin-top: 3px;">${escapeOracleText(s.label || s.option.toUpperCase())} <span id="slipLegOdds-${s.market_id}" style="color:#aaa;font-weight:normal;font-size:12px;"></span></div>
                     </div>
-                    <button onclick="removeFromSlip(${s.marketId})" style="background: none; border: none; color: #e50914; font-size: 18px; cursor: pointer; padding: 0 5px;">×</button>
+                    <button onclick="removeOracleSlipLeg(${s.market_id})" style="background: none; border: none; color: #e50914; font-size: 18px; cursor: pointer; padding: 0 5px;">×</button>
                 </div>
             `).join('');
-
-            if (count >= 2) {
-                document.getElementById('slipSummary').style.display = 'block';
-                updateSlipPayout();
-            } else {
-                document.getElementById('slipSummary').style.display = 'none';
+            document.getElementById('slipSummary').style.display = 'block';
+            if (count < 2) {
+                document.getElementById('slipTotalOdds').textContent = 'Add 1 more';
+                document.getElementById('slipBonus').textContent = '—';
+                document.getElementById('slipPayout').textContent = '—';
+                document.getElementById('slipPlaceBtn').disabled = true;
+                return;
             }
+            document.getElementById('slipPlaceBtn').disabled = false;
+            clearTimeout(oracleSlipQuoteTimer);
+            oracleSlipQuoteTimer = setTimeout(refreshOracleSlipQuote, 150);
+        }
+
+        async function refreshOracleSlipQuote() {
+            if (oracleSlip.length < 2) return;
+            try {
+                const res = await fetch('/api/oracle/parlay/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ legs: oracleSlip.map(s => ({ market_id: s.market_id, option: s.option })) }) });
+                const q = await res.json();
+                if (!res.ok) { document.getElementById('slipTotalOdds').textContent = q.error || 'Unavailable'; document.getElementById('slipPlaceBtn').disabled = true; return; }
+                q.legs.forEach(l => { const el = document.getElementById('slipLegOdds-' + l.market_id); if (el) el.textContent = '@ ' + l.odds.toFixed(2) + 'x'; });
+                document.getElementById('slipTotalOdds').textContent = q.multiplier.toFixed(2) + 'x';
+                document.getElementById('slipBonus').textContent = q.bonusPct > 0 ? '+' + Math.round(q.bonusPct * 100) + '%' : (oracleSlip.length === 3 ? 'add 1 more for +5%' : '0%');
+                oracleSlip._multiplier = q.multiplier;
+                updateSlipPayout();
+            } catch (e) {}
         }
 
         function updateSlipPayout() {
-            const count = slipSelections.length;
-            if (count < 2) return;
-
-            // Fetch odds for each selection
-            let totalOdds = 1;
-            let oddsFetched = 0;
-            slipSelections.forEach(s => {
-                fetch(`/api/betting/markets/${s.marketId}/odds/${encodeURIComponent(s.option)}`)
-                    .then(r => r.json())
-                    .then(data => {
-                        totalOdds *= data.odds || 2;
-                        oddsFetched++;
-                        if (oddsFetched === count) {
-                            // Apply bonus
-                            let bonus = 0;
-                            if (count >= 8) bonus = 10;
-                            else if (count >= 5) bonus = 5;
-                            const bonusMult = 1 + bonus / 100;
-                            const finalOdds = totalOdds * bonusMult;
-                            document.getElementById('slipTotalOdds').textContent = finalOdds.toFixed(2) + 'x';
-                            document.getElementById('slipBonus').textContent = bonus > 0 ? `+${bonus}%` : '0%';
-                            const stake = parseFloat(document.getElementById('slipStake').value) || 0;
-                            const payout = stake * finalOdds * 0.97; // 3% platform fee
-                            document.getElementById('slipPayout').textContent = payout.toFixed(8) + ' BTC';
-                        }
-                    })
-                    .catch(() => {
-                        totalOdds *= 2;
-                        oddsFetched++;
-                    });
-            });
-        }
-
-        function showSlipPanel() {
-            document.getElementById('betSlipPanel').style.display = 'block';
-            document.getElementById('slipToggleBtn').style.display = 'none';
+            const stake = parseFloat(document.getElementById('slipStake').value) || 0;
+            const mult = oracleSlip._multiplier || 0;
+            const payout = Math.min(stake * mult, 500);
+            document.getElementById('slipPayout').textContent = mult ? '$' + payout.toFixed(2) + (stake * mult > 500 ? ' (max)' : '') : '—';
         }
 
         function toggleSlip() {
@@ -5518,7 +5516,7 @@
             const btn = document.getElementById('slipToggleBtn');
             if (panel.style.display === 'block') {
                 panel.style.display = 'none';
-                if (slipSelections.length > 0) btn.style.display = 'flex';
+                if (oracleSlip.length > 0) btn.style.display = 'flex';
             } else {
                 panel.style.display = 'block';
                 btn.style.display = 'none';
@@ -5526,47 +5524,45 @@
         }
 
         async function submitSlip() {
-            if (slipSelections.length < 2) {
-                alert('Add at least 2 selections to your slip');
-                return;
-            }
-            if (!sessionToken) {
-                alert('Please login to place a slip');
-                showAuthModal();
-                return;
-            }
+            if (oracleSlip.length < 2) { alert('Add at least 2 selections to your slip'); return; }
+            if (!sessionToken) { showAuthModal(); return; }
             const stake = parseFloat(document.getElementById('slipStake').value);
-            if (!stake || stake <= 0) {
-                alert('Enter a valid stake amount');
-                return;
-            }
-
+            if (!stake || stake < 2) { alert('Minimum slip stake is $2'); return; }
+            const btn = document.getElementById('slipPlaceBtn');
+            btn.disabled = true;
             try {
-                const response = await fetch('/api/parlay/create', {
+                const res = await fetch('/api/oracle/parlay', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${sessionToken}`
-                    },
-                    body: JSON.stringify({
-                        selections: slipSelections.map(s => ({ marketId: s.marketId, option: s.option })),
-                        stakeAmount: stake
-                    })
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                    body: JSON.stringify({ legs: oracleSlip.map(s => ({ market_id: s.market_id, option: s.option })), stake })
                 });
-                const data = await response.json();
-                if (data.error) {
-                    alert(data.error);
-                    return;
-                }
-                alert(`Slip placed!\n\nSelections: ${slipSelections.length}\nTotal Odds: ${data.totalOdds.toFixed(2)}x\nPotential Payout: ${data.potentialPayout.toFixed(8)} BTC\n\nAll selections must win for payout!`);
-                slipSelections = [];
-                renderSlip();
+                const data = await res.json();
+                if (!res.ok) { alert(data.error || 'Failed to place slip'); return; }
+                showArcadeToast('win', '🎫', 'SLIP PLACED!', `${data.legs.length} picks @ ${data.multiplier.toFixed(2)}x · win $${data.potentialPayout.toFixed(2)}`);
+                oracleSlip = [];
+                renderOracleSlip();
                 document.getElementById('betSlipPanel').style.display = 'none';
-                document.getElementById('slipStake').value = '';
-                loadWalletData();
-            } catch (error) {
+                document.getElementById('slipStake').value = '2';
+                loadArcadeBalance();
+                renderOracleMarketsGrid();
+                switchOracleSubTab('positions');
+            } catch (e) {
                 alert('Failed to place slip');
+            } finally {
+                btn.disabled = false;
             }
+        }
+
+        async function cashoutOracleSlip(id) {
+            if (!confirm('Cash out this slip now at the quoted value?')) return;
+            try {
+                const res = await fetch(`/api/oracle/parlay/${id}/cashout`, { method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}` } });
+                const data = await res.json();
+                if (!res.ok) { alert(data.error); return; }
+                showArcadeToast('win', '💸', 'CASHED OUT', '$' + data.payout.toFixed(2) + ' added to your balance');
+                loadArcadeBalance();
+                loadOraclePositions();
+            } catch (e) { alert('Cash out failed'); }
         }
 
         async function toggleSubBets(marketId) {
@@ -9517,6 +9513,11 @@
                             <button class="btn btn-secondary" onclick="buyOracleShares(${m.id}, 'yes')" style="flex:1;text-align:center;justify-content:center;background:rgba(76,175,80,0.15);border-color:#4caf50;font-size:12px;">BUY ${escapeOracleText(m.option_yes_label || 'Yes')} ${yesPct}¢</button>
                             <button class="btn btn-secondary" onclick="buyOracleShares(${m.id}, 'no')" style="flex:1;text-align:center;justify-content:center;background:rgba(244,67,54,0.15);border-color:#f44336;font-size:12px;">BUY ${escapeOracleText(m.option_no_label || 'No')} ${noPct}¢</button>
                         </div>
+                        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+                            <span style="font-size:10px;color:#888;letter-spacing:.4px;">🎫 SLIP</span>
+                            <button onclick="addOracleSlipLeg(${m.id}, 'yes')" style="flex:1;font-size:11px;padding:5px;border-radius:6px;cursor:pointer;border:1px solid ${oracleSlipHas(m.id,'yes') ? '#4caf50' : '#333'};background:${oracleSlipHas(m.id,'yes') ? 'rgba(76,175,80,0.35)' : '#1a1a1a'};color:#fff;">${oracleSlipHas(m.id,'yes') ? '✓ ' : '+ '}${escapeOracleText(m.option_yes_label || 'Yes')}</button>
+                            <button onclick="addOracleSlipLeg(${m.id}, 'no')" style="flex:1;font-size:11px;padding:5px;border-radius:6px;cursor:pointer;border:1px solid ${oracleSlipHas(m.id,'no') ? '#f44336' : '#333'};background:${oracleSlipHas(m.id,'no') ? 'rgba(244,67,54,0.35)' : '#1a1a1a'};color:#fff;">${oracleSlipHas(m.id,'no') ? '✓ ' : '+ '}${escapeOracleText(m.option_no_label || 'No')}</button>
+                        </div>
                         <div style="text-align:right;margin-bottom:8px;">
                             <button onclick="toggleOracleLimitPanel(${m.id})" style="background:none;border:none;color:#888;font-size:11px;text-decoration:underline;cursor:pointer;padding:0;">⚙ Advanced: limit order / order book</button>
                         </div>
@@ -9677,14 +9678,34 @@
             const list = document.getElementById('oraclePositionsList');
             list.innerHTML = '<div style="color:#888;text-align:center;padding:40px;">Loading your positions...</div>';
             try {
-                const [posRes, ordersRes] = await Promise.all([
+                const [posRes, ordersRes, slipsRes] = await Promise.all([
                     fetch('/api/arcade/predictions/my-bets', { headers: { 'Authorization': `Bearer ${sessionToken}` } }),
-                    fetch('/api/oracle/orders/mine', { headers: { 'Authorization': `Bearer ${sessionToken}` } })
+                    fetch('/api/oracle/orders/mine', { headers: { 'Authorization': `Bearer ${sessionToken}` } }),
+                    fetch('/api/oracle/parlays/mine', { headers: { 'Authorization': `Bearer ${sessionToken}` } })
                 ]);
                 const positions = await posRes.json();
                 const openOrders = await ordersRes.json();
+                const slips = slipsRes.ok ? await slipsRes.json() : [];
 
                 let html = '';
+                if (slips.length) {
+                    const statusColor = { open: '#e8b830', won: '#4caf50', cashed_out: '#4caf50', lost: '#f44336', void: '#888' };
+                    const legIcon = { open: '⏳', won: '✅', lost: '❌', void: '➖' };
+                    html += `<h4 style="font-size:13px;color:#aaa;margin-bottom:8px;">🎫 MY SLIPS</h4>`;
+                    html += slips.map(s => `
+                        <div style="background:#1a1a1a;border:1px solid ${s.status === 'open' ? '#e8b830' : '#333'};border-radius:10px;padding:12px;margin-bottom:8px;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+                                <div style="font-size:12px;color:#aaa;">${s.legs.length} picks • ${s.multiplier.toFixed(2)}x • stake $${s.stake.toFixed(2)}</div>
+                                <div style="font-size:11px;font-weight:700;color:${statusColor[s.status] || '#888'};border:1px solid currentColor;padding:2px 8px;border-radius:20px;">${s.status.replace('_', ' ').toUpperCase()}</div>
+                            </div>
+                            ${s.legs.map(l => `<div style="font-size:12px;display:flex;gap:6px;align-items:center;padding:3px 0;color:${l.status === 'lost' ? '#777' : '#ddd'};"><span>${legIcon[l.status] || '⏳'}</span><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeOracleText(l.title)}</span><span style="color:${l.option === 'yes' ? '#4caf50' : '#f44336'};font-weight:700;">${escapeOracleText(l.label || l.option.toUpperCase())}</span><span style="color:#888;">${l.odds.toFixed(2)}x</span></div>`).join('')}
+                            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;border-top:1px solid #2a2a2a;padding-top:8px;">
+                                <div style="font-size:12px;color:#aaa;">${s.status === 'open' ? `Potential win: <strong style="color:#4caf50;">$${s.potential_payout.toFixed(2)}</strong>` : s.payout > 0 ? `Paid: <strong style="color:#4caf50;">$${s.payout.toFixed(2)}</strong>` : 'No payout'}</div>
+                                ${s.status === 'open' && s.cashoutValue ? `<button class="btn btn-secondary" style="font-size:11px;padding:6px 10px;border-color:#e8b830;color:#e8b830;" onclick="cashoutOracleSlip(${s.id})">💸 CASH OUT $${s.cashoutValue.toFixed(2)}</button>` : ''}
+                            </div>
+                        </div>
+                    `).join('');
+                }
                 if (openOrders.length) {
                     html += `<h4 style="font-size:13px;color:#aaa;margin-bottom:8px;">RESTING ORDERS</h4>`;
                     html += openOrders.map(o => `
@@ -9700,7 +9721,7 @@
                 }
 
                 if (!positions.length) {
-                    html += '<div style="color:#888;text-align:center;padding:40px;">No open positions yet — buy Yes/No shares in the Markets tab to get started.</div>';
+                    if (!slips.length && !openOrders.length) html += '<div style="color:#888;text-align:center;padding:40px;">No open positions yet — buy Yes/No shares or build a slip in the Markets tab to get started.</div>';
                     list.innerHTML = html;
                     return;
                 }

@@ -1473,6 +1473,26 @@ async function initSchema() {
     );
   `);
 
+  // Oracle parlay slips: house-backed multi-leg bets on Yes/No outcomes. legs = JSON array of
+  // { market_id, option, price, odds, title, status: 'open'|'won'|'lost'|'void' }
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS oracle_parlays (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      stake REAL NOT NULL,
+      legs TEXT NOT NULL,
+      total_odds REAL NOT NULL,
+      bonus_pct REAL DEFAULT 0,
+      potential_payout REAL NOT NULL,
+      status TEXT DEFAULT 'open',
+      payout REAL DEFAULT 0,
+      cashed_out_at TEXT,
+      settled_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_oracle_parlays_user ON oracle_parlays(user_id, status);
+  `);
+
   // Gift card / game token liquidation → BTC pipeline
   await dbExec(`
     CREATE TABLE IF NOT EXISTS giftcard_liquidations (
@@ -9485,6 +9505,16 @@ async function oracleMarketSell(marketId, userId, option, quantity) {
 // Resolution: every Yes share pays exactly $1 if Yes wins (else $0), every No share pays $1 if No wins (else $0).
 // Fixed redemption — no pool splitting, no approximation. House holdings settle through the pool the same way.
 async function resolveOracleMarket(marketId, outcome, resolverUserId) {
+  const result = await resolveOracleMarketCore(marketId, outcome, resolverUserId);
+  try {
+    await settleParlaysForMarket(marketId, String(outcome).toLowerCase());
+  } catch (e) {
+    console.error('Parlay settlement error for market', marketId, e.message);
+  }
+  return result;
+}
+
+async function resolveOracleMarketCore(marketId, outcome, resolverUserId) {
   const outcomeLower = String(outcome || '').toLowerCase();
   if (!['yes', 'no', 'cancel'].includes(outcomeLower)) throw new Error('Outcome must be yes, no, or cancel');
 
@@ -9547,6 +9577,194 @@ async function resolveOracleMarket(marketId, outcome, resolverUserId) {
     return { message: `Resolved as ${winningOption}`, winnersCount: winners.length, totalPaid };
   });
 }
+
+// ===== ORACLE PARLAY SLIPS =====
+// House-backed accumulators over Oracle Yes/No outcomes. Each leg's odds come from the live market
+// price shaded by PARLAY_LEG_SHADE (the house edge compounds per leg). All legs must win; a cancelled
+// market voids its leg (dropped from the multiplier) rather than losing the slip.
+const PARLAY_LEG_SHADE = 0.05;
+const PARLAY_MIN_LEGS = 2;
+const PARLAY_MAX_LEGS = 6;
+const PARLAY_MAX_PAYOUT = 500;
+const PARLAY_CASHOUT_FEE = 0.08;
+const PARLAY_PRICE_FLOOR = 0.03;
+const PARLAY_PRICE_CEIL = 0.97;
+const round2 = (n) => Math.round(n * 100) / 100;
+
+function parlayBonusPct(legCount) {
+  if (legCount >= 5) return 0.10;
+  if (legCount === 4) return 0.05;
+  return 0;
+}
+
+function parlayLegOdds(price) {
+  const p = Math.min(PARLAY_PRICE_CEIL, Math.max(PARLAY_PRICE_FLOOR, Number(price) || 0.5));
+  return Math.max(1.01, round2((1 / p) * (1 - PARLAY_LEG_SHADE)));
+}
+
+function parlayMultiplier(legs) {
+  const live = legs.filter(l => l.status !== 'void');
+  const odds = live.reduce((acc, l) => acc * l.odds, 1);
+  const bonus = parlayBonusPct(live.length);
+  return { totalOdds: round2(odds), bonusPct: bonus, multiplier: round2(odds * (1 + bonus)) };
+}
+
+async function quoteParlay(legsInput) {
+  if (!Array.isArray(legsInput) || legsInput.length < PARLAY_MIN_LEGS || legsInput.length > PARLAY_MAX_LEGS) {
+    throw new Error(`A slip needs ${PARLAY_MIN_LEGS}-${PARLAY_MAX_LEGS} selections`);
+  }
+  const seen = new Set();
+  const legs = [];
+  for (const raw of legsInput) {
+    const marketId = parseInt(raw.market_id, 10);
+    const option = String(raw.option || '').toLowerCase();
+    if (!marketId || !['yes', 'no'].includes(option)) throw new Error('Invalid selection');
+    if (seen.has(marketId)) throw new Error('Only one selection per market is allowed');
+    seen.add(marketId);
+    const market = await dbGet('SELECT id, title, status, option_yes_label, option_no_label, last_price_yes, last_price_no FROM prediction_markets WHERE id = ?', [marketId]);
+    if (!market || market.status !== 'active') throw new Error(`Market "${market ? market.title : marketId}" is no longer open`);
+    const price = option === 'yes' ? (market.last_price_yes ?? 0.5) : (market.last_price_no ?? 0.5);
+    legs.push({
+      market_id: marketId, option, price: Math.round(price * 1000) / 1000, odds: parlayLegOdds(price),
+      title: market.title, label: option === 'yes' ? (market.option_yes_label || 'Yes') : (market.option_no_label || 'No'), status: 'open'
+    });
+  }
+  return { legs, ...parlayMultiplier(legs) };
+}
+
+async function placeParlay(userId, legsInput, stake) {
+  stake = round2(Number(stake));
+  if (isNaN(stake) || stake < WEB_MIN_STAKE) throw new Error(`Minimum slip stake is $${WEB_MIN_STAKE}`);
+  if (stake > 10000) throw new Error('Stake too large');
+  const quote = await quoteParlay(legsInput);
+  const potential = round2(Math.min(stake * quote.multiplier, PARLAY_MAX_PAYOUT));
+
+  return await dbTransaction(async (tx) => {
+    const bal = await tx.dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [userId]);
+    if (!bal || bal.usd_balance < stake) throw new Error('Insufficient USD balance');
+    const poolBalance = await getPoolBalance();
+    if (poolBalance + stake < potential) throw new Error('House pool cannot cover this payout right now. Try a smaller stake or fewer legs.');
+
+    await tx.dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stake, stake, userId]);
+    await creditPoolDeposit(stake);
+    const res = await tx.dbRun(
+      'INSERT INTO oracle_parlays (user_id, stake, legs, total_odds, bonus_pct, potential_payout) VALUES (?, ?, ?, ?, ?, ?)',
+      [userId, stake, JSON.stringify(quote.legs), quote.totalOdds, quote.bonusPct, potential]
+    );
+    return { id: res.lastID, stake, legs: quote.legs, totalOdds: quote.totalOdds, bonusPct: quote.bonusPct, multiplier: quote.multiplier, potentialPayout: potential };
+  });
+}
+
+// Live cash-out value: stake × odds of legs already won × current probability of legs still open, minus fee.
+// Returns null when the slip can't be cashed out (a leg lost, or nothing is open).
+async function parlayCashoutValue(parlay) {
+  const legs = JSON.parse(parlay.legs);
+  if (legs.some(l => l.status === 'lost')) return null;
+  const open = legs.filter(l => l.status === 'open');
+  if (!open.length) return null;
+  let value = parlay.stake;
+  for (const l of legs) {
+    if (l.status === 'won') value *= l.odds;
+    else if (l.status === 'open') {
+      const market = await dbGet('SELECT status, last_price_yes, last_price_no FROM prediction_markets WHERE id = ?', [l.market_id]);
+      if (!market || market.status !== 'active') return null; // resolution pending — settle instead
+      value *= l.option === 'yes' ? (market.last_price_yes ?? 0.5) : (market.last_price_no ?? 0.5);
+    }
+  }
+  const { bonusPct } = parlayMultiplier(legs);
+  value = value * (1 + bonusPct) * (1 - PARLAY_CASHOUT_FEE);
+  return round2(Math.min(value, parlay.potential_payout));
+}
+
+async function cashoutParlay(userId, parlayId) {
+  return await dbTransaction(async (tx) => {
+    const parlay = await tx.dbGet('SELECT * FROM oracle_parlays WHERE id = ? AND user_id = ? AND status = ?', [parlayId, userId, 'open']);
+    if (!parlay) throw new Error('Slip not found or already settled');
+    const value = await parlayCashoutValue(parlay);
+    if (value === null || value <= 0) throw new Error('This slip cannot be cashed out right now');
+    const poolBalance = await getPoolBalance();
+    if (poolBalance < value) throw new Error('House pool cannot cover this cash-out right now');
+    await debitPoolPayout(value);
+    await tx.dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [value, value, userId]);
+    await tx.dbRun(`UPDATE oracle_parlays SET status = 'cashed_out', payout = ?, cashed_out_at = CURRENT_TIMESTAMP, settled_at = CURRENT_TIMESTAMP WHERE id = ?`, [value, parlayId]);
+    await logSystemEvent('info', `Parlay ${parlayId} cashed out by user ${userId}`, `Paid $${value.toFixed(2)} on $${parlay.stake.toFixed(2)} stake`);
+    return { payout: value };
+  });
+}
+
+async function settleParlaysForMarket(marketId, outcome) {
+  marketId = parseInt(marketId, 10);
+  const open = await dbAll(`SELECT * FROM oracle_parlays WHERE status = 'open' AND legs LIKE ?`, [`%"market_id":${marketId},%`]);
+  for (const parlay of open) {
+    await dbTransaction(async (tx) => {
+      const legs = JSON.parse(parlay.legs);
+      let touched = false;
+      for (const l of legs) {
+        if (l.market_id !== marketId || l.status !== 'open') continue;
+        l.status = outcome === 'cancel' ? 'void' : (l.option === outcome ? 'won' : 'lost');
+        touched = true;
+      }
+      if (!touched) return;
+      const anyLost = legs.some(l => l.status === 'lost');
+      const anyOpen = legs.some(l => l.status === 'open');
+      if (anyLost) {
+        await tx.dbRun(`UPDATE oracle_parlays SET legs = ?, status = 'lost', settled_at = CURRENT_TIMESTAMP WHERE id = ?`, [JSON.stringify(legs), parlay.id]);
+        return;
+      }
+      if (anyOpen) {
+        await tx.dbRun('UPDATE oracle_parlays SET legs = ? WHERE id = ?', [JSON.stringify(legs), parlay.id]);
+        return;
+      }
+      const won = legs.filter(l => l.status === 'won');
+      let payout;
+      if (!won.length) payout = parlay.stake; // every leg voided → refund
+      else payout = round2(Math.min(parlay.stake * parlayMultiplier(legs).multiplier, parlay.potential_payout));
+      await debitPoolPayout(payout);
+      await tx.dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [payout, payout, parlay.user_id]);
+      await tx.dbRun(`UPDATE oracle_parlays SET legs = ?, status = ?, payout = ?, settled_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [JSON.stringify(legs), won.length ? 'won' : 'void', payout, parlay.id]);
+      await logSystemEvent('info', `Parlay ${parlay.id} settled ${won.length ? 'WON' : 'VOID'}`, `User ${parlay.user_id} paid $${payout.toFixed(2)} on $${parlay.stake.toFixed(2)} stake`);
+    });
+  }
+}
+
+app.post('/api/oracle/parlay/quote', async (req, res) => {
+  try { res.json(await quoteParlay(req.body.legs)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/oracle/parlay', rateLimit({ windowMs: 60 * 1000, max: 15, key: req => `oracle-parlay:${req.userId || req.ip}` }), authenticateRequest, async (req, res) => {
+  try {
+    const result = await placeParlay(req.userId, req.body.legs, req.body.stake);
+    await logSystemEvent('info', `Parlay placed by user ${req.userId}`, `Slip ${result.id}: ${result.legs.length} legs @ ${result.multiplier}x, stake $${result.stake}`);
+    await logConversionEvent(req.userId, 'trade', result.stake, 0);
+    const newBal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    res.json({ ...result, newBalance: newBal.usd_balance });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get('/api/oracle/parlays/mine', authenticateRequest, async (req, res) => {
+  const rows = await dbAll('SELECT * FROM oracle_parlays WHERE user_id = ? ORDER BY created_at DESC LIMIT 50', [req.userId]);
+  const out = [];
+  for (const p of rows) {
+    const legs = JSON.parse(p.legs);
+    const cashoutValue = p.status === 'open' ? await parlayCashoutValue(p) : null;
+    out.push({ ...p, legs, multiplier: parlayMultiplier(legs).multiplier, cashoutValue });
+  }
+  res.json(out);
+});
+
+app.post('/api/oracle/parlay/:id/cashout', rateLimit({ windowMs: 60 * 1000, max: 20, key: req => `oracle-parlay-co:${req.userId || req.ip}` }), authenticateRequest, async (req, res) => {
+  try {
+    const result = await cashoutParlay(req.userId, parseInt(req.params.id, 10));
+    const newBal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
+    res.json({ ...result, newBalance: newBal.usd_balance });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
 
 // API: List active + recently resolved markets, with live order-book prices + sparkline history
 app.get('/api/arcade/predictions/markets', async (req, res) => {
