@@ -8322,6 +8322,11 @@
         function openOracle() {
             showSection('arcade');
             openArcadeGame('predictions');
+            // Highlight The Oracle in nav instead of Arcade
+            const navArcade = document.getElementById('nav-arcade');
+            const navOracle = document.getElementById('nav-betting');
+            if (navArcade) navArcade.classList.remove('active');
+            if (navOracle) navOracle.classList.add('active');
         }
 
         function exitArcadeGame() {
