@@ -10332,6 +10332,73 @@ app.post('/api/admin/predictions/espn/seed-all', authenticateRequest, async (req
   }
 });
 
+// Fallback sample Oracle markets if no active markets exist and external API seeders fail
+async function seedSampleOracleMarkets() {
+  const existing = await dbGet('SELECT COUNT(*) as c FROM prediction_markets WHERE status = ?', ['active']);
+  if (existing && Number(existing.c) > 0) return { created: 0 };
+
+  const samples = [
+    {
+      title: 'Will Manchester United win the Premier League this season?',
+      description: 'Resolves YES if Manchester United are crowned Premier League champions for the current season.',
+      category: 'sports',
+      resolves_at: '2026-05-25T00:00:00Z',
+      option_yes_label: 'Yes',
+      option_no_label: 'No'
+    },
+    {
+      title: 'Will Bitcoin price exceed $100,000 before 2027?',
+      description: 'Resolves YES if the BTC/USD price on CoinGecko closes above $100,000 on any day before Jan 1 2027.',
+      category: 'crypto',
+      resolves_at: '2026-12-31T23:59:59Z',
+      option_yes_label: 'Yes',
+      option_no_label: 'No'
+    },
+    {
+      title: 'Will a major earthquake (magnitude 7.0+) hit California in 2026?',
+      description: 'Resolves YES if USGS reports an earthquake of magnitude 7.0 or greater in California during 2026.',
+      category: 'news',
+      resolves_at: '2026-12-31T23:59:59Z',
+      option_yes_label: 'Yes',
+      option_no_label: 'No'
+    },
+    {
+      title: 'Will the ruling party win the next general election in South Africa?',
+      description: 'Resolves YES if the current ruling party wins the most seats in the next general election.',
+      category: 'politics',
+      resolves_at: '2026-11-30T00:00:00Z',
+      option_yes_label: 'Yes',
+      option_no_label: 'No'
+    },
+    {
+      title: 'Will the next CS2 Major be won by a European team?',
+      description: 'Resolves YES if the winner of the next Counter-Strike 2 Major tournament is based in Europe.',
+      category: 'esports',
+      resolves_at: '2026-09-30T00:00:00Z',
+      option_yes_label: 'Yes',
+      option_no_label: 'No'
+    }
+  ];
+
+  let created = 0;
+  for (const m of samples) {
+    try {
+      const result = await dbRun(`
+        INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, status, resolves_at, created_by)
+        VALUES (?, ?, ?, ?, ?, 'active', ?, 1)
+      `, [m.title, m.description, m.category, m.option_yes_label, m.option_no_label, m.resolves_at]);
+      if (result && result.lastID) {
+        await dbRun('INSERT INTO prediction_price_history (market_id, price_yes, price_no) VALUES (?, ?, ?)', [result.lastID, 0.50, 0.50]);
+        created++;
+      }
+    } catch (e) {
+      console.error('Sample market insert failed:', e.message);
+    }
+  }
+  console.log(`Auto-seed sample Oracle markets: ${created} created`);
+  return { created };
+}
+
 // Auto-seed prediction markets on startup if a category is empty
 async function seedPredictionMarketsIfEmpty() {
   try {
@@ -10346,13 +10413,20 @@ async function seedPredictionMarketsIfEmpty() {
     const sportsEmpty = await dbGet('SELECT COUNT(*) as c FROM prediction_markets WHERE category = ? AND status = ?', ['sports', 'active']);
     if (!sportsEmpty || Number(sportsEmpty.c) === 0) {
       console.log('Auto-seed sports: soccer + ESPN...');
-      const soccerResult = await seedAllSoccerMarkets(null);
-      console.log(`Auto-seed soccer: ${soccerResult.created} created, ${soccerResult.skipped} skipped`);
-      const espnResult = await seedAllEspnMarkets(null);
-      console.log(`Auto-seed ESPN sports: ${espnResult.created} created, ${espnResult.skipped} skipped`);
+      try {
+        const soccerResult = await seedAllSoccerMarkets(null);
+        console.log(`Auto-seed soccer: ${soccerResult.created} created, ${soccerResult.skipped} skipped`);
+      } catch (e) { console.error('Soccer seed failed:', e.message); }
+      try {
+        const espnResult = await seedAllEspnMarkets(null);
+        console.log(`Auto-seed ESPN sports: ${espnResult.created} created, ${espnResult.skipped} skipped`);
+      } catch (e) { console.error('ESPN seed failed:', e.message); }
     }
-    await seedIfEmpty('crypto', seedCryptoMarkets);
-    await seedIfEmpty('esports', seedEsportsMarkets);
+    await seedIfEmpty('crypto', seedCryptoMarkets).catch(e => console.error('Crypto seed failed:', e.message));
+    await seedIfEmpty('esports', seedEsportsMarkets).catch(e => console.error('Esports seed failed:', e.message));
+
+    // If all external seeders failed, plant sample markets so The Oracle is never empty
+    await seedSampleOracleMarkets();
   } catch (e) {
     console.error('Auto-seed prediction markets failed:', e.message);
   }
