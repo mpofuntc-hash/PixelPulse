@@ -117,6 +117,7 @@ async function ensureLegacySchema() {
     ['users', 'utm_campaign', 'TEXT'],
     ['users', 'utm_content', 'TEXT'],
     ['users', 'utm_term', 'TEXT'],
+    ['users', 'must_change_password', 'INTEGER DEFAULT 0'],
     ['users', 'first_landing_page', 'TEXT'],
     ['chat_messages', 'source', "TEXT DEFAULT 'webapp'"],
     ['chat_messages', 'reply_to_id', 'INTEGER'],
@@ -4692,6 +4693,7 @@ app.post('/api/auth/login', rateLimit({ windowMs: 60 * 1000, max: 10, key: req =
   res.json({
     message: 'Login successful',
     sessionToken,
+    mustChangePassword: user.must_change_password === 1,
     user: { id: user.id, username: user.username, email: user.email }
   });
 });
@@ -4721,7 +4723,7 @@ app.post('/api/auth/change-password', rateLimit({ windowMs: 60 * 1000, max: 5, k
     return res.status(401).json({ error: 'Current password is incorrect' });
   }
 
-  await dbRun('UPDATE users SET password_hash = ? WHERE id = ?', [await hashPassword(String(newPassword)), req.userId]);
+  await dbRun('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?', [await hashPassword(String(newPassword)), req.userId]);
 
   // Keep the current session alive, sign out every other device
   const currentToken = req.headers.authorization?.replace('Bearer ', '');
@@ -4744,7 +4746,7 @@ app.get('/api/auth/me', async (req, res) => {
   }
 
   const tokenColumns = Object.values(TOKEN_TYPES).map(t => t.column).join(', ');
-  const user = await dbGet(`SELECT id, username, email, ${tokenColumns} FROM users WHERE id = ?`, [session.user_id]);
+  const user = await dbGet(`SELECT id, username, email, must_change_password, ${tokenColumns} FROM users WHERE id = ?`, [session.user_id]);
   const balance = await dbGet('SELECT * FROM user_balances WHERE user_id = ?', [session.user_id]);
 
   const tokens = {};
@@ -4752,7 +4754,7 @@ app.get('/api/auth/me', async (req, res) => {
     tokens[key] = { label: info.label, icon: info.icon, game: info.game, balance: user[info.column] || 0 };
   }
 
-  res.json({ user, balance, tokens });
+  res.json({ user, balance, tokens, mustChangePassword: user.must_change_password === 1 });
 });
 
 // Middleware: Authenticate requests
@@ -6247,6 +6249,48 @@ app.post('/api/admin/change-password', rateLimit({ windowMs: 60 * 1000, max: 5, 
   logSystemEvent('info', `Admin password changed`, `Admin ID: ${admin.id}`);
 
   res.json({ message: 'Password changed successfully' });
+});
+
+// API: Admin creates an invited user with an assigned/temp password (forced change on first login)
+app.post('/api/admin/users/create', checkAdminSession, rateLimit({ windowMs: 60 * 1000, max: 10, key: req => `admin-create-user:${req.ip || 'unknown'}` }), async (req, res) => {
+  const { email, username, password } = req.body;
+
+  if (!validateEmail(email)) return res.status(400).json({ error: 'Valid email required' });
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const existing = await dbGet('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
+  if (existing) return res.status(400).json({ error: 'Email already registered' });
+
+  const finalUsername = (username && String(username).trim()) || normalizedEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20) || 'player';
+  const assignedPassword = (password && String(password)) || `PP-${require('crypto').randomBytes(4).toString('hex')}!`;
+  if (assignedPassword.length < 8) return res.status(400).json({ error: 'Assigned password must be at least 8 characters' });
+
+  const passwordHash = await hashPassword(assignedPassword);
+  const referralCode = require('crypto').randomBytes(4).toString('hex');
+  const result = await dbRun(
+    'INSERT INTO users (username, email, password_hash, is_adult, must_change_password, referral_code) VALUES (?, ?, ?, 1, 1, ?)',
+    [finalUsername, normalizedEmail, passwordHash, referralCode]
+  );
+  await dbRun('INSERT OR IGNORE INTO user_balances (user_id, usd_balance) VALUES (?, 0)', [result.lastID]);
+  logSystemEvent('info', 'Admin created invited user', `User ID: ${result.lastID}, email: ${normalizedEmail}`);
+
+  res.json({ message: 'User created', userId: result.lastID, username: finalUsername, email: normalizedEmail, assignedPassword, mustChangePassword: true });
+});
+
+// API: Admin resets a user's password to a new assigned one (forced change on next login)
+app.post('/api/admin/users/reset-password', checkAdminSession, rateLimit({ windowMs: 60 * 1000, max: 10, key: req => `admin-reset-user:${req.ip || 'unknown'}` }), async (req, res) => {
+  const { email, password } = req.body;
+  if (!validateEmail(email)) return res.status(400).json({ error: 'Valid email required' });
+  const user = await dbGet('SELECT id, username FROM users WHERE email = ?', [String(email).trim().toLowerCase()]);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const assignedPassword = (password && String(password)) || `PP-${require('crypto').randomBytes(4).toString('hex')}!`;
+  if (assignedPassword.length < 8) return res.status(400).json({ error: 'Assigned password must be at least 8 characters' });
+
+  await dbRun('UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?', [await hashPassword(assignedPassword), user.id]);
+  await dbRun('DELETE FROM sessions WHERE user_id = ?', [user.id]);
+  logSystemEvent('info', 'Admin reset user password', `User ID: ${user.id}`);
+
+  res.json({ message: 'Password reset', userId: user.id, username: user.username, assignedPassword, mustChangePassword: true });
 });
 
 // Middleware to check admin session

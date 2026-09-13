@@ -472,6 +472,9 @@
             <div class="nav-item" onclick="showSection('referrals')">
                 <span>🔗</span> Referrals
             </div>
+            <div class="nav-item" onclick="showSection('users')">
+                <span>👥</span> Users
+            </div>
             <div class="nav-item" onclick="showSection('ads')">
                 <span>📢</span> Ads
             </div>
@@ -700,6 +703,42 @@
                     <div class="ticket-list" id="adsList">
                         <div class="loading">Loading ads...</div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Users Section -->
+            <div id="users" class="section">
+                <div class="chart-container">
+                    <h3>Invite New User (assigned password)</h3>
+                    <p style="color: #999; font-size: 13px; margin: 10px 0;">Creates an account the user can log into immediately. They will be forced to set their own password on first login. Leave password blank to auto-generate one.</p>
+                    <div class="form-group" style="margin-top: 10px;">
+                        <label>Email</label>
+                        <input type="email" id="invEmail" placeholder="user@example.com" style="width: 100%; padding: 10px; background: #1a1a1a; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                    </div>
+                    <div class="form-group" style="margin-top: 10px;">
+                        <label>Username (optional)</label>
+                        <input type="text" id="invUsername" placeholder="Auto-derived from email if blank" style="width: 100%; padding: 10px; background: #1a1a1a; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                    </div>
+                    <div class="form-group" style="margin-top: 10px;">
+                        <label>Assigned password (optional)</label>
+                        <input type="text" id="invPassword" placeholder="Auto-generated if blank" style="width: 100%; padding: 10px; background: #1a1a1a; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                    </div>
+                    <button class="btn btn-primary" onclick="adminCreateUser()" style="margin-top: 10px;">Create User</button>
+                    <div id="invResult" style="margin-top: 15px;"></div>
+                </div>
+                <div class="chart-container" style="margin-top: 20px;">
+                    <h3>Reset User Password</h3>
+                    <p style="color: #999; font-size: 13px; margin: 10px 0;">Gives an existing user a new assigned password and signs them out everywhere. They must set their own password on next login.</p>
+                    <div class="form-group" style="margin-top: 10px;">
+                        <label>User Email</label>
+                        <input type="email" id="rstEmail" placeholder="user@example.com" style="width: 100%; padding: 10px; background: #1a1a1a; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                    </div>
+                    <div class="form-group" style="margin-top: 10px;">
+                        <label>New assigned password (optional)</label>
+                        <input type="text" id="rstPassword" placeholder="Auto-generated if blank" style="width: 100%; padding: 10px; background: #1a1a1a; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                    </div>
+                    <button class="btn btn-primary" onclick="adminResetUserPassword()" style="margin-top: 10px;">Reset Password</button>
+                    <div id="rstResult" style="margin-top: 15px;"></div>
                 </div>
             </div>
 
@@ -1387,6 +1426,45 @@
             }
             return originalFetch(url, options);
         };
+
+        // ============================================================
+        // USER INVITES / PASSWORD RESETS
+        // ============================================================
+
+        function renderCredResult(elId, data, ok) {
+            const el = document.getElementById(elId);
+            if (!ok) { el.innerHTML = `<div style="color:#f44336;font-size:13px;">${data.error || 'Request failed'}</div>`; return; }
+            el.innerHTML = `<div style="background:#0d2818;border:1px solid #2e7d32;border-radius:8px;padding:14px;font-size:13px;line-height:1.9;">
+                <div style="color:#4caf50;font-weight:700;margin-bottom:6px;">✅ ${data.message}</div>
+                <div><strong>Email:</strong> ${data.email || ''}</div>
+                ${data.username ? `<div><strong>Username:</strong> ${data.username}</div>` : ''}
+                <div><strong>Assigned password:</strong> <code style="background:#000;padding:2px 8px;border-radius:4px;color:#ffd700;">${data.assignedPassword}</code></div>
+                <div style="color:#999;margin-top:6px;">Share these credentials with the user — they'll be asked to set their own password on first login.</div>
+            </div>`;
+        }
+
+        async function adminCreateUser() {
+            const body = {
+                email: document.getElementById('invEmail').value.trim(),
+                username: document.getElementById('invUsername').value.trim(),
+                password: document.getElementById('invPassword').value.trim() || undefined
+            };
+            try {
+                const res = await fetch('/api/admin/users/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                renderCredResult('invResult', await res.json(), res.ok);
+            } catch (e) { renderCredResult('invResult', { error: 'Network error' }, false); }
+        }
+
+        async function adminResetUserPassword() {
+            const body = {
+                email: document.getElementById('rstEmail').value.trim(),
+                password: document.getElementById('rstPassword').value.trim() || undefined
+            };
+            try {
+                const res = await fetch('/api/admin/users/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                renderCredResult('rstResult', await res.json(), res.ok);
+            } catch (e) { renderCredResult('rstResult', { error: 'Network error' }, false); }
+        }
 
         // ============================================================
         // REFERRAL AGENT MANAGEMENT
