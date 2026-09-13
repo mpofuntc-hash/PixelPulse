@@ -9549,7 +9549,7 @@ async function resolveOracleMarket(marketId, outcome, resolverUserId) {
 }
 
 // API: List active + recently resolved markets, with live order-book prices + sparkline history
-app.get('/api/arcade/predictions/markets', authenticateRequest, async (req, res) => {
+app.get('/api/arcade/predictions/markets', async (req, res) => {
   const active = await dbAll(`
     SELECT id, title, description, category, option_yes_label, option_no_label, status, resolution_value,
            last_price_yes, last_price_no, fee_rate, created_at, resolved_at, resolution_source, is_user_created,

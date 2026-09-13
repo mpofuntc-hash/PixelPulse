@@ -443,6 +443,18 @@
             padding: 40px 4%;
         }
 
+        /* The Oracle — dedicated full-width page */
+        .oracle-page { max-width: 1280px; margin: 0 auto; }
+        .oracle-topbar { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #2a2a2a; }
+        .oracle-topbar-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .oracle-balance-chip { background: #0d0d0d; border: 1px solid #333; border-radius: 6px; padding: 8px 14px; display: flex; gap: 8px; align-items: center; }
+        @media (max-width: 640px) {
+            .oracle-topbar { align-items: stretch; }
+            .oracle-topbar-actions { width: 100%; }
+            .oracle-topbar-actions .btn { flex: 1; }
+            #predictionsGrid { grid-template-columns: 1fr !important; }
+        }
+
         .section-title {
             font-size: 24px;
             font-weight: bold;
@@ -2599,82 +2611,107 @@
     </div>
 
     <div class="section" id="betting" style="display: none;">
-        <div class="info-banner"><strong>Prediction Markets</strong> — Predict outcomes of esports matches and anime events using BTC. Browse live fixtures, place single or accumulator bets, and track your predictions.</div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h2 class="section-title">Prediction Markets</h2>
-            <div style="display: flex; gap: 10px;">
-                <button class="btn" style="background: #2f2f2f; color: #fff; border: 1px solid #333;" onclick="filterMarkets('all')">All</button>
-                <button class="btn" style="background: #2f2f2f; color: #fff; border: 1px solid #333;" onclick="filterMarkets('esports')">Esports</button>
-                <button class="btn" style="background: #2f2f2f; color: #fff; border: 1px solid #333;" onclick="filterMarkets('anime')">Anime</button>
+        <div class="oracle-page">
+        <div class="oracle-topbar">
+            <div>
+                <h2 class="section-title" style="margin-bottom: 6px;">🔮 The Oracle</h2>
+                <p style="color: #888; font-size: 13px; margin: 0;">Buy Yes/No shares on real-world outcomes. Every winning share pays $1. Cash out early any time.</p>
+            </div>
+            <div class="oracle-topbar-actions">
+                <div class="oracle-balance-chip"><span style="color: #888; font-size: 12px;">BALANCE</span> <span id="oracleBalance" style="color: #4caf50; font-weight: 700; font-size: 16px;">$0.00</span></div>
+                <button class="btn btn-primary" onclick="sessionToken ? showDepositModal() : showAuthModal()" style="font-size: 13px;">Deposit</button>
+                <button class="btn btn-secondary" onclick="switchOracleSubTab('positions')" style="font-size: 13px;">My Positions</button>
             </div>
         </div>
 
-        <div style="background: linear-gradient(135deg, #121c18, #171717); border: 1px solid #2d5438; border-radius: 10px; padding: 18px; margin-bottom: 20px;">
-            <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
-                <div><div style="font-size:12px; color:#8cdb9a; font-weight:bold; letter-spacing:.08em;">LIVE INFORMATION FIRST</div><h3 style="margin:4px 0 0;">Events waiting for your prediction</h3></div>
-                <span id="predictionSourceStatus" style="font-size:12px; color:#aaa;">Checking sources…</span>
-            </div>
-            <div id="predictionLiveFeed" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px;"><div style="color:#999;">Loading live fixtures…</div></div>
-            <div id="predictionUpcomingFeed" style="margin-top:12px; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px;"></div>
+        <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+            <button class="chat-tab active" id="oracleSubTab-markets" onclick="switchOracleSubTab('markets')">MARKETS</button>
+            <button class="chat-tab" id="oracleSubTab-positions" onclick="switchOracleSubTab('positions')">MY POSITIONS</button>
+            <button class="chat-tab" id="oracleSubTab-submit" onclick="switchOracleSubTab('submit')">SUBMIT A MARKET</button>
+            <button class="chat-tab" id="oracleSubTab-admin" onclick="switchOracleSubTab('admin')" style="display:none;">ADMIN QUEUE</button>
         </div>
-        
-        <!-- Auto-scrolling news ticker -->
-        <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; border: 1px solid #333; margin-bottom: 20px; overflow: hidden;">
-            <div style="display: flex; align-items: center; gap: 20px; animation: scroll 30s linear infinite;">
-                <div id="newsTicker" style="display: flex; gap: 30px; white-space: nowrap;">
-                    <span style="color: #999;">Loading latest news...</span>
+
+        <!-- Category filter -->
+        <div id="oracleCategoryFilter" style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+            <button class="plinko-risk-btn active" onclick="filterOracleCategory('all', this)">ALL</button>
+            <button class="plinko-risk-btn" onclick="filterOracleCategory('sports', this)">⚽ SPORTS</button>
+            <button class="plinko-risk-btn" onclick="filterOracleCategory('esports', this)">🎮 ESPORTS</button>
+            <button class="plinko-risk-btn" onclick="filterOracleCategory('crypto', this)">🪙 CRYPTO</button>
+            <button class="plinko-risk-btn" onclick="filterOracleCategory('politics', this)">🏛️ POLITICS</button>
+            <button class="plinko-risk-btn" onclick="filterOracleCategory('news', this)">📰 NEWS</button>
+            <button class="plinko-risk-btn" onclick="filterOracleCategory('misc', this)">✨ MISC</button>
+        </div>
+
+        <!-- MARKETS TAB -->
+        <div id="oraclePane-markets">
+            <div id="predictionsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;">
+                <div style="color: #888; text-align: center; padding: 40px;">Loading The Oracle...</div>
+            </div>
+        </div>
+
+        <!-- MY POSITIONS TAB -->
+        <div id="oraclePane-positions" style="display: none;">
+            <div id="oraclePositionsList" style="display: flex; flex-direction: column; gap: 10px;">
+                <div style="color: #888; text-align: center; padding: 40px;">Loading your positions...</div>
+            </div>
+        </div>
+
+        <!-- SUBMIT A MARKET TAB -->
+        <div id="oraclePane-submit" style="display: none;">
+            <div style="max-width: 480px; margin: 0 auto; padding: 16px; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 8px;">
+                <h4 style="margin-bottom: 8px;">📝 Submit Your Own Market</h4>
+                <p style="font-size: 12px; color: #888; margin-bottom: 12px;">Propose any Yes/No question. Our team reviews for clarity and a verifiable resolution source before it goes live.</p>
+                <input type="text" id="oracleSubmitTitle" placeholder="e.g. Will Team X win the final on Nov 12?" class="arcade-input" style="margin-bottom: 8px;">
+                <input type="text" id="oracleSubmitDesc" placeholder="Extra detail (optional)" class="arcade-input" style="margin-bottom: 8px;">
+                <select id="oracleSubmitCategory" class="arcade-input" style="margin-bottom: 8px;">
+                    <option value="sports">Sports</option>
+                    <option value="esports">Esports</option>
+                    <option value="crypto">Crypto</option>
+                    <option value="politics">Politics</option>
+                    <option value="news">News</option>
+                    <option value="misc">Misc</option>
+                </select>
+                <input type="text" id="oracleSubmitYes" placeholder="Yes label (default Yes)" class="arcade-input" style="margin-bottom: 8px;">
+                <input type="text" id="oracleSubmitNo" placeholder="No label (default No)" class="arcade-input" style="margin-bottom: 8px;">
+                <input type="text" id="oracleSubmitSource" placeholder="Resolution source (e.g. official league site, ESPN box score)" class="arcade-input" style="margin-bottom: 12px;">
+                <button class="arcade-btn" onclick="submitOracleMarket()">SUBMIT FOR REVIEW</button>
+                <div id="oracleSubmitResult" class="arcade-payout"></div>
+                <hr style="border: 1px solid #2a2a4a; margin: 16px 0;">
+                <h4 style="margin-bottom: 8px; font-size: 13px; color: #aaa;">YOUR SUBMISSIONS</h4>
+                <div id="oracleMySubmissions" style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="color: #888; font-size: 12px;">Loading...</div>
                 </div>
             </div>
         </div>
-        
-        <style>
-            @keyframes scroll {
-                0% { transform: translateX(0); }
-                100% { transform: translateX(-50%); }
-            }
-        </style>
-        
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px;">
-            <div style="background: #1a1a1a; padding: 20px; border-radius: 8px; border: 1px solid #333;">
-                <div style="color: #999; font-size: 12px; margin-bottom: 5px;">Total Volume (24h)</div>
-                <div style="font-size: 24px; font-weight: bold; color: #4caf50;" id="totalVolume24h">0.00000000 BTC</div>
+
+        <!-- ADMIN QUEUE TAB -->
+        <div id="oraclePane-admin" style="display: none;">
+            <div id="predictionAdminPanel" style="margin-bottom: 20px; padding: 16px; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 8px;">
+                <h4 style="margin-bottom: 12px;">⚙️ Admin Create Market (goes live instantly)</h4>
+                <input type="text" id="predAdminTitle" placeholder="Title" class="arcade-input" style="margin-bottom: 8px;">
+                <input type="text" id="predAdminDesc" placeholder="Description" class="arcade-input" style="margin-bottom: 8px;">
+                <select id="predAdminCategory" class="arcade-input" style="margin-bottom: 8px;">
+                    <option value="sports">Sports</option>
+                    <option value="news">News</option>
+                    <option value="esports">Esports</option>
+                    <option value="politics">Politics</option>
+                    <option value="crypto">Crypto</option>
+                    <option value="misc">Misc</option>
+                </select>
+                <input type="text" id="predAdminYes" placeholder="Yes label (default Yes)" class="arcade-input" style="margin-bottom: 8px;">
+                <input type="text" id="predAdminNo" placeholder="No label (default No)" class="arcade-input" style="margin-bottom: 8px;">
+                <button class="arcade-btn" onclick="adminCreatePrediction()">CREATE MARKET</button>
+                <hr style="border: 1px solid #2a2a4a; margin: 16px 0;">
+                <button class="arcade-btn" style="background: rgba(76,175,80,0.2); border-color: #4caf50;" onclick="adminSeedFootballMarkets()">⚽ SEED FREE FOOTBALL MARKETS</button>
+                <button class="arcade-btn" style="background: rgba(255,193,7,0.15); border-color: #ffc107; margin-top: 8px;" onclick="adminSeedCryptoMarkets()">🪙 SEED CRYPTO MARKETS</button>
+                <button class="arcade-btn" style="background: rgba(142,68,173,0.15); border-color: #8e44ad; margin-top: 8px;" onclick="adminSeedEsportsMarkets()">🎮 SEED ESPORTS MARKETS</button>
+                <p style="font-size: 12px; color: #888; margin-top: 6px;">Auto-creates English Premier League, CoinGecko crypto, and CS2 esports markets from free public APIs.</p>
             </div>
-            <div style="background: #1a1a1a; padding: 20px; border-radius: 8px; border: 1px solid #333;">
-                <div style="color: #999; font-size: 12px; margin-bottom: 5px;">Active Markets</div>
-                <div style="font-size: 24px; font-weight: bold; color: #fff;" id="activeMarketsCount">0</div>
-            </div>
-            <div style="background: #1a1a1a; padding: 20px; border-radius: 8px; border: 1px solid #333;">
-                <div style="color: #999; font-size: 12px; margin-bottom: 5px;">Total Predictions (24h)</div>
-                <div style="font-size: 24px; font-weight: bold; color: #fff;" id="totalBets24h">0</div>
-            </div>
-            <div style="background: #1a1a1a; padding: 20px; border-radius: 8px; border: 1px solid #333;">
-                <div style="color: #999; font-size: 12px; margin-bottom: 5px;">Your Predictions</div>
-                <div style="font-size: 24px; font-weight: bold; color: #e50914;" id="yourBetsCount">0</div>
-            </div>
-        </div>
-        
-        <div style="background: #1a1a1a; padding: 20px; border-radius: 8px; border: 1px solid #333; margin-bottom: 30px;">
-            <h3 style="margin-bottom: 15px;">Trading Volume (7 Days)</h3>
-            <canvas id="bettingVolumeChart" height="150"></canvas>
-        </div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
-            <div style="background: #1a1a1a; padding: 20px; border-radius: 8px; border: 1px solid #333;">
-                <h3 style="margin-bottom: 15px;">🎮 Esports Highlights</h3>
-                <div id="esportsHighlights">
-                    <div class="loading">Loading esports data...</div>
-                </div>
-            </div>
-            <div style="background: #1a1a1a; padding: 20px; border-radius: 8px; border: 1px solid #333;">
-                <h3 style="margin-bottom: 15px;">🎬 Anime Insights</h3>
-                <div id="animeInsights">
-                    <div class="loading">Loading anime data...</div>
-                </div>
+            <h4 style="margin-bottom: 12px;">📥 User-Submitted Markets Awaiting Review</h4>
+            <div id="oracleAdminQueue" style="display: flex; flex-direction: column; gap: 10px;">
+                <div style="color: #888; text-align: center; padding: 20px;">Loading queue...</div>
             </div>
         </div>
-        
-        <div class="markets-container" id="bettingGrid">
-            <div class="loading">Loading markets...</div>
         </div>
     </div>
 
@@ -2807,7 +2844,7 @@
                 <div class="game-card-name">PVP CLASH</div>
                 <div class="game-card-tag">3% FEE</div>
             </div>
-            <div class="arcade-game-card" id="arcadeTab-predictions" onclick="openArcadeGame('predictions')" style="--card-accent:#9B59B6; --card-glow:rgba(155,89,182,0.25);">
+            <div class="arcade-game-card" id="arcadeTab-predictions" onclick="openOracle()" style="--card-accent:#9B59B6; --card-glow:rgba(155,89,182,0.25);">
                 <span class="game-card-icon" style="font-size:28px;">🔮</span>
                 <div class="game-card-name">THE ORACLE</div>
                 <div class="game-card-tag">YES/NO MARKETS</div>
@@ -3137,103 +3174,6 @@
                         <div id="pvpWaiting" style="display: none; color: #888; font-size: 13px; padding: 20px;">Waiting for opponent...</div>
                         <div id="pvpResult" class="arcade-payout"></div>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- The Oracle: Polymarket-style Yes/No prediction exchange -->
-        <div id="arcade-predictions" style="display: none;">
-            <div style="margin-bottom: 16px;">
-                <h3 style="margin-bottom: 8px;">🔮 THE ORACLE</h3>
-                <p style="color: #888; font-size: 13px; margin-bottom: 12px;">Trade Yes/No shares on sports, esports, crypto, news &amp; politics. Prices move live with the crowd — buy in, watch your side move, and cash out early any time before it resolves.</p>
-            </div>
-
-            <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
-                <button class="chat-tab active" id="oracleSubTab-markets" onclick="switchOracleSubTab('markets')">MARKETS</button>
-                <button class="chat-tab" id="oracleSubTab-positions" onclick="switchOracleSubTab('positions')">MY POSITIONS</button>
-                <button class="chat-tab" id="oracleSubTab-submit" onclick="switchOracleSubTab('submit')">SUBMIT A MARKET</button>
-                <button class="chat-tab" id="oracleSubTab-admin" onclick="switchOracleSubTab('admin')" style="display:none;">ADMIN QUEUE</button>
-            </div>
-
-            <!-- Category filter -->
-            <div id="oracleCategoryFilter" style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
-                <button class="plinko-risk-btn active" onclick="filterOracleCategory('all', this)">ALL</button>
-                <button class="plinko-risk-btn" onclick="filterOracleCategory('sports', this)">⚽ SPORTS</button>
-                <button class="plinko-risk-btn" onclick="filterOracleCategory('esports', this)">🎮 ESPORTS</button>
-                <button class="plinko-risk-btn" onclick="filterOracleCategory('crypto', this)">🪙 CRYPTO</button>
-                <button class="plinko-risk-btn" onclick="filterOracleCategory('politics', this)">🏛️ POLITICS</button>
-                <button class="plinko-risk-btn" onclick="filterOracleCategory('news', this)">📰 NEWS</button>
-                <button class="plinko-risk-btn" onclick="filterOracleCategory('misc', this)">✨ MISC</button>
-            </div>
-
-            <!-- MARKETS TAB -->
-            <div id="oraclePane-markets">
-                <div id="predictionsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;">
-                    <div style="color: #888; text-align: center; padding: 40px;">Loading The Oracle...</div>
-                </div>
-            </div>
-
-            <!-- MY POSITIONS TAB -->
-            <div id="oraclePane-positions" style="display: none;">
-                <div id="oraclePositionsList" style="display: flex; flex-direction: column; gap: 10px;">
-                    <div style="color: #888; text-align: center; padding: 40px;">Loading your positions...</div>
-                </div>
-            </div>
-
-            <!-- SUBMIT A MARKET TAB -->
-            <div id="oraclePane-submit" style="display: none;">
-                <div style="max-width: 480px; margin: 0 auto; padding: 16px; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 8px;">
-                    <h4 style="margin-bottom: 8px;">📝 Submit Your Own Market</h4>
-                    <p style="font-size: 12px; color: #888; margin-bottom: 12px;">Propose any Yes/No question. Our team reviews for clarity and a verifiable resolution source before it goes live.</p>
-                    <input type="text" id="oracleSubmitTitle" placeholder="e.g. Will Team X win the final on Nov 12?" class="arcade-input" style="margin-bottom: 8px;">
-                    <input type="text" id="oracleSubmitDesc" placeholder="Extra detail (optional)" class="arcade-input" style="margin-bottom: 8px;">
-                    <select id="oracleSubmitCategory" class="arcade-input" style="margin-bottom: 8px;">
-                        <option value="sports">Sports</option>
-                        <option value="esports">Esports</option>
-                        <option value="crypto">Crypto</option>
-                        <option value="politics">Politics</option>
-                        <option value="news">News</option>
-                        <option value="misc">Misc</option>
-                    </select>
-                    <input type="text" id="oracleSubmitYes" placeholder="Yes label (default Yes)" class="arcade-input" style="margin-bottom: 8px;">
-                    <input type="text" id="oracleSubmitNo" placeholder="No label (default No)" class="arcade-input" style="margin-bottom: 8px;">
-                    <input type="text" id="oracleSubmitSource" placeholder="Resolution source (e.g. official league site, ESPN box score)" class="arcade-input" style="margin-bottom: 12px;">
-                    <button class="arcade-btn" onclick="submitOracleMarket()">SUBMIT FOR REVIEW</button>
-                    <div id="oracleSubmitResult" class="arcade-payout"></div>
-                    <hr style="border: 1px solid #2a2a4a; margin: 16px 0;">
-                    <h4 style="margin-bottom: 8px; font-size: 13px; color: #aaa;">YOUR SUBMISSIONS</h4>
-                    <div id="oracleMySubmissions" style="display: flex; flex-direction: column; gap: 8px;">
-                        <div style="color: #888; font-size: 12px;">Loading...</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ADMIN QUEUE TAB -->
-            <div id="oraclePane-admin" style="display: none;">
-                <div id="predictionAdminPanel" style="margin-bottom: 20px; padding: 16px; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 8px;">
-                    <h4 style="margin-bottom: 12px;">⚙️ Admin Create Market (goes live instantly)</h4>
-                    <input type="text" id="predAdminTitle" placeholder="Title" class="arcade-input" style="margin-bottom: 8px;">
-                    <input type="text" id="predAdminDesc" placeholder="Description" class="arcade-input" style="margin-bottom: 8px;">
-                    <select id="predAdminCategory" class="arcade-input" style="margin-bottom: 8px;">
-                        <option value="sports">Sports</option>
-                        <option value="news">News</option>
-                        <option value="esports">Esports</option>
-                        <option value="politics">Politics</option>
-                        <option value="crypto">Crypto</option>
-                        <option value="misc">Misc</option>
-                    </select>
-                    <input type="text" id="predAdminYes" placeholder="Yes label (default Yes)" class="arcade-input" style="margin-bottom: 8px;">
-                    <input type="text" id="predAdminNo" placeholder="No label (default No)" class="arcade-input" style="margin-bottom: 8px;">
-                    <button class="arcade-btn" onclick="adminCreatePrediction()">CREATE MARKET</button>
-                    <hr style="border: 1px solid #2a2a4a; margin: 16px 0;">
-                    <button class="arcade-btn" style="background: rgba(76,175,80,0.2); border-color: #4caf50;" onclick="adminSeedFootballMarkets()">⚽ SEED FREE FOOTBALL MARKETS</button>
-                    <button class="arcade-btn" style="background: rgba(255,193,7,0.15); border-color: #ffc107; margin-top: 8px;" onclick="adminSeedCryptoMarkets()">🪙 SEED CRYPTO MARKETS</button>
-                    <button class="arcade-btn" style="background: rgba(142,68,173,0.15); border-color: #8e44ad; margin-top: 8px;" onclick="adminSeedEsportsMarkets()">🎮 SEED ESPORTS MARKETS</button>
-                    <p style="font-size: 12px; color: #888; margin-top: 6px;">Auto-creates English Premier League, CoinGecko crypto, and CS2 esports markets from free public APIs.</p>
-                </div>
-                <h4 style="margin-bottom: 12px;">📥 User-Submitted Markets Awaiting Review</h4>
-                <div id="oracleAdminQueue" style="display: flex; flex-direction: column; gap: 10px;">
-                    <div style="color: #888; text-align: center; padding: 20px;">Loading queue...</div>
                 </div>
             </div>
         </div>
@@ -5041,7 +4981,8 @@
             } else if (section === 'community') {
                 loadCommunityPosts();
             } else if (section === 'betting') {
-                loadBettingMarkets();
+                loadPredictions();
+                loadArcadeBalance();
             } else if (section === 'arcade') {
                 loadArcadeBalance();
             } else if (section === 'marketplace') {
@@ -8320,13 +8261,9 @@
         }
 
         function openOracle() {
-            showSection('arcade');
-            openArcadeGame('predictions');
-            // Highlight The Oracle in nav instead of Arcade
-            const navArcade = document.getElementById('nav-arcade');
-            const navOracle = document.getElementById('nav-betting');
-            if (navArcade) navArcade.classList.remove('active');
-            if (navOracle) navOracle.classList.add('active');
+            showSection('betting');
+            switchOracleSubTab('markets');
+            window.scrollTo(0, 0);
         }
 
         function exitArcadeGame() {
@@ -8344,7 +8281,7 @@
             if (crashState && crashState.active) crashState.active = false;
             if (typeof pvpState !== 'undefined' && pvpState.polling) { clearInterval(pvpState.polling); pvpState.polling = null; }
 
-            const tabs = ['coinflip', 'slots', 'crash', 'mines', 'dice', 'plinko', 'roulette', 'hilo', 'wheel', 'pvp', 'predictions', 'winners', 'rankings'];
+            const tabs = ['coinflip', 'slots', 'crash', 'mines', 'dice', 'plinko', 'roulette', 'hilo', 'wheel', 'pvp', 'winners', 'rankings'];
             tabs.forEach(t => {
                 const panel = document.getElementById('arcade-' + t);
                 const btn = document.getElementById('arcadeTab-' + t);
@@ -8358,7 +8295,6 @@
                 }
             });
             if (tab === 'winners') loadArcadeWinners();
-            if (tab === 'predictions') loadPredictions();
             if (tab === 'dice') initDiceGrid();
             if (tab === 'plinko') initPlinkoBoard();
             if (tab === 'rankings') loadRankings();
@@ -8369,8 +8305,8 @@
             try {
                 const res = await fetch('/api/arcade/balance', { headers: { 'Authorization': `Bearer ${sessionToken}` } });
                 const data = await res.json();
-                const el = document.getElementById('arcadeBalance');
-                if (el) el.textContent = `$${(data.balance || 0).toFixed(2)}`;
+                const txt = `$${(data.balance || 0).toFixed(2)}`;
+                ['arcadeBalance', 'oracleBalance'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = txt; });
             } catch(e) {}
         }
 
@@ -9657,16 +9593,16 @@
         }
 
         async function loadPredictions() {
-            if (!sessionToken) { showAuthModal(); return; }
             const grid = document.getElementById('predictionsGrid');
             grid.innerHTML = '<div style="grid-column:1/-1;color:#888;text-align:center;padding:40px;">Loading The Oracle...</div>';
             try {
+                const authHeaders = sessionToken ? { 'Authorization': `Bearer ${sessionToken}` } : {};
                 const [marketsRes, adminRes] = await Promise.all([
-                    fetch('/api/arcade/predictions/markets', { headers: { 'Authorization': `Bearer ${sessionToken}` } }),
-                    fetch('/api/arcade/admin-check', { headers: { 'Authorization': `Bearer ${sessionToken}` } })
+                    fetch('/api/arcade/predictions/markets', { headers: authHeaders }),
+                    sessionToken ? fetch('/api/arcade/admin-check', { headers: authHeaders }) : Promise.resolve(null)
                 ]);
                 const data = await marketsRes.json();
-                const adminData = await adminRes.json();
+                const adminData = adminRes ? await adminRes.json() : { isAdmin: false };
                 arcadeAdmin = adminData.isAdmin;
                 document.getElementById('oracleSubTab-admin').style.display = arcadeAdmin ? 'inline-block' : 'none';
 
