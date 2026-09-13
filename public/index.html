@@ -2426,7 +2426,7 @@
             <p class="hero-description">Bet on real-world outcomes with a true order-book exchange — sports, crypto, esports, politics. Buy Yes/No shares, set your own price, cash out anytime. Plus provably fair arcade games. Same crypto wallet, one platform.</p>
             <div class="hero-buttons">
                 <button class="btn btn-primary" onclick="showAuthModal(); showRegisterForm();">🚀 Get $2 Free to Start</button>
-                <button class="btn btn-secondary" onclick="showSection('predictions')">View The Oracle</button>
+                <button class="btn btn-secondary" onclick="openOracle()">View The Oracle</button>
             </div>
             <div class="hero-trust-bar">
                 <div class="hero-trust-item">📊 Real Order Book</div>
@@ -2463,7 +2463,7 @@
     <section id="oracleFeedSection" style="max-width:1200px;margin:20px auto;padding:0 16px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
             <h3 style="font-size:18px;color:#fff;margin:0;">Live Oracle Activity</h3>
-            <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px;" onclick="showSection('predictions')">View All Markets</button>
+            <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px;" onclick="openOracle()">View All Markets</button>
         </div>
         <div id="oracleFeedGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
             <div style="background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:16px;">
@@ -10381,7 +10381,7 @@
                         let meta = {}; try { meta = m.metadata ? JSON.parse(m.metadata) : {}; } catch (e) {}
                         const yesPct = Math.round((m.last_price_yes || 0.5) * 100);
                         const img = meta.home_logo || m.image_url || '';
-                        return `<div style="display:flex;align-items:center;gap:10px;padding:8px;background:#0d0d0d;border-radius:8px;cursor:pointer;" onclick="showSection('predictions')">
+                        return `<div style="display:flex;align-items:center;gap:10px;padding:8px;background:#0d0d0d;border-radius:8px;cursor:pointer;" onclick="openOracle()">
                             ${img ? `<img src="${img}" style="width:28px;height:28px;border-radius:4px;object-fit:contain;background:#fff;padding:1px;">` : '<div style="width:28px;height:28px;border-radius:4px;background:#2a2a4a;display:flex;align-items:center;justify-content:center;font-size:14px;">📊</div>'}
                             <div style="flex:1;min-width:0;">
                                 <div style="font-size:12px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${(m.title||'').replace(/</g,'<')}</div>
