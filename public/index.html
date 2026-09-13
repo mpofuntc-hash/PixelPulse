@@ -1087,6 +1087,7 @@
             border: 3px solid;
             max-width: 240px;
         }
+        .pulse-cta { animation: pulse 0.6s ease-in-out infinite; box-shadow: 0 0 18px rgba(76,175,80,0.8); }
         .arcade-toast.show {
             transform: scale(1);
             opacity: 1;
@@ -2133,7 +2134,6 @@
             .balance-card, .your-bets { width: 100%; }
         }
     </style>
-    <script src="https://richinfo.co/richpartners/pops/js/richads-pu-ob.js" data-pubid="1021968" data-siteid="406305" async data-cfasync="false"></script>
     <style>
     .chat-layout { display: grid; grid-template-columns: 260px 1fr; gap: 0; height: calc(100vh - 220px); min-height: 500px; background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 8px; overflow: hidden; }
     .chat-sidebar { background: #12121e; border-right: 1px solid #2a2a3e; display: flex; flex-direction: column; padding: 12px; overflow-y: auto; }
@@ -3145,6 +3145,7 @@
                     <div class="pvp-queue-status">
                         <div class="pvp-queue-spinner"></div>
                         <div>Searching for opponent at $<span id="pvpQueueStake">2.00</span> stake...</div>
+                        <div style="font-size: 11px; color: #666; margin-top: 6px;">A house player joins automatically if no opponent is found in ~15s</div>
                         <button class="arcade-btn" onclick="cancelPvpQueue()" style="margin-top: 16px;">CANCEL</button>
                     </div>
                 </div>
@@ -7981,6 +7982,16 @@
         let coinflipChoice = null;
         let crashState = { active: false, sessionId: null, stake: 0, crashPoint: 0, currentMult: 1.0, cashedOut: false, crashed: false, animInterval: null };
 
+        // Non-blocking replacement for alert() inside arcade games — a native alert()
+        // freezes the page mid-animation and leaves buttons stuck on "FLIPPING..."
+        function gameAlert(msg) {
+            showArcadeToast('loss', '⚠️', String(msg || 'Something went wrong'), '');
+            if (/insufficient/i.test(String(msg))) {
+                const dep = document.querySelector('#arcade [onclick*="showDepositModal"]');
+                if (dep) { dep.classList.add('pulse-cta'); setTimeout(() => dep.classList.remove('pulse-cta'), 3000); }
+            }
+        }
+
         function showArcadeToast(type, icon, title, amount) {
             const toast = document.getElementById('arcadeToast');
             if (!toast) return;
@@ -8323,7 +8334,7 @@
 
         async function playCoinflip() {
             if (!sessionToken) { showAuthModal(); return; }
-            if (!coinflipChoice) { alert('Choose heads or tails first!'); return; }
+            if (!coinflipChoice) { gameAlert('Choose heads or tails first!'); return; }
             if (ArcadeSession.isBusy('coinflip')) { return; }
             ArcadeSession.lock('coinflip');
             const stake = parseFloat(document.getElementById('coinflipStake').value);
@@ -8340,7 +8351,7 @@
                     body: JSON.stringify({ choice: coinflipChoice, stake })
                 });
                 const data = await res.json();
-                if (!res.ok) { alert(data.error); btn.disabled = false; btn.textContent = 'FLIP COIN'; resultEl.classList.remove('flipping'); ArcadeSession.unlock('coinflip'); return; }
+                if (!res.ok) { gameAlert(data.error); btn.disabled = false; btn.textContent = 'FLIP COIN'; resultEl.classList.remove('flipping'); ArcadeSession.unlock('coinflip'); return; }
 
                 let flips = 0;
                 playGameSound('flip');
@@ -8371,7 +8382,7 @@
                         ArcadeSession.unlock('coinflip');
                     }
                 }, 180);
-            } catch(e) { console.error('Coinflip error:', e); alert('Error playing coinflip: ' + (e.message || 'unknown')); btn.disabled = false; btn.textContent = 'FLIP COIN'; resultEl.classList.remove('flipping'); ArcadeSession.unlock('coinflip'); }
+            } catch(e) { console.error('Coinflip error:', e); gameAlert('Error playing coinflip: ' + (e.message || 'unknown')); btn.disabled = false; btn.textContent = 'FLIP COIN'; resultEl.classList.remove('flipping'); ArcadeSession.unlock('coinflip'); }
         }
 
         async function playSlots() {
@@ -8401,7 +8412,7 @@
                         method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
                         body: JSON.stringify({ stake })
                     }).then(res => res.json()).then(data => {
-                        if (data.error) { alert(data.error); btn.disabled=false; btn.textContent='SPIN'; ArcadeSession.unlock('slots'); return; }
+                        if (data.error) { gameAlert(data.error); btn.disabled=false; btn.textContent='SPIN'; ArcadeSession.unlock('slots'); return; }
                         reelsEl.innerHTML = data.reels.map(r => `<span${data.result === 'jackpot' ? ' class="jackpot"' : ''}>${r}</span>`).join('');
                         if (data.payout > 0) {
                             if (data.result === 'jackpot') {
@@ -8422,7 +8433,7 @@
                         document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
                         // Keep results on screen for 2.5s before re-enabling spin
                         ArcadeSession.setTimeout(() => { btn.disabled = false; btn.textContent = 'SPIN'; ArcadeSession.unlock('slots'); }, 2500);
-                    }).catch((e) => { console.error('Slots error:', e); alert('Error: ' + (e.message || 'unknown')); btn.disabled=false; btn.textContent='SPIN'; ArcadeSession.unlock('slots'); });
+                    }).catch((e) => { console.error('Slots error:', e); gameAlert('Error: ' + (e.message || 'unknown')); btn.disabled=false; btn.textContent='SPIN'; ArcadeSession.unlock('slots'); });
                     ArcadeSession.trackFetch(fetchPromise);
                 }
             }, 140);
@@ -8448,7 +8459,7 @@
                     body: JSON.stringify({ stake })
                 });
                 const data = await res.json();
-                if (!res.ok) { alert(data.error); startBtn.disabled = false; ArcadeSession.unlock('crash'); return; }
+                if (!res.ok) { gameAlert(data.error); startBtn.disabled = false; ArcadeSession.unlock('crash'); return; }
 
                 crashState = { active: true, sessionId: data.sessionId, stake: data.stake, crashPoint: data.crashPoint, currentMult: 1.0, cashedOut: false, crashed: false, animInterval: null };
                 document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
@@ -8599,7 +8610,7 @@
                     const policeSteps = ['🚔', '🚓', '🚔'];
                     policeEl.textContent = policeSteps[Math.floor(elapsed * policeSpeed) % policeSteps.length];
                 }, 180);
-            } catch(e) { console.error('Crash start error:', e); alert('Error starting crash: ' + (e.message || 'unknown')); startBtn.disabled = false; ArcadeSession.unlock('crash'); }
+            } catch(e) { console.error('Crash start error:', e); gameAlert('Error starting crash: ' + (e.message || 'unknown')); startBtn.disabled = false; ArcadeSession.unlock('crash'); }
         }
 
         async function cashoutCrash() {
@@ -8616,7 +8627,7 @@
                     body: JSON.stringify({ sessionId: crashState.sessionId, multiplier: crashState.currentMult, stake: crashState.stake })
                 });
                 const data = await res.json();
-                if (!res.ok) { ArcadeSession.unlock('crash'); alert(data.error); return; }
+                if (!res.ok) { ArcadeSession.unlock('crash'); gameAlert(data.error); return; }
 
                 document.getElementById('crashMultiplier').textContent = `${crashState.currentMult.toFixed(2)}x`;
                 document.getElementById('crashMultiplier').style.color = '#4caf50';
@@ -8636,7 +8647,7 @@
                     document.getElementById('crashResult').textContent = '';
                     ArcadeSession.unlock('crash');
                 }, 3000);
-            } catch(e) { console.error('Crash cashout error:', e); alert('Error cashing out: ' + (e.message || 'unknown')); ArcadeSession.unlock('crash'); }
+            } catch(e) { console.error('Crash cashout error:', e); gameAlert('Error cashing out: ' + (e.message || 'unknown')); ArcadeSession.unlock('crash'); }
         }
 
         // ===== MINES =====
@@ -8673,8 +8684,8 @@
                 });
                 const text = await res.text();
                 let data;
-                try { data = JSON.parse(text); } catch(e) { alert('Server error. Please try again.'); startBtn.disabled = false; ArcadeSession.unlock('mines'); return; }
-                if (!res.ok) { alert(data.error || 'Error starting game'); startBtn.disabled = false; ArcadeSession.unlock('mines'); return; }
+                try { data = JSON.parse(text); } catch(e) { gameAlert('Server error. Please try again.'); startBtn.disabled = false; ArcadeSession.unlock('mines'); return; }
+                if (!res.ok) { gameAlert(data.error || 'Error starting game'); startBtn.disabled = false; ArcadeSession.unlock('mines'); return; }
 
                 minesState = { sessionId: data.sessionId, mineCount: data.mineCount, stake: stake, revealed: [], active: true, picking: false, cashingOut: false };
                 document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
@@ -8693,7 +8704,7 @@
                     card.onclick = () => pickMineCard(i);
                     grid.appendChild(card);
                 }
-            } catch(e) { console.error('Mines start error:', e); alert('Network error. Please try again.'); startBtn.disabled = false; ArcadeSession.unlock('mines'); }
+            } catch(e) { console.error('Mines start error:', e); gameAlert('Network error. Please try again.'); startBtn.disabled = false; ArcadeSession.unlock('mines'); }
         }
 
         async function pickMineCard(index) {
@@ -8712,10 +8723,10 @@
                 });
                 const text = await res.text();
                 let data;
-                try { data = JSON.parse(text); } catch(e) { alert('Server error. Please restart the game.'); resetMinesUI(); return; }
+                try { data = JSON.parse(text); } catch(e) { gameAlert('Server error. Please restart the game.'); resetMinesUI(); return; }
                 if (!res.ok) {
                     if (data.error === 'Game not found' || data.error === 'Game already ended') { resetMinesUI(); return; }
-                    alert(data.error || 'Error picking card');
+                    gameAlert(data.error || 'Error picking card');
                     return;
                 }
 
@@ -8749,7 +8760,7 @@
                         cashoutMines();
                     }
                 }
-            } catch(e) { console.error('Mines pick error:', e); alert('Network error. Please try again.'); minesState.picking = false; card.style.opacity = ''; }
+            } catch(e) { console.error('Mines pick error:', e); gameAlert('Network error. Please try again.'); minesState.picking = false; card.style.opacity = ''; }
         }
 
         async function cashoutMines() {
@@ -8764,10 +8775,10 @@
                 });
                 const text = await res.text();
                 let data;
-                try { data = JSON.parse(text); } catch(e) { alert('Server error. Please try again.'); resetMinesUI(); return; }
+                try { data = JSON.parse(text); } catch(e) { gameAlert('Server error. Please try again.'); resetMinesUI(); return; }
                 if (!res.ok) {
                     if (data.error === 'Game not found' || data.error === 'Game already ended') { resetMinesUI(); return; }
-                    alert(data.error || 'Error cashing out');
+                    gameAlert(data.error || 'Error cashing out');
                     minesState.cashingOut = false;
                     document.getElementById('minesCashoutBtn').style.display = 'block';
                     return;
@@ -8786,7 +8797,7 @@
                 });
 
                 ArcadeSession.setTimeout(() => { resetMinesUI(); ArcadeSession.unlock('mines'); }, 3500);
-            } catch(e) { console.error('Mines cashout error:', e); alert('Network error. Please try again.'); }
+            } catch(e) { console.error('Mines cashout error:', e); gameAlert('Network error. Please try again.'); }
         }
 
         // ===== DICE =====
@@ -8915,7 +8926,7 @@
                 const msg = diceMode === 'single' ? 'Select a number 1-6 first!' :
                             diceMode === 'sum' ? 'Select a number 2-12 first!' :
                             'Select your dice combination first!';
-                alert(msg);
+                gameAlert(msg);
                 return;
             }
             ArcadeSession.lock('dice');
@@ -8945,7 +8956,7 @@
                         method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
                         body: JSON.stringify({ prediction: dicePrediction, stake, mode: diceMode })
                     }).then(res => res.json()).then(data => {
-                        if (data.error) { alert(data.error); btn.disabled=false; btn.textContent='ROLL DICE'; ArcadeSession.unlock('dice'); return; }
+                        if (data.error) { gameAlert(data.error); btn.disabled=false; btn.textContent='ROLL DICE'; ArcadeSession.unlock('dice'); return; }
                         die1El.textContent = data.die1;
                         if (data.numDice === 2) die2El.textContent = data.die2;
                         const resultStr = data.numDice === 2 ? `${data.die1}+${data.die2} = ${data.sum}` : `${data.die1}`;
@@ -9033,7 +9044,7 @@
                     body: JSON.stringify({ stake, riskLevel: plinkoRisk })
                 });
                 const data = await res.json();
-                if (!res.ok) { alert(data.error); btn.disabled=false; btn.textContent='DROP BALL'; ball.style.display='none'; ArcadeSession.unlock('plinko'); return; }
+                if (!res.ok) { gameAlert(data.error); btn.disabled=false; btn.textContent='DROP BALL'; ball.style.display='none'; ArcadeSession.unlock('plinko'); return; }
 
                 // Animate ball path using percentages to avoid repeated layout thrashing
                 const path = data.path;
@@ -9104,7 +9115,7 @@
             try {
                 const res = await fetch('/api/arcade/roulette', { method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ choice: rouletteChoice, pick, stake }) });
                 const data = await res.json();
-                if (!res.ok) { alert(data.error); btn.disabled = false; btn.textContent = 'SPIN'; ArcadeSession.unlock('roulette'); return; }
+                if (!res.ok) { gameAlert(data.error); btn.disabled = false; btn.textContent = 'SPIN'; ArcadeSession.unlock('roulette'); return; }
                 const colorEmoji = data.color === 'red' ? '🔴' : data.color === 'black' ? '⚫' : '🟢';
                 if (data.won) {
                     dramaticWin('#arcade-roulette .arcade-game', data.payout || 0, false, true);
@@ -9143,7 +9154,7 @@
             try {
                 const res = await fetch('/api/arcade/hilo', { method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ guess: hiloChoice, stake }) });
                 const data = await res.json();
-                if (!res.ok) { alert(data.error); btn.disabled = false; btn.textContent = 'DRAW CARD'; ArcadeSession.unlock('hilo'); return; }
+                if (!res.ok) { gameAlert(data.error); btn.disabled = false; btn.textContent = 'DRAW CARD'; ArcadeSession.unlock('hilo'); return; }
                 baseEl.textContent = `${CARD_RANKS[data.baseCard - 1]} → ${CARD_RANKS[data.nextCard - 1]}`;
                 if (data.won) {
                     dramaticWin('#arcade-hilo .arcade-game', data.payout || 0, false, true);
@@ -9181,7 +9192,7 @@
             try {
                 const res = await fetch('/api/arcade/wheel', { method: 'POST', headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ stake }) });
                 const data = await res.json();
-                if (!res.ok) { alert(data.error); btn.disabled = false; btn.textContent = 'SPIN WHEEL'; clearInterval(spinAnim); ArcadeSession.clearTimer(spinAnim); ArcadeSession.unlock('wheel'); return; }
+                if (!res.ok) { gameAlert(data.error); btn.disabled = false; btn.textContent = 'SPIN WHEEL'; clearInterval(spinAnim); ArcadeSession.clearTimer(spinAnim); ArcadeSession.unlock('wheel'); return; }
                 const target = data.segment;
                 // Land after a slower, more visible spin
                 ArcadeSession.setTimeout(() => {
@@ -9219,7 +9230,7 @@
                     body: JSON.stringify({ stake })
                 });
                 const data = await res.json();
-                if (!res.ok) { alert(data.error); btn.disabled = false; return; }
+                if (!res.ok) { gameAlert(data.error); btn.disabled = false; return; }
 
                 if (data.matched) {
                     pvpState.gameId = data.gameId;
@@ -9237,6 +9248,7 @@
                             body: JSON.stringify({ stake })
                         });
                         const checkData = await checkRes.json();
+                        if (checkData.error) { clearInterval(pvpState.polling); pvpState.polling = null; cancelPvpQueue(); gameAlert(checkData.error); return; }
                         if (checkData.matched) {
                             clearInterval(pvpState.polling);
                             pvpState.gameId = checkData.gameId;
@@ -9267,7 +9279,19 @@
                         body: JSON.stringify({ gameId: pvpState.gameId, action: 'status' })
                     });
                     const data = await res.json();
-                    if (data.error) { clearInterval(pvpState.polling); return; }
+                    if (data.error) {
+                        clearInterval(pvpState.polling);
+                        document.getElementById('pvpWaiting').textContent = 'Game ended — returning to lobby...';
+                        setTimeout(() => {
+                            pvpState.gameId = null;
+                            document.getElementById('pvpGameArea').style.display = 'none';
+                            document.getElementById('pvpSetupArea').style.display = 'block';
+                            document.getElementById('pvpJoinBtn').disabled = false;
+                            document.getElementById('pvpWaiting').textContent = 'Waiting for opponent...';
+                        }, 2500);
+                        return;
+                    }
+                    if (data.gameOver || data.status === 'finished') { clearInterval(pvpState.polling); pvpEndGame(data); return; }
 
                     document.getElementById('pvpYourScore').textContent = data.yourScore;
                     document.getElementById('pvpOppScore').textContent = data.opponentScore;
@@ -9301,6 +9325,32 @@
             }, 2000);
         }
 
+        function pvpEndGame(data) {
+            document.getElementById('pvpColorChoice').style.display = 'none';
+            document.getElementById('pvpGuessChoice').style.display = 'none';
+            document.getElementById('pvpWaiting').style.display = 'none';
+            if (data.newBalance !== undefined) document.getElementById('arcadeBalance').textContent = `$${data.newBalance.toFixed(2)}`;
+            if (data.tie) {
+                document.getElementById('pvpResult').innerHTML = `🤝 Tie! Refunded minus house fee.`;
+                showArcadeToast('loss', '🤝', 'TIE!', 'Refunded');
+            } else if (data.youWon) {
+                document.getElementById('pvpResult').innerHTML = `🎉 YOU WON <span style="color:#4caf50;font-weight:700">$${(data.prize || 0).toFixed(2)}</span>`;
+                dramaticWin('#arcade-pvp .arcade-screen, #arcade-pvp .pvp-arena', data.prize || 0, false);
+                showArcadeToast('win', '⚔️', 'YOU WON!', `+$${(data.prize || 0).toFixed(2)}`);
+            } else {
+                document.getElementById('pvpResult').innerHTML = `❌ You lost $${(data.houseFee !== undefined ? (data.prize + data.houseFee) / 2 : 0).toFixed(2)} stake`;
+                showArcadeToast('loss', '⚔️', 'YOU LOST!', `-$${(data.houseFee !== undefined ? (data.prize + data.houseFee) / 2 : 0).toFixed(2)}`);
+            }
+            setTimeout(() => {
+                pvpState.gameId = null;
+                document.getElementById('pvpGameArea').style.display = 'none';
+                document.getElementById('pvpSetupArea').style.display = 'block';
+                document.getElementById('pvpJoinBtn').disabled = false;
+                document.getElementById('pvpResult').textContent = '';
+                document.getElementById('pvpWaiting').textContent = 'Waiting for opponent...';
+            }, 5000);
+        }
+
         async function pvpSetColor(color) {
             if (!pvpState.gameId) return;
             try {
@@ -9309,7 +9359,7 @@
                     body: JSON.stringify({ gameId: pvpState.gameId, action: 'set_color', value: color })
                 });
                 const data = await res.json();
-                if (data.error) { alert(data.error); return; }
+                if (data.error) { gameAlert(data.error); return; }
                 document.getElementById('pvpColorChoice').style.display = 'none';
                 document.getElementById('pvpWaiting').style.display = 'block';
             } catch(e) {}
@@ -9323,28 +9373,11 @@
                     body: JSON.stringify({ gameId: pvpState.gameId, action: 'guess', value: color })
                 });
                 const data = await res.json();
-                if (data.error) { alert(data.error); return; }
+                if (data.error) { gameAlert(data.error); return; }
 
                 if (data.gameOver) {
                     clearInterval(pvpState.polling);
-                    document.getElementById('pvpGuessChoice').style.display = 'none';
-                    document.getElementById('pvpWaiting').style.display = 'none';
-                    document.getElementById('arcadeBalance').textContent = `$${(data.newBalance || 0).toFixed(2)}`;
-                    if (data.winner === 0 || data.winner === 1) {
-                        const won = (data.winner === 0 && pvpState.gameId); // simplified
-                        document.getElementById('pvpResult').innerHTML = `Game Over! Prize: $${data.prize.toFixed(2)} (House fee: $${data.houseFee.toFixed(2)})`;
-                        showArcadeToast('win', '⚔️', 'GAME OVER!', `Prize: $${data.prize.toFixed(2)}`);
-                    } else {
-                        document.getElementById('pvpResult').innerHTML = `Tie! Refunded minus house fee.`;
-                        showArcadeToast('loss', '🤝', 'TIE!', 'Refunded');
-                    }
-                    setTimeout(() => {
-                        pvpState.gameId = null;
-                        document.getElementById('pvpGameArea').style.display = 'none';
-                        document.getElementById('pvpSetupArea').style.display = 'block';
-                        document.getElementById('pvpJoinBtn').disabled = false;
-                        document.getElementById('pvpResult').textContent = '';
-                    }, 5000);
+                    pvpEndGame(data);
                 } else if (data.roundOver) {
                     document.getElementById('pvpGuessChoice').style.display = 'none';
                     document.getElementById('pvpWaiting').style.display = 'block';

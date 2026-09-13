@@ -5674,24 +5674,20 @@ async function checkStreakUnlocks(userId) {
   const stats = await getUserStats(userId);
   const profile = await getOrCreateUserProfile(userId);
   const unlocks = [];
-  
+
+  const unlockedAvatars = new Set((await dbAll('SELECT avatar_id FROM user_avatar_unlocks WHERE user_id = ?', [userId])).map(r => r.avatar_id));
   for (const avatar of AVATARS) {
-    if (avatar.category === 'streak' && canUnlockAvatar(avatar, stats)) {
-      const existing = await dbGet('SELECT 1 FROM user_avatar_unlocks WHERE user_id = ? AND avatar_id = ?', [userId, avatar.id]);
-      if (!existing) {
-        await dbRun('INSERT INTO user_avatar_unlocks (user_id, avatar_id, unlock_method) VALUES (?, ?, ?)', [userId, avatar.id, 'streak']);
-        unlocks.push({ type: 'avatar', id: avatar.id, name: avatar.name });
-      }
+    if (avatar.category === 'streak' && !unlockedAvatars.has(avatar.id) && canUnlockAvatar(avatar, stats)) {
+      await dbRun('INSERT INTO user_avatar_unlocks (user_id, avatar_id, unlock_method) VALUES (?, ?, ?)', [userId, avatar.id, 'streak']);
+      unlocks.push({ type: 'avatar', id: avatar.id, name: avatar.name });
     }
   }
-  
+
+  const unlockedBanners = new Set((await dbAll('SELECT banner_id FROM user_banner_unlocks WHERE user_id = ?', [userId])).map(r => r.banner_id));
   for (const banner of BANNERS) {
-    if (banner.category === 'streak' && canUnlockBanner(banner, stats)) {
-      const existing = await dbGet('SELECT 1 FROM user_banner_unlocks WHERE user_id = ? AND banner_id = ?', [userId, banner.id]);
-      if (!existing) {
-        await dbRun('INSERT INTO user_banner_unlocks (user_id, banner_id, unlock_method) VALUES (?, ?, ?)', [userId, banner.id, 'streak']);
-        unlocks.push({ type: 'banner', id: banner.id, name: banner.name });
-      }
+    if (banner.category === 'streak' && !unlockedBanners.has(banner.id) && canUnlockBanner(banner, stats)) {
+      await dbRun('INSERT INTO user_banner_unlocks (user_id, banner_id, unlock_method) VALUES (?, ?, ?)', [userId, banner.id, 'streak']);
+      unlocks.push({ type: 'banner', id: banner.id, name: banner.name });
     }
   }
   
@@ -11131,41 +11127,88 @@ app.post('/api/arcade/pvp/queue', authenticateRequest, async (req, res) => {
     if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
   }
 
-  // Check if already in queue
+  // If this user already has a live game (e.g. matched while they were polling), tell them
+  const liveGame = Object.values(global.pvpGames || {}).find(g =>
+    g.status !== 'finished' && (g.player1.userId === req.userId || g.player2.userId === req.userId));
+  if (liveGame) {
+    const iAmP1 = liveGame.player1.userId === req.userId;
+    const opp = iAmP1 ? liveGame.player2 : liveGame.player1;
+    return res.json({ matched: true, gameId: liveGame.gameId, opponent: opp.username, youStart: liveGame.currentPlayer === (iAmP1 ? 0 : 1), stake: liveGame.stake });
+  }
+
+  // Already in queue → heartbeat; after ~15s match them against a house bot
   const existing = global.pvpQueue.find(q => q.userId === req.userId);
-  if (existing) return res.status(400).json({ error: 'Already in queue' });
+  if (existing) {
+    const humanOpp = global.pvpQueue.find(q => q.stake === stakeAmount && q.userId !== req.userId);
+    if (humanOpp || Date.now() - existing.joinedAt > 15000) {
+      global.pvpQueue = global.pvpQueue.filter(q => q.userId !== req.userId);
+      return createPvpGame(req, res, humanOpp || 'BOT', stakeAmount, isAdmin);
+    }
+    return res.json({ matched: false, message: 'Waiting for opponent...' });
+  }
 
   // Check for opponent
   const opponent = global.pvpQueue.find(q => q.stake === stakeAmount && q.userId !== req.userId);
   if (opponent) {
-    // Match found! Create game
     global.pvpQueue = global.pvpQueue.filter(q => q !== opponent);
-    const gameId = Date.now();
-    const serverSeed = generateServerSeed();
-    // Randomize who starts
-    const startRoll = provablyFairResult(serverSeed, 'pvp_start', gameId);
-    const player1Starts = startRoll < 0.5;
-    const player1 = { userId: opponent.userId, username: opponent.username, stake: stakeAmount, isAdmin: opponent.isAdmin, color: null, score: 0, guess: null };
-    const player2 = { userId: req.userId, username: req.body.username || 'You', stake: stakeAmount, isAdmin, color: null, score: 0, guess: null };
-
-    // Deduct stakes
-    if (!opponent.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stakeAmount, opponent.userId]);
-    if (!isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stakeAmount, req.userId]);
-
-    global.pvpGames[gameId] = {
-      gameId, player1, player2, stake: stakeAmount,
-      currentPlayer: player1Starts ? 0 : 1, // index into [player1, player2]
-      turn: 1, maxTurns: 5, targetScore: 3,
-      serverSeed, status: 'choosing_colors', roundHistory: []
-    };
-
-    res.json({ matched: true, gameId, opponent: opponent.username, youStart: !player1Starts, stake: stakeAmount });
-  } else {
-    // Add to queue
-    global.pvpQueue.push({ userId: req.userId, username: req.body.username || 'You', stake: stakeAmount, isAdmin, joinedAt: Date.now() });
-    res.json({ matched: false, message: 'Added to queue. Waiting for opponent...' });
+    return createPvpGame(req, res, opponent, stakeAmount, isAdmin);
   }
+  global.pvpQueue.push({ userId: req.userId, username: req.body.username || 'You', stake: stakeAmount, isAdmin, joinedAt: Date.now() });
+  return res.json({ matched: false, message: 'Added to queue. Waiting for opponent...' });
 });
+
+const PVP_BOT_NAMES = ['PixelKnight', 'NeonFox', 'GlitchWolf', 'CyberRaven', 'BytePhantom', 'LaserViper', 'DarkPulse', 'NovaStrike'];
+
+async function createPvpGame(req, res, opponent, stakeAmount, isAdmin) {
+  const isBot = opponent === 'BOT';
+  const botName = PVP_BOT_NAMES[Math.floor(Math.random() * PVP_BOT_NAMES.length)];
+  const gameId = Date.now() + Math.floor(Math.random() * 1000);
+  const serverSeed = generateServerSeed();
+  const startRoll = provablyFairResult(serverSeed, 'pvp_start', gameId);
+  const player1Starts = startRoll < 0.5;
+  const player1 = isBot
+    ? { userId: -1, username: botName, stake: stakeAmount, isAdmin: true, isBot: true, color: null, score: 0, guess: null }
+    : { userId: opponent.userId, username: opponent.username, stake: stakeAmount, isAdmin: opponent.isAdmin, color: null, score: 0, guess: null };
+  const player2 = { userId: req.userId, username: req.body.username || 'You', stake: stakeAmount, isAdmin, color: null, score: 0, guess: null };
+
+  global.pvpGames[gameId] = {
+    gameId, player1, player2, stake: stakeAmount,
+    currentPlayer: player1Starts ? 0 : 1,
+    turn: 1, maxTurns: 5, targetScore: 3,
+    serverSeed, status: 'choosing_colors', roundHistory: []
+  };
+  const game = global.pvpGames[gameId];
+
+  // Deduct stakes — both sides for human-vs-human, only the human vs the house bot
+  if (!isBot && !player1.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stakeAmount, player1.userId]);
+  if (!isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ? WHERE user_id = ?', [stakeAmount, req.userId]);
+
+  res.json({ matched: true, gameId, opponent: player1.username, youStart: game.currentPlayer === 1, stake: stakeAmount });
+  if (isBot) advancePvpBot(game);
+}
+
+// House bot: picks a random color, guesses randomly on its turn.
+// Called from the action handler so the bot only ever acts while the human is online.
+function advancePvpBot(game) {
+  if (!game || game.status === 'finished') return;
+  const botIdx = game.player1.isBot ? 0 : (game.player2.isBot ? 1 : -1);
+  if (botIdx === -1) return;
+  const bot = botIdx === 0 ? game.player1 : game.player2;
+  const pick = () => (provablyFairResult(game.serverSeed, `bot_${game.turn}_${Date.now() % 997}`, game.gameId) < 0.5 ? 'red' : 'blue');
+  if (game.status === 'choosing_colors') {
+    if (!bot.color) bot.color = pick();
+    if (game.player1.color && game.player2.color) {
+      game.status = 'playing';
+      game.currentPlayer = provablyFairResult(game.serverSeed, 'start', game.gameId) < 0.5 ? 0 : 1;
+    }
+  }
+  if (game.status === 'playing' && game.currentPlayer === botIdx && !bot.guess) {
+    bot.guess = pick();
+    game.currentPlayer = 1 - botIdx; // hand the turn to the human
+  }
+}
+
+
 
 app.post('/api/arcade/pvp/action', authenticateRequest, async (req, res) => {
   const { gameId, action, value } = req.body;
@@ -11183,10 +11226,7 @@ app.post('/api/arcade/pvp/action', authenticateRequest, async (req, res) => {
     if (game.status !== 'choosing_colors') return res.status(400).json({ error: 'Not color selection phase' });
     if (!['red', 'blue'].includes(value)) return res.status(400).json({ error: 'Choose red or blue' });
     me.color = value;
-    if (game.player1.color && game.player2.color) {
-      game.status = 'playing';
-      game.currentPlayer = provablyFairResult(game.serverSeed, 'start', game.gameId) < 0.5 ? 0 : 1;
-    }
+    advancePvpBot(game); // bot picks its color (and guesses instantly if it goes first)
     res.json({ colorSet: true, ready: game.status === 'playing', yourTurn: game.currentPlayer === myIndex });
   } else if (action === 'guess') {
     if (game.status !== 'playing') return res.status(400).json({ error: 'Not playing phase' });
@@ -11195,92 +11235,28 @@ app.post('/api/arcade/pvp/action', authenticateRequest, async (req, res) => {
     if (me.guess) return res.status(400).json({ error: 'Already guessed this round' });
 
     me.guess = value;
-    // Check if both players have guessed
-    if (game.player1.guess && game.player2.guess) {
-      // Resolve round
-      const p1Correct = game.player1.guess === game.player2.color;
-      const p2Correct = game.player2.guess === game.player1.color;
-      if (p1Correct) game.player1.score++;
-      if (p2Correct) game.player2.score++;
-      game.roundHistory.push({
-        turn: game.turn,
-        p1Color: game.player1.color, p1Guess: game.player1.guess,
-        p2Color: game.player2.color, p2Guess: game.player2.guess,
-        p1Correct, p2Correct,
-        p1Score: game.player1.score, p2Score: game.player2.score
-      });
-      // Reset for next round
-      game.player1.guess = null;
-      game.player2.guess = null;
-      game.player1.color = null;
-      game.player2.color = null;
-      game.turn++;
-      game.status = 'choosing_colors';
-
-      // Check win conditions
-      const p1Won = game.player1.score >= game.targetScore;
-      const p2Won = game.player2.score >= game.targetScore;
-
-      if (p1Won || p2Won || game.turn > game.maxTurns) {
-        // Game over
-        let winner;
-        if (p1Won && !p2Won) winner = 0;
-        else if (p2Won && !p1Won) winner = 1;
-        else if (game.player1.score > game.player2.score) winner = 0;
-        else if (game.player2.score > game.player1.score) winner = 1;
-        else winner = -1; // tie
-
-        game.status = 'finished';
-        const totalPot = game.stake * 2;
-        const houseFee = Math.floor(totalPot * PVP_HOUSE_FEE * 100) / 100;
-        const prize = Math.floor((totalPot - houseFee) * 100) / 100;
-        await creditHouseRevenue(houseFee);
-
-        if (winner === 0) {
-          if (!game.player1.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [prize, prize, game.player1.userId]);
-          await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'pvp_color', ?, 'USD', ?, ?, 'won', ?, ?)`,
-            [game.player1.userId, game.stake, prize / game.stake, prize, JSON.stringify({ game: 'pvp', opponent: game.player2.userId, houseFee, rounds: game.roundHistory, admin_test: game.player1.isAdmin }), game.gameId]);
-          await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'pvp_color', ?, 'USD', 0, 0, 'lost', ?, ?)`,
-            [game.player2.userId, game.stake, JSON.stringify({ game: 'pvp', opponent: game.player1.userId, houseFee, rounds: game.roundHistory, admin_test: game.player2.isAdmin }), game.gameId]);
-        } else if (winner === 1) {
-          if (!game.player2.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [prize, prize, game.player2.userId]);
-          await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'pvp_color', ?, 'USD', ?, ?, 'won', ?, ?)`,
-            [game.player2.userId, game.stake, prize / game.stake, prize, JSON.stringify({ game: 'pvp', opponent: game.player1.userId, houseFee, rounds: game.roundHistory, admin_test: game.player2.isAdmin }), game.gameId]);
-          await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'pvp_color', ?, 'USD', 0, 0, 'lost', ?, ?)`,
-            [game.player1.userId, game.stake, JSON.stringify({ game: 'pvp', opponent: game.player2.userId, houseFee, rounds: game.roundHistory, admin_test: game.player1.isAdmin }), game.gameId]);
-        } else {
-          // Tie — refund both minus half house fee
-          const refund = Math.floor((game.stake - houseFee / 2) * 100) / 100;
-          if (!game.player1.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [refund, game.player1.userId]);
-          if (!game.player2.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [refund, game.player2.userId]);
-          await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'pvp_color', ?, 'USD', 0, ?, 'tie', ?, ?)`,
-            [game.player1.userId, game.stake, refund, JSON.stringify({ game: 'pvp', result: 'tie', houseFee, admin_test: game.player1.isAdmin }), game.gameId]);
-          await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'pvp_color', ?, 'USD', 0, ?, 'tie', ?, ?)`,
-            [game.player2.userId, game.stake, refund, JSON.stringify({ game: 'pvp', result: 'tie', houseFee, admin_test: game.player2.isAdmin }), game.gameId]);
-        }
-
-        const bal1 = game.player1.isAdmin ? null : await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [game.player1.userId]);
-        const bal2 = game.player2.isAdmin ? null : await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [game.player2.userId]);
-        delete global.pvpGames[gameId];
-        return res.json({
-          roundOver: true, gameOver: true, winner,
-          p1Score: game.player1.score, p2Score: game.player2.score,
-          prize, houseFee, roundHistory: game.roundHistory,
-          newBalance: isPlayer1 ? (game.player1.isAdmin ? 10000 : (bal1?.usd_balance || 0)) : (game.player2.isAdmin ? 10000 : (bal2?.usd_balance || 0))
-        });
-      }
-
-      return res.json({
-        roundOver: true, gameOver: false,
-        p1Score: game.player1.score, p2Score: game.player2.score,
-        turn: game.turn, yourTurn: game.currentPlayer === myIndex,
-        lastRound: game.roundHistory[game.roundHistory.length - 1]
-      });
-    } else {
-      // Waiting for opponent's guess
-      res.json({ guessed: true, waiting: true, message: 'Waiting for opponent...' });
+    let round = await resolvePvpRound(game);
+    if (!round) {
+      game.currentPlayer = 1 - myIndex; // pass the turn so the opponent can guess
+      advancePvpBot(game);
+      round = await resolvePvpRound(game);
+      if (!round) return res.json({ guessed: true, waiting: true, message: 'Waiting for opponent...' });
     }
+    return res.json({ ...round, youWon: round.winner === myIndex, tie: round.winner === -1, newBalance: round.myBalance(isPlayer1) });
   } else if (action === 'status') {
+    advancePvpBot(game);
+    const round = await resolvePvpRound(game);
+    if (round && round.gameOver) {
+      return res.json({ status: 'finished', gameOver: true, youWon: round.winner === myIndex, tie: round.winner === -1,
+        prize: round.prize, houseFee: round.houseFee, yourScore: me.score, opponentScore: opponent.score,
+        turn: game.turn, roundHistory: game.roundHistory, newBalance: round.myBalance(isPlayer1) });
+    }
+    if (game.status === 'finished') {
+      return res.json({ status: 'finished', gameOver: true, youWon: game.winner === myIndex, tie: game.winner === -1,
+        prize: game.prize, houseFee: game.houseFee, yourScore: me.score, opponentScore: opponent.score,
+        turn: game.turn, roundHistory: game.roundHistory,
+        newBalance: isPlayer1 ? game.finalBalances?.p1 : game.finalBalances?.p2 });
+    }
     res.json({
       status: game.status,
       yourScore: me.score,
@@ -11295,6 +11271,88 @@ app.post('/api/arcade/pvp/action', authenticateRequest, async (req, res) => {
     res.status(400).json({ error: 'Unknown action' });
   }
 });
+
+// Resolve a PvP round once both players have guessed. Returns the result payload, or null if still waiting.
+// On game over, stores winner/prize/finalBalances on the game and keeps it for ~90s so the
+// player who was polling (not guessing) can still fetch the result instead of "Game not found".
+async function resolvePvpRound(game) {
+  if (!game.player1.guess || !game.player2.guess) return null;
+
+  const p1Correct = game.player1.guess === game.player2.color;
+  const p2Correct = game.player2.guess === game.player1.color;
+  if (p1Correct) game.player1.score++;
+  if (p2Correct) game.player2.score++;
+  game.roundHistory.push({
+    turn: game.turn,
+    p1Color: game.player1.color, p1Guess: game.player1.guess,
+    p2Color: game.player2.color, p2Guess: game.player2.guess,
+    p1Correct, p2Correct,
+    p1Score: game.player1.score, p2Score: game.player2.score
+  });
+  const lastRound = game.roundHistory[game.roundHistory.length - 1];
+  game.player1.guess = null;
+  game.player2.guess = null;
+  game.player1.color = null;
+  game.player2.color = null;
+  game.turn++;
+  game.status = 'choosing_colors';
+
+  const p1Won = game.player1.score >= game.targetScore;
+  const p2Won = game.player2.score >= game.targetScore;
+  if (!(p1Won || p2Won || game.turn > game.maxTurns)) {
+    return { roundOver: true, gameOver: false, p1Score: game.player1.score, p2Score: game.player2.score, turn: game.turn, lastRound, myBalance: () => undefined };
+  }
+
+  let winner;
+  if (p1Won && !p2Won) winner = 0;
+  else if (p2Won && !p1Won) winner = 1;
+  else if (game.player1.score > game.player2.score) winner = 0;
+  else if (game.player2.score > game.player1.score) winner = 1;
+  else winner = -1;
+
+  game.status = 'finished';
+  const totalPot = game.stake * 2;
+  const houseFee = Math.floor(totalPot * PVP_HOUSE_FEE * 100) / 100;
+  const prize = Math.floor((totalPot - houseFee) * 100) / 100;
+  await creditHouseRevenue(houseFee);
+
+  if (winner === 0) {
+    if (!game.player1.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [prize, prize, game.player1.userId]);
+    await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'pvp_color', ?, 'USD', ?, ?, 'won', ?, ?)`,
+      [game.player1.userId, game.stake, prize / game.stake, prize, JSON.stringify({ game: 'pvp', opponent: game.player2.username, houseFee, rounds: game.roundHistory, admin_test: game.player1.isAdmin }), game.gameId]);
+    await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'pvp_color', ?, 'USD', 0, 0, 'lost', ?, ?)`,
+      [game.player2.userId, game.stake, JSON.stringify({ game: 'pvp', opponent: game.player1.username, houseFee, rounds: game.roundHistory, admin_test: game.player2.isAdmin }), game.gameId]);
+  } else if (winner === 1) {
+    if (!game.player2.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ?, total_won = total_won + ? WHERE user_id = ?', [prize, prize, game.player2.userId]);
+    await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'pvp_color', ?, 'USD', ?, ?, 'won', ?, ?)`,
+      [game.player2.userId, game.stake, prize / game.stake, prize, JSON.stringify({ game: 'pvp', opponent: game.player1.username, houseFee, rounds: game.roundHistory, admin_test: game.player2.isAdmin }), game.gameId]);
+    await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'pvp_color', ?, 'USD', 0, 0, 'lost', ?, ?)`,
+      [game.player1.userId, game.stake, JSON.stringify({ game: 'pvp', opponent: game.player2.username, houseFee, rounds: game.roundHistory, admin_test: game.player1.isAdmin }), game.gameId]);
+  } else {
+    const refund = Math.floor((game.stake - houseFee / 2) * 100) / 100;
+    if (!game.player1.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [refund, game.player1.userId]);
+    if (!game.player2.isAdmin) await dbRun('UPDATE user_balances SET usd_balance = usd_balance + ? WHERE user_id = ?', [refund, game.player2.userId]);
+    await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'pvp_color', ?, 'USD', 0, ?, 'tie', ?, ?)`,
+      [game.player1.userId, game.stake, refund, JSON.stringify({ game: 'pvp', result: 'tie', houseFee, admin_test: game.player1.isAdmin }), game.gameId]);
+    await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'pvp_color', ?, 'USD', 0, ?, 'tie', ?, ?)`,
+      [game.player2.userId, game.stake, refund, JSON.stringify({ game: 'pvp', result: 'tie', houseFee, admin_test: game.player2.isAdmin }), game.gameId]);
+  }
+
+  const bal1 = game.player1.isAdmin ? null : await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [game.player1.userId]);
+  const bal2 = game.player2.isAdmin ? null : await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [game.player2.userId]);
+  game.winner = winner;
+  game.prize = prize;
+  game.houseFee = houseFee;
+  game.finalBalances = { p1: game.player1.isAdmin ? 10000 : (bal1?.usd_balance || 0), p2: game.player2.isAdmin ? 10000 : (bal2?.usd_balance || 0) };
+  setTimeout(() => { if (global.pvpGames[game.gameId] === game) delete global.pvpGames[game.gameId]; }, 90000);
+
+  return {
+    roundOver: true, gameOver: true, winner,
+    p1Score: game.player1.score, p2Score: game.player2.score,
+    prize, houseFee, roundHistory: game.roundHistory,
+    myBalance: (isP1) => isP1 ? game.finalBalances.p1 : game.finalBalances.p2
+  };
+}
 
 app.post('/api/arcade/pvp/cancel', authenticateRequest, async (req, res) => {
   global.pvpQueue = global.pvpQueue.filter(q => q.userId !== req.userId);
