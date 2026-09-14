@@ -10118,57 +10118,102 @@ app.get('/api/arcade/admin-check', authenticateRequest, async (req, res) => {
   res.json({ isAdmin: await isArcadeAdmin(req.userId) });
 });
 
-// Fetch EPL standings and return a { normalizedTeamName -> { ppg, rank, gamesPlayed } } map
-async function fetchEplStrength() {
+// Leagues we seed sports markets for. `code` = worldcup26/ESPN league id, `oddsKey` = The Odds API sport key.
+const SPORTS_LEAGUES = [
+  { code: 'eng.1', name: 'English Premier League', oddsKey: 'soccer_epl' },
+  { code: 'esp.1', name: 'La Liga', oddsKey: 'soccer_spain_la_liga' },
+  { code: 'ita.1', name: 'Serie A', oddsKey: 'soccer_italy_serie_a' },
+  { code: 'ger.1', name: 'Bundesliga', oddsKey: 'soccer_germany_bundesliga' },
+  { code: 'fra.1', name: 'Ligue 1', oddsKey: 'soccer_france_ligue_one' },
+  { code: 'uefa.champions', name: 'UEFA Champions League', oddsKey: 'soccer_uefa_champs_league' },
+];
+
+// Normalize team names so "Real Madrid CF" (fixtures feed) matches "Real Madrid" (odds feed)
+function normTeamName(n) {
+  return (n || '').toLowerCase()
+    .replace(/\b(fc|afc|cf|sc|ac|as|sv|ssc|rcd|ud|cd|sk|bk|if|ogc|rc)\b/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+// Real bookmaker odds via The Odds API. Returns { "<normHome>|<normAway>": impliedHomeWinProb } —
+// h2h prices de-vigged so Yes reflects the true consensus probability.
+async function fetchBookmakerOdds(oddsKey) {
+  const key = process.env.ODDS_API_KEY;
+  if (!key || !oddsKey) return {};
   try {
-    const res = await fetch('https://worldcup26.ir/get/soccer/eng.1/standings');
+    const res = await fetch(`https://api.the-odds-api.com/v4/sports/${oddsKey}/odds/?apiKey=${key}&regions=uk,eu,us&markets=h2h&oddsFormat=decimal`);
+    if (!res.ok) { console.error('Odds API', oddsKey, res.status); return {}; }
+    const events = await res.json();
+    const map = {};
+    for (const ev of events || []) {
+      // Consensus across bookmakers: average the implied probabilities
+      let homeProbSum = 0, books = 0;
+      for (const bk of ev.bookmakers || []) {
+        const mkt = (bk.markets || []).find(m => m.key === 'h2h');
+        if (!mkt) continue;
+        const h = mkt.outcomes.find(o => normTeamName(o.name) === normTeamName(ev.home_team));
+        const a = mkt.outcomes.find(o => normTeamName(o.name) === normTeamName(ev.away_team));
+        const d = mkt.outcomes.find(o => o.name === 'Draw');
+        if (!h || !a) continue;
+        const ph = 1 / h.price, pa = 1 / a.price, pd = d ? 1 / d.price : 0;
+        homeProbSum += ph / (ph + pa + pd); // remove overround
+        books++;
+      }
+      if (books > 0) map[`${normTeamName(ev.home_team)}|${normTeamName(ev.away_team)}`] = homeProbSum / books;
+    }
+    return map;
+  } catch (e) { console.error('Odds API error:', e.message); return {}; }
+}
+
+// Fetch league standings and return a { normalizedTeamName -> { ppg, rank, gamesPlayed } } map
+async function fetchLeagueStrength(leagueCode) {
+  try {
+    const res = await fetch(`https://worldcup26.ir/get/soccer/${leagueCode}/standings`);
     if (!res.ok) return {};
     const data = await res.json();
     const entries = data?.children?.[0]?.standings?.entries || [];
     const map = {};
     for (const e of entries) {
       const get = (n) => { const s = (e.stats || []).find(x => x.name === n); return s ? parseFloat(s.displayValue ?? s.value) : 0; };
-      const name = (e.team?.displayName || '').trim().toLowerCase();
+      const name = normTeamName(e.team?.displayName);
       if (!name) continue;
       const gp = Math.max(get('gamesPlayed'), 1);
-      map[name] = { ppg: get('points') / gp, rank: get('rank'), gamesPlayed: get('gamesPlayed'), gd: get('pointDifferential') };
+      map[name] = { ppg: get('points') / gp, rank: get('rank'), gamesPlayed: get('gamesPlayed') };
     }
     return map;
   } catch (e) { return {}; }
 }
 
-// Opening line for "Will <home> beat <away>?" from league strength + home advantage.
-// Base EPL home-win rate ≈ 44%; each 0.1 PPG edge ≈ ±2.5%. Clamped 15%–80%.
-function openingYesPrice(strength, home, away) {
-  const h = strength[(home || '').trim().toLowerCase()];
-  const a = strength[(away || '').trim().toLowerCase()];
-  if (!h || !a) return 0.46; // no standings data — home-favoured default, still better than flat 50/50
+// Opening line for "Will <home> beat <away>?". Prefers real bookmaker probability (de-vigged);
+// falls back to a standings model (44% home base, ±2.5% per 0.1 PPG edge). Clamped 10%–85%.
+function openingYesPrice(strength, home, away, bookProb) {
+  if (typeof bookProb === 'number') {
+    return Math.round(Math.min(0.85, Math.max(0.10, bookProb)) * 100) / 100;
+  }
+  const h = strength[normTeamName(home)];
+  const a = strength[normTeamName(away)];
+  if (!h || !a) return 0.46; // no data at all — home-favoured default, still better than flat 50/50
   let diff = h.ppg - a.ppg;
   const minGames = Math.min(h.gamesPlayed, a.gamesPlayed);
   if (minGames < 4) diff *= minGames / 4; // early season: shrink confidence in the table
   let p = 0.44 + diff * 0.25;
-  return Math.round(Math.min(0.80, Math.max(0.15, p)) * 100) / 100;
+  return Math.round(Math.min(0.85, Math.max(0.10, p)) * 100) / 100;
 }
 
-// Seed English Premier League fixtures from worldcup26 into sports prediction markets
-async function seedFootballMarkets(userId = null) {
+// Seed upcoming fixtures for a league into sports prediction markets
+async function seedLeagueMarkets(league, userId = null) {
   const today = new Date();
   const toDate = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
   const fmt = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');
-  const fromStr = fmt(today);
-  const toStr = fmt(toDate);
 
-  const apiUrl = `https://worldcup26.ir/get/soccer/eng.1/fixtures?status=all&from=${fromStr}&to=${toStr}`;
-  const apiRes = await fetch(apiUrl);
-  if (!apiRes.ok) throw new Error(`Football API ${apiRes.status}`);
+  const apiRes = await fetch(`https://worldcup26.ir/get/soccer/${league.code}/fixtures?status=all&from=${fmt(today)}&to=${fmt(toDate)}`);
+  if (!apiRes.ok) throw new Error(`Fixtures API ${apiRes.status} for ${league.code}`);
   const apiData = await apiRes.json();
   const events = apiData?.events || [];
 
-  const strength = await fetchEplStrength();
+  const [strength, bookOdds] = await Promise.all([fetchLeagueStrength(league.code), fetchBookmakerOdds(league.oddsKey)]);
 
-  let created = 0;
-  let skipped = 0;
-
+  let created = 0, skipped = 0;
   for (const event of events.slice(0, 30)) {
     if (event?.status?.type?.name !== 'STATUS_SCHEDULED') { skipped++; continue; }
     const comp = event?.competitions?.[0];
@@ -10187,19 +10232,31 @@ async function seedFootballMarkets(userId = null) {
     if (existing) { skipped++; continue; }
 
     const eventDate = event.date?.slice(0, 10);
-    const metadata = JSON.stringify({ home_logo: homeComp.team?.logo || '', away_logo: awayComp.team?.logo || '', home, away, competition: event.competition || 'English Premier League', competition_logo: event.competition_logo || '' });
+    const metadata = JSON.stringify({ home_logo: homeComp.team?.logo || '', away_logo: awayComp.team?.logo || '', home, away, competition: league.name, competition_logo: event.competition_logo || '', league_code: league.code });
     const imageUrl = homeComp.team?.logo || '';
-    const yesPrice = openingYesPrice(strength, home, away);
+    const bookProb = bookOdds[`${normTeamName(home)}|${normTeamName(away)}`];
+    const yesPrice = openingYesPrice(strength, home, away, bookProb);
     const ins = await dbRun(`
       INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, api_source, api_event_id, api_event_date, image_url, metadata, created_by, options_json, status, last_price_yes, last_price_no)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [`Will ${home} beat ${away}?`, `English Premier League match on ${matchDate}. Yes = ${home} wins. No = ${away} wins or draw.`, 'sports', `${home} wins`, `${away} or draw`, 'worldcup26', eventId, eventDate, imageUrl, metadata, userId, '[]', 'active', yesPrice, Math.round((1 - yesPrice) * 100) / 100]);
+    `, [`Will ${home} beat ${away}?`, `${league.name} match on ${matchDate}. Yes = ${home} wins. No = ${away} wins or draw.`, 'sports', `${home} wins`, `${away} or draw`, 'worldcup26', eventId, eventDate, imageUrl, metadata, userId, '[]', 'active', yesPrice, Math.round((1 - yesPrice) * 100) / 100]);
     try { await dbRun('INSERT INTO prediction_price_history (market_id, yes_price) VALUES (?, ?)', [ins.lastID, yesPrice]); } catch (e) {}
     created++;
   }
-
-  await logSystemEvent('info', `Seeded football prediction markets`, `Created ${created}, skipped ${skipped}`);
   return { created, skipped, total: events.length };
+}
+
+// Seed all configured leagues
+async function seedFootballMarkets(userId = null) {
+  let created = 0, skipped = 0, total = 0;
+  for (const league of SPORTS_LEAGUES) {
+    try {
+      const r = await seedLeagueMarkets(league, userId);
+      created += r.created; skipped += r.skipped; total += r.total;
+    } catch (e) { console.error('Seed failed for', league.code, e.message); }
+  }
+  await logSystemEvent('info', `Seeded sports prediction markets`, `Created ${created}, skipped ${skipped}`);
+  return { created, skipped, total };
 }
 
 // API: Admin seed football (soccer) prediction markets from free worldcup26 API
@@ -12783,6 +12840,10 @@ databaseInitialization.then(async () => {
   // Every 30 min: auto-resolve finished sports markets and retire stale ones
   setInterval(maintainApiSportsMarkets, 30 * 60 * 1000);
   setTimeout(maintainApiSportsMarkets, 15 * 1000); // first pass shortly after boot
+
+  // Daily: pull in new fixtures across all configured leagues
+  setInterval(seedFootballMarkets, 24 * 60 * 60 * 1000);
+  setTimeout(seedFootballMarkets, 45 * 1000);
 }).catch(err => {
   console.error('Server startup aborted:', err);
   process.exit(1);
