@@ -5032,10 +5032,12 @@
             const heroEl = document.getElementById('home');
             const howEl = document.getElementById('how-it-works');
             const exploreEl = document.getElementById('explore-modules');
+            const feedEl = document.getElementById('oracleFeedSection');
             if (section === 'home') {
                 if (heroEl) heroEl.style.display = 'flex';
                 if (howEl) howEl.style.display = 'block';
                 if (exploreEl) exploreEl.style.display = 'block';
+                if (feedEl) feedEl.style.display = 'block';
                 document.getElementById('nav-home').classList.add('active');
                 window.scrollTo(0, 0);
                 return;
@@ -5044,6 +5046,8 @@
             if (heroEl) heroEl.style.display = 'none';
             if (howEl) howEl.style.display = 'none';
             if (exploreEl) exploreEl.style.display = 'none';
+            // Live Oracle feed shows only on Home and The Oracle page
+            if (feedEl) feedEl.style.display = section === 'betting' ? 'block' : 'none';
             
             // Show selected section
             document.getElementById(section).style.display = 'block';
