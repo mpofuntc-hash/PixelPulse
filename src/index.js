@@ -4578,8 +4578,11 @@ function ensureOwnsResource(req, res, resourceUserId, label = 'resource') {
 app.post('/api/auth/register', rateLimit({ windowMs: 60 * 1000, max: 5, key: req => `register:${req.ip || 'unknown'}` }), async (req, res) => {
   const { email, password, username, isAdult, referralCode, clickid, utm_source, utm_medium, utm_campaign, utm_content, utm_term, landing_page } = req.body;
 
-  if (!validateEmail(email) || !validateText(password, { maxLength: 128, required: true }) || !validateText(username, { maxLength: 50, required: true })) {
-    return res.status(400).json({ error: 'Invalid email, password, or username.' });
+  // Username optional — auto-derive from email if omitted (low-friction signup)
+  const finalUsername = (username && String(username).trim()) || String(email || '').split('@')[0].replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20) || 'player';
+
+  if (!validateEmail(email) || !validateText(password, { maxLength: 128, required: true })) {
+    return res.status(400).json({ error: 'Invalid email or password.' });
   }
 
   if (String(password).length < 8) {
@@ -4626,7 +4629,7 @@ app.post('/api/auth/register', rateLimit({ windowMs: 60 * 1000, max: 5, key: req
     INSERT INTO users (email, password_hash, username, is_adult, referred_by, referred_by_user_id, popcash_clickid,
                        utm_source, utm_medium, utm_campaign, utm_content, utm_term, first_landing_page)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [normalizedEmail, passwordHash, String(username).trim(), 1, validReferralCode, referringUserId, popcashClickId,
+  `, [normalizedEmail, passwordHash, finalUsername, 1, validReferralCode, referringUserId, popcashClickId,
       utmFields.source, utmFields.medium, utmFields.campaign, utmFields.content, utmFields.term, utmFields.landing]);
 
   const userId = result.lastID;
@@ -4635,7 +4638,7 @@ app.post('/api/auth/register', rateLimit({ windowMs: 60 * 1000, max: 5, key: req
   await dbRun('UPDATE users SET referral_code = ? WHERE id = ?', [myReferralCode, userId]);
 
   await dbRun('INSERT INTO user_balances (user_id, btc_balance, usd_balance) VALUES (?, 0, 0)', [userId]);
-  await dbRun('INSERT INTO user_profiles (user_id, username, avatar_id, banner_id, pixelation_level, weekly_streak, max_streak, clip_wins) VALUES (?, ?, ?, ?, 8, 0, 0, 0)', [userId, String(username).trim(), 'male_default', 'bronze_cloth']);
+  await dbRun('INSERT INTO user_profiles (user_id, username, avatar_id, banner_id, pixelation_level, weekly_streak, max_streak, clip_wins) VALUES (?, ?, ?, ?, 8, 0, 0, 0)', [userId, finalUsername, 'male_default', 'bronze_cloth']);
   await dbRun('INSERT INTO user_points (user_id, points, total_earned, total_spent) VALUES (?, 0, 0, 0)', [userId]);
 
   // Welcome signup bonus: $2.00 real arcade credit (below $5 min withdrawal — must be wagered or topped up)
@@ -4653,7 +4656,12 @@ app.post('/api/auth/register', rateLimit({ windowMs: 60 * 1000, max: 5, key: req
     }
   }
 
-  res.json({ message: 'Registration successful', userId });
+  // Auto-login: create a session immediately so the signup funnel lands logged-in
+  const sessionToken = require('crypto').randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  await dbRun('INSERT INTO sessions (user_id, session_token, expires_at) VALUES (?, ?, ?)', [userId, sessionToken, expiresAt]);
+
+  res.json({ message: 'Registration successful', userId, sessionToken, user: { id: userId, username: finalUsername, email: normalizedEmail } });
 });
 
 // API: Login user

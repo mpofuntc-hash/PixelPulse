@@ -3420,10 +3420,10 @@
     <!-- Signup Prompt Popup for non-logged-in users -->
     <div class="signup-prompt" id="signupPrompt">
         <div class="signup-prompt-text">
-            <strong>⚔️ Join the Pixel Kingdom</strong>
-            Create a free account to trade skins, predict matches, and climb the ranks!
+            <strong>🎁 Get $2.00 Free — No Deposit</strong>
+            Sign up in 20 seconds, bet on sports &amp; crypto instantly!
         </div>
-        <button class="signup-prompt-btn" onclick="showAuthModal(); showRegisterForm(); document.getElementById('signupPrompt').style.display='none';">Sign Up Free</button>
+        <button class="signup-prompt-btn" onclick="showAuthModal(); showRegisterForm(); document.getElementById('signupPrompt').style.display='none';">Claim $2 Free</button>
         <button class="signup-prompt-close" onclick="document.getElementById('signupPrompt').style.display='none';">&times;</button>
     </div>
 
@@ -3874,17 +3874,17 @@
                     <button class="btn btn-secondary" onclick="window.location.href='/admin.html'" style="width: 100%;">🔐 Admin Dashboard</button>
                 </div>
                 <div id="registerForm" style="display: none;">
+                    <div style="background:#0d2818;border:1px solid #2e7d32;border-radius:8px;padding:12px;margin-bottom:15px;text-align:center;">
+                        <div style="font-size:20px;font-weight:800;color:#4caf50;">$2.00 FREE</div>
+                        <div style="font-size:12px;color:#aaa;">Credited instantly — no deposit needed</div>
+                    </div>
                     <div style="margin-bottom: 15px;">
                         <label style="display: block; margin-bottom: 5px;">Email</label>
                         <input type="email" id="registerEmail" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
                     </div>
                     <div style="margin-bottom: 15px;">
-                        <label style="display: block; margin-bottom: 5px;">Username</label>
-                        <input type="text" id="registerUsername" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
-                    </div>
-                    <div style="margin-bottom: 15px;">
                         <label style="display: block; margin-bottom: 5px;">Password</label>
-                        <input type="password" id="registerPassword" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                        <input type="password" id="registerPassword" placeholder="Min 8 characters" style="width: 100%; padding: 10px; background: #2f2f2f; border: 1px solid #333; color: #fff; border-radius: 4px;">
                     </div>
                     <div style="margin-bottom: 15px;">
                         <label style="display: flex; align-items: center; gap: 10px;">
@@ -3892,7 +3892,7 @@
                             <span>I confirm I am 18 years or older</span>
                         </label>
                     </div>
-                    <button class="btn btn-primary" onclick="register()" style="width: 100%;">Register</button>
+                    <button class="btn btn-primary" onclick="register()" style="width: 100%;">Claim $2 &amp; Play</button>
                     <p style="margin-top: 15px; text-align: center;">Already have an account? <a href="#" onclick="showLoginForm()" style="color: #e50914;">Login</a></p>
                 </div>
             </div>
@@ -4223,7 +4223,6 @@
 
         async function register() {
             const email = document.getElementById('registerEmail').value;
-            const username = document.getElementById('registerUsername').value;
             const password = document.getElementById('registerPassword').value;
             const isAdult = document.getElementById('isAdultCheck').checked;
 
@@ -4241,7 +4240,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        email, password, username, isAdult, referralCode: refCode, clickid: pcClick,
+                        email, password, isAdult, referralCode: refCode, clickid: pcClick,
                         utm_source: utm.source, utm_medium: utm.medium, utm_campaign: utm.campaign,
                         utm_content: utm.content, utm_term: utm.term, landing_page: landing
                     })
@@ -4263,6 +4262,27 @@
                     }
                 } catch (e) {}
 
+                // Auto-login with the session returned by register
+                if (data.sessionToken) {
+                    sessionToken = data.sessionToken;
+                    currentUser = data.user;
+                    currentUserId = data.user.id;
+                    localStorage.setItem('sessionToken', sessionToken);
+                    document.getElementById('nav-auth').textContent = 'Logout';
+                    document.getElementById('nav-auth').style.background = 'transparent';
+                    document.getElementById('nav-auth').style.color = '#fff';
+                    document.getElementById('nav-auth').style.padding = '0';
+                    document.getElementById('nav-auth').style.fontWeight = 'normal';
+                    document.getElementById('nav-profile').style.display = 'inline-flex';
+                    document.getElementById('nav-wallet').style.display = '';
+                    document.getElementById('nav-support').style.display = '';
+                    document.getElementById('signupPrompt').style.display = 'none';
+                    closeAuthModal();
+                    loadWalletData();
+                    loadNavAvatar();
+                    gameAlert('🎁 Welcome! $2.00 has been credited to your account.', 'success');
+                    return;
+                }
                 alert('Registration successful! Please login.');
                 document.getElementById('signupPrompt').style.display = 'none';
                 showLoginForm();
