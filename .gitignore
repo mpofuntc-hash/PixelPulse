@@ -3,3 +3,6 @@ data/
 dist/
 .env
 *.db
+cloudflared.exe
+cloudflared_*.log
+server_*.log
