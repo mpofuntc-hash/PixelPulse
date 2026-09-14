@@ -4046,8 +4046,6 @@ bot.command('coinflip', async (ctx) => {
 
     const coverage = await checkPoolCoverage(stake);
     if (!coverage.allowed) {
-      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stake, stake, user.id]);
-      await creditHouseRevenue(stake);
       ctx.reply(`House pool cannot cover this bet ($${stake.toFixed(2)}). Try a smaller stake.`);
       return;
     }
@@ -4103,8 +4101,6 @@ bot.command('slots', async (ctx) => {
 
     const coverage = await checkPoolCoverage(stake);
     if (!coverage.allowed) {
-      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stake, stake, user.id]);
-      await creditHouseRevenue(stake);
       ctx.reply(`House pool cannot cover this bet ($${stake.toFixed(2)}). Try a smaller stake.`);
       return;
     }
@@ -4145,8 +4141,6 @@ bot.command('crash', async (ctx) => {
 
     const coverage = await checkPoolCoverage(stake);
     if (!coverage.allowed) {
-      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stake, stake, user.id]);
-      await creditHouseRevenue(stake);
       ctx.reply(`House pool cannot cover this bet ($${stake.toFixed(2)}). Try a smaller stake.`);
       return;
     }
@@ -4308,8 +4302,6 @@ bot.command('dice', async (ctx) => {
 
     const coverage = await checkPoolCoverage(stake);
     if (!coverage.allowed) {
-      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stake, stake, user.id]);
-      await creditHouseRevenue(stake);
       ctx.reply(`House pool cannot cover this bet ($${stake.toFixed(2)}). Try a smaller stake.`);
       return;
     }
@@ -8963,9 +8955,7 @@ app.post('/api/arcade/coinflip', authenticateRequest, async (req, res) => {
     if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
     const coverage = await checkPoolCoverage(stakeAmount);
     if (!coverage.allowed) {
-      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
-      await creditHouseRevenue(stakeAmount);
-      return res.status(400).json({ error: 'House pool cannot cover this bet. Try a smaller stake.', poolInsufficient: true, newBalance: bal.usd_balance - stakeAmount });
+      return res.status(400).json({ error: 'House pool cannot cover this bet right now. Try a smaller stake.', poolInsufficient: true });
     }
   }
 
@@ -9011,9 +9001,7 @@ app.post('/api/arcade/slots', authenticateRequest, async (req, res) => {
     if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
     const coverage = await checkPoolCoverage(stakeAmount);
     if (!coverage.allowed) {
-      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
-      await creditHouseRevenue(stakeAmount);
-      return res.status(400).json({ error: 'House pool cannot cover this bet. Try a smaller stake.', poolInsufficient: true, newBalance: bal.usd_balance - stakeAmount });
+      return res.status(400).json({ error: 'House pool cannot cover this bet right now. Try a smaller stake.', poolInsufficient: true });
     }
   }
 
@@ -9077,9 +9065,7 @@ app.post('/api/arcade/roulette', authenticateRequest, async (req, res) => {
     if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
     const coverage = await checkPoolCoverage(stakeAmount);
     if (!coverage.allowed) {
-      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
-      await creditHouseRevenue(stakeAmount);
-      return res.status(400).json({ error: 'House pool cannot cover this bet. Try a smaller stake.', poolInsufficient: true, newBalance: bal.usd_balance - stakeAmount });
+      return res.status(400).json({ error: 'House pool cannot cover this bet right now. Try a smaller stake.', poolInsufficient: true });
     }
   }
 
@@ -9140,9 +9126,7 @@ app.post('/api/arcade/hilo', authenticateRequest, async (req, res) => {
     if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
     const coverage = await checkPoolCoverage(stakeAmount);
     if (!coverage.allowed) {
-      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
-      await creditHouseRevenue(stakeAmount);
-      return res.status(400).json({ error: 'House pool cannot cover this bet. Try a smaller stake.', poolInsufficient: true, newBalance: bal.usd_balance - stakeAmount });
+      return res.status(400).json({ error: 'House pool cannot cover this bet right now. Try a smaller stake.', poolInsufficient: true });
     }
   }
 
@@ -9205,9 +9189,7 @@ app.post('/api/arcade/wheel', authenticateRequest, async (req, res) => {
     if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
     const coverage = await checkPoolCoverage(stakeAmount);
     if (!coverage.allowed) {
-      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
-      await creditHouseRevenue(stakeAmount);
-      return res.status(400).json({ error: 'House pool cannot cover this bet. Try a smaller stake.', poolInsufficient: true, newBalance: bal.usd_balance - stakeAmount });
+      return res.status(400).json({ error: 'House pool cannot cover this bet right now. Try a smaller stake.', poolInsufficient: true });
     }
   }
 
@@ -10797,13 +10779,7 @@ app.post('/api/arcade/castle-crash/start', authenticateRequest, async (req, res)
     // Pool coverage check — if pool can't cover, user loses stake immediately
     const coverage = await checkPoolCoverage(stakeAmount);
     if (!coverage.allowed) {
-      // Pool can't cover this bet — forfeit stake to pool
-      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
-      await creditHouseRevenue(stakeAmount);
-      await dbRun(`INSERT INTO game_bets (user_id, game_type, stake_amount, stake_currency, multiplier, payout, result, game_data, nonce) VALUES (?, 'castle_crash', ?, 'USD', 0, 0, 'pool_insufficient', ?, ?)`,
-        [req.userId, stakeAmount, JSON.stringify({ reason: 'pool_insufficient', poolBalance: coverage.poolBalance }), Date.now()]);
-      const newBal = await dbGet('SELECT usd_balance FROM user_balances WHERE user_id = ?', [req.userId]);
-      return res.status(400).json({ error: 'The house pool cannot cover this bet right now. Your stake has been returned as house credit. Try a smaller stake.', poolInsufficient: true, newBalance: newBal?.usd_balance || 0 });
+      return res.status(400).json({ error: 'The house pool cannot cover this bet right now. Try a smaller stake.', poolInsufficient: true });
     }
   }
 
@@ -10893,9 +10869,7 @@ app.post('/api/arcade/mines/start', authenticateRequest, async (req, res) => {
       if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
       const coverage = await checkPoolCoverage(stakeAmount);
       if (!coverage.allowed) {
-        await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
-        await creditHouseRevenue(stakeAmount);
-        return res.status(400).json({ error: 'House pool cannot cover this bet. Try a smaller stake.', poolInsufficient: true, newBalance: bal.usd_balance - stakeAmount });
+        return res.status(400).json({ error: 'House pool cannot cover this bet right now. Try a smaller stake.', poolInsufficient: true });
       }
     }
 
@@ -11038,9 +11012,7 @@ app.post('/api/arcade/dice', authenticateRequest, async (req, res) => {
     if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
     const coverage = await checkPoolCoverage(stakeAmount);
     if (!coverage.allowed) {
-      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
-      await creditHouseRevenue(stakeAmount);
-      return res.status(400).json({ error: 'House pool cannot cover this bet. Try a smaller stake.', poolInsufficient: true, newBalance: bal.usd_balance - stakeAmount });
+      return res.status(400).json({ error: 'House pool cannot cover this bet right now. Try a smaller stake.', poolInsufficient: true });
     }
   }
 
@@ -11136,9 +11108,7 @@ app.post('/api/arcade/plinko', authenticateRequest, async (req, res) => {
     if (!bal || bal.usd_balance < stakeAmount) return res.status(400).json({ error: 'Insufficient USD balance' });
     const coverage = await checkPoolCoverage(stakeAmount);
     if (!coverage.allowed) {
-      await dbRun('UPDATE user_balances SET usd_balance = usd_balance - ?, total_lost = total_lost + ? WHERE user_id = ?', [stakeAmount, stakeAmount, req.userId]);
-      await creditHouseRevenue(stakeAmount);
-      return res.status(400).json({ error: 'House pool cannot cover this bet. Try a smaller stake.', poolInsufficient: true, newBalance: bal.usd_balance - stakeAmount });
+      return res.status(400).json({ error: 'House pool cannot cover this bet right now. Try a smaller stake.', poolInsufficient: true });
     }
   }
 
