@@ -10026,6 +10026,77 @@ app.post('/api/admin/prediction-markets/:id/resolve', authenticateRequest, async
   }
 });
 
+// Resolve a worldcup26 sports market by reading the scoreboard. Returns { outcome, homeScore, awayScore }
+// or throws if the match is not final / not found.
+async function autoResolveApiMarket(market, resolverUserId) {
+  let meta = {};
+  try { meta = market.metadata ? JSON.parse(market.metadata) : {}; } catch (e) { meta = {}; }
+  const leagueCode = meta.league_code || 'eng.1';
+
+  if (!market.api_event_date) throw new Error('No match date stored for this market');
+  const date = market.api_event_date.replace(/-/g, '');
+  const apiRes = await fetch(`https://worldcup26.ir/get/soccer/${leagueCode}/scoreboard?dates=${date}`);
+  if (!apiRes.ok) throw new Error(`Scoreboard API returned ${apiRes.status}`);
+
+  const data = await apiRes.json();
+  // For totals markets, api_event_id is `${eventId}-ou25`; strip the suffix to find the base event
+  const baseEventId = String(market.api_event_id).replace(/-ou25$/, '');
+  const event = (data?.events || []).find(e => String(e.id) === baseEventId);
+  if (!event) throw new Error('Match not found on this date');
+
+  const status = event?.status?.type?.name || '';
+  const completed = event?.status?.type?.completed === true || status === 'STATUS_FINAL' || status === 'STATUS_FULL_TIME';
+  if (!completed) throw new Error(`Match status is ${status}, not final yet`);
+
+  const comp = event?.competitions?.[0];
+  const home = comp?.competitors?.find(c => c.homeAway === 'home');
+  const away = comp?.competitors?.find(c => c.homeAway === 'away');
+  if (!home || !away || home.score === undefined || away.score === undefined) throw new Error('Match scores unavailable');
+
+  const homeScore = parseInt(home.score, 10);
+  const awayScore = parseInt(away.score, 10);
+  const totalGoals = homeScore + awayScore;
+
+  // Determine outcome based on market type
+  let outcome;
+  if (meta.market_type === 'totals' && meta.line) {
+    // Over/Under: Yes = over the line, No = under or exactly on the line
+    outcome = totalGoals > meta.line ? 'yes' : 'no';
+  } else {
+    // Moneyline: Yes = home wins, No = away wins or draw
+    outcome = homeScore > awayScore ? 'yes' : 'no';
+  }
+
+  const result = await resolveOracleMarket(market.id, outcome, resolverUserId);
+  return { ...result, outcome, homeScore, awayScore, totalGoals, match: `${home.team?.displayName || ''} ${homeScore} - ${awayScore} ${away.team?.displayName || ''}` };
+}
+
+// Housekeeping: every 30 min, resolve or retire sports markets whose match date has passed,
+// so finished games stop appearing as upcoming fixtures.
+async function maintainApiSportsMarkets() {
+  try {
+    const expired = await dbAll(
+      `SELECT * FROM prediction_markets WHERE status = 'active' AND api_source = 'worldcup26'
+       AND api_event_date IS NOT NULL AND api_event_date < date('now')`
+    );
+    for (const m of expired) {
+      try {
+        const r = await autoResolveApiMarket(m, null);
+        await logSystemEvent('info', `Auto-resolved sports market ${m.id}`, `${m.title} → ${r.outcome} (${r.match})`);
+      } catch (e) {
+        // Not final — if it's >2 days past match date the game was postponed/abandoned; cancel it
+        const ageDays = (Date.now() - new Date(m.api_event_date + 'T00:00:00Z').getTime()) / 86400000;
+        if (ageDays > 2) {
+          try {
+            await resolveOracleMarket(m.id, 'cancel', null);
+            await logSystemEvent('info', `Auto-cancelled stale sports market ${m.id}`, `${m.title} — match not final ${Math.floor(ageDays)} days after listed date`);
+          } catch (e2) { console.error('Auto-cancel failed for market', m.id, e2.message); }
+        }
+      }
+    }
+  } catch (e) { console.error('maintainApiSportsMarkets error:', e.message); }
+}
+
 // API: Admin auto-resolve a football market from the free worldcup26 scoreboard
 app.post('/api/admin/predictions/football/:id/auto-resolve', authenticateRequest, async (req, res) => {
   if (!(await isArcadeAdmin(req.userId))) return res.status(403).json({ error: 'Admin required' });
@@ -10033,47 +10104,9 @@ app.post('/api/admin/predictions/football/:id/auto-resolve', authenticateRequest
   const market = await dbGet('SELECT * FROM prediction_markets WHERE id = ? AND api_source = ? AND status = ?', [req.params.id, 'worldcup26', 'active']);
   if (!market) return res.status(400).json({ error: 'Football market not active or not from API' });
 
-  let meta = {};
-  try { meta = market.metadata ? JSON.parse(market.metadata) : {}; } catch (e) { meta = {}; }
-  const leagueCode = meta.league_code || 'eng.1';
-
   try {
-    if (!market.api_event_date) throw new Error('No match date stored for this market');
-    const date = market.api_event_date.replace(/-/g, '');
-    const apiRes = await fetch(`https://worldcup26.ir/get/soccer/${leagueCode}/scoreboard?dates=${date}`);
-    if (!apiRes.ok) throw new Error(`Scoreboard API returned ${apiRes.status}`);
-
-    const data = await apiRes.json();
-    // For totals markets, api_event_id is `${eventId}-ou25`; strip the suffix to find the base event
-    const baseEventId = String(market.api_event_id).replace(/-ou25$/, '');
-    const event = (data?.events || []).find(e => String(e.id) === baseEventId);
-    if (!event) throw new Error('Match not found on this date');
-
-    const status = event?.status?.type?.name || '';
-    const completed = event?.status?.type?.completed === true || status === 'STATUS_FINAL';
-    if (!completed) throw new Error(`Match status is ${status}, not final yet`);
-
-    const comp = event?.competitions?.[0];
-    const home = comp?.competitors?.find(c => c.homeAway === 'home');
-    const away = comp?.competitors?.find(c => c.homeAway === 'away');
-    if (!home || !away || home.score === undefined || away.score === undefined) throw new Error('Match scores unavailable');
-
-    const homeScore = parseInt(home.score, 10);
-    const awayScore = parseInt(away.score, 10);
-    const totalGoals = homeScore + awayScore;
-
-    // Determine outcome based on market type
-    let outcome;
-    if (meta.market_type === 'totals' && meta.line) {
-      // Over/Under: Yes = over the line, No = under or exactly on the line
-      outcome = totalGoals > meta.line ? 'yes' : 'no';
-    } else {
-      // Moneyline: Yes = home wins, No = away wins or draw
-      outcome = homeScore > awayScore ? 'yes' : 'no';
-    }
-
-    const result = await resolveOracleMarket(market.id, outcome, req.userId);
-    res.json({ ...result, apiOutcome: outcome, homeScore, awayScore, totalGoals, match: `${home.team?.displayName || ''} ${homeScore} - ${awayScore} ${away.team?.displayName || ''}` });
+    const result = await autoResolveApiMarket(market, req.userId);
+    res.json({ ...result, apiOutcome: result.outcome });
   } catch (e) {
     console.error('Football auto-resolve error:', e);
     res.status(500).json({ error: e.message });
@@ -10084,6 +10117,38 @@ app.post('/api/admin/predictions/football/:id/auto-resolve', authenticateRequest
 app.get('/api/arcade/admin-check', authenticateRequest, async (req, res) => {
   res.json({ isAdmin: await isArcadeAdmin(req.userId) });
 });
+
+// Fetch EPL standings and return a { normalizedTeamName -> { ppg, rank, gamesPlayed } } map
+async function fetchEplStrength() {
+  try {
+    const res = await fetch('https://worldcup26.ir/get/soccer/eng.1/standings');
+    if (!res.ok) return {};
+    const data = await res.json();
+    const entries = data?.children?.[0]?.standings?.entries || [];
+    const map = {};
+    for (const e of entries) {
+      const get = (n) => { const s = (e.stats || []).find(x => x.name === n); return s ? parseFloat(s.displayValue ?? s.value) : 0; };
+      const name = (e.team?.displayName || '').trim().toLowerCase();
+      if (!name) continue;
+      const gp = Math.max(get('gamesPlayed'), 1);
+      map[name] = { ppg: get('points') / gp, rank: get('rank'), gamesPlayed: get('gamesPlayed'), gd: get('pointDifferential') };
+    }
+    return map;
+  } catch (e) { return {}; }
+}
+
+// Opening line for "Will <home> beat <away>?" from league strength + home advantage.
+// Base EPL home-win rate ≈ 44%; each 0.1 PPG edge ≈ ±2.5%. Clamped 15%–80%.
+function openingYesPrice(strength, home, away) {
+  const h = strength[(home || '').trim().toLowerCase()];
+  const a = strength[(away || '').trim().toLowerCase()];
+  if (!h || !a) return 0.46; // no standings data — home-favoured default, still better than flat 50/50
+  let diff = h.ppg - a.ppg;
+  const minGames = Math.min(h.gamesPlayed, a.gamesPlayed);
+  if (minGames < 4) diff *= minGames / 4; // early season: shrink confidence in the table
+  let p = 0.44 + diff * 0.25;
+  return Math.round(Math.min(0.80, Math.max(0.15, p)) * 100) / 100;
+}
 
 // Seed English Premier League fixtures from worldcup26 into sports prediction markets
 async function seedFootballMarkets(userId = null) {
@@ -10098,6 +10163,8 @@ async function seedFootballMarkets(userId = null) {
   if (!apiRes.ok) throw new Error(`Football API ${apiRes.status}`);
   const apiData = await apiRes.json();
   const events = apiData?.events || [];
+
+  const strength = await fetchEplStrength();
 
   let created = 0;
   let skipped = 0;
@@ -10122,10 +10189,12 @@ async function seedFootballMarkets(userId = null) {
     const eventDate = event.date?.slice(0, 10);
     const metadata = JSON.stringify({ home_logo: homeComp.team?.logo || '', away_logo: awayComp.team?.logo || '', home, away, competition: event.competition || 'English Premier League', competition_logo: event.competition_logo || '' });
     const imageUrl = homeComp.team?.logo || '';
-    await dbRun(`
-      INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, api_source, api_event_id, api_event_date, image_url, metadata, created_by, options_json, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [`Will ${home} beat ${away}?`, `English Premier League match on ${matchDate}. Yes = ${home} wins. No = ${away} wins or draw.`, 'sports', `${home} wins`, `${away} or draw`, 'worldcup26', eventId, eventDate, imageUrl, metadata, userId, '[]', 'active']);
+    const yesPrice = openingYesPrice(strength, home, away);
+    const ins = await dbRun(`
+      INSERT INTO prediction_markets (title, description, category, option_yes_label, option_no_label, api_source, api_event_id, api_event_date, image_url, metadata, created_by, options_json, status, last_price_yes, last_price_no)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [`Will ${home} beat ${away}?`, `English Premier League match on ${matchDate}. Yes = ${home} wins. No = ${away} wins or draw.`, 'sports', `${home} wins`, `${away} or draw`, 'worldcup26', eventId, eventDate, imageUrl, metadata, userId, '[]', 'active', yesPrice, Math.round((1 - yesPrice) * 100) / 100]);
+    try { await dbRun('INSERT INTO prediction_price_history (market_id, yes_price) VALUES (?, ?)', [ins.lastID, yesPrice]); } catch (e) {}
     created++;
   }
 
@@ -12710,6 +12779,10 @@ databaseInitialization.then(async () => {
   // Update crypto prices every 5 minutes
   setInterval(updateCryptoPrices, 5 * 60 * 1000);
   updateCryptoPrices(); // Initial update
+
+  // Every 30 min: auto-resolve finished sports markets and retire stale ones
+  setInterval(maintainApiSportsMarkets, 30 * 60 * 1000);
+  setTimeout(maintainApiSportsMarkets, 15 * 1000); // first pass shortly after boot
 }).catch(err => {
   console.error('Server startup aborted:', err);
   process.exit(1);
