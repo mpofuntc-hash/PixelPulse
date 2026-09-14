@@ -2276,7 +2276,7 @@ async function handleDiscordSlashCommand(interaction) {
             '💼 Marketplace — Buy & sell skins, accounts, gift cards',
             '🔄 Trade Hub — Swap tokens across 8+ platforms',
             '',
-            '🔗 **Website:** https://pixelpulse.zentriva-clubsync.online',
+            '🔗 **Website:** https://pixelpulse.zentriva.online',
             '⚡ **New here? Run `/gamble` to get started in 3 easy steps!**'
           ].join('\n'))
           .setFooter({ text: 'PixelPulse — Play. Trade. Win.' });
@@ -2292,7 +2292,7 @@ async function handleDiscordSlashCommand(interaction) {
             '**3 EASY STEPS TO START PLAYING:**',
             '',
             '**STEP 1: Create & Link Your Account**',
-            '```1. Go to https://pixelpulse.zentriva-clubsync.online\n2. Register an account\n3. Come back here and type: /link <your-username>```',
+            '```1. Go to https://pixelpulse.zentriva.online\n2. Register an account\n3. Come back here and type: /link <your-username>```',
             userLinked ? `✅ **Already linked as ${userLinked.username}!** Skip to Step 2.` : '⬜ Not linked yet — do this first!',
             '',
             '**STEP 2: Fund Your Balance**',
@@ -2315,7 +2315,7 @@ async function handleDiscordSlashCommand(interaction) {
             'Check your balance anytime: `/balance`',
             'See recent winners: `/winners`',
             '',
-            '🔗 **Website:** https://pixelpulse.zentriva-clubsync.online'
+            '🔗 **Website:** https://pixelpulse.zentriva.online'
           ].join('\n'))
           .setFooter({ text: 'Minimum stake: $0.50 | All games are provably fair' });
         await interaction.reply({ embeds: [embed], ephemeral: true });
@@ -2370,7 +2370,7 @@ async function handleDiscordSlashCommand(interaction) {
             'You can now use this balance to play:',
             '`/coinflip` `/slots` `/crash`',
             '',
-            'Play on the website: https://pixelpulse.zentriva-clubsync.online'
+            'Play on the website: https://pixelpulse.zentriva.online'
           ].join('\n'))
           .setFooter({ text: 'PixelPulse — Play. Trade. Win.' });
         await interaction.reply({ embeds: [embed] });
@@ -2388,7 +2388,7 @@ async function handleDiscordSlashCommand(interaction) {
           const options = JSON.parse(m.options).join(', ');
           embed.addFields({ name: `${i + 1}. ${m.title}`, value: `Options: ${options}\nEnds: ${new Date(m.end_date).toLocaleDateString()}` });
         });
-        embed.setFooter({ text: 'Predict now: https://pixelpulse.zentriva-clubsync.online' });
+        embed.setFooter({ text: 'Predict now: https://pixelpulse.zentriva.online' });
         await interaction.editReply({ embeds: [embed] });
         break;
       }
@@ -2403,7 +2403,7 @@ async function handleDiscordSlashCommand(interaction) {
         clips.forEach((c, i) => {
           embed.addFields({ name: `${i + 1}. ${c.title}`, value: `Game: ${c.game_type} | 👍 ${c.upvotes} upvotes | 👤 ${c.username}` });
         });
-        embed.setFooter({ text: 'Watch clips: https://pixelpulse.zentriva-clubsync.online' });
+        embed.setFooter({ text: 'Watch clips: https://pixelpulse.zentriva.online' });
         await interaction.editReply({ embeds: [embed] });
         break;
       }
@@ -2418,7 +2418,7 @@ async function handleDiscordSlashCommand(interaction) {
         skins.forEach((s, i) => {
           embed.addFields({ name: `${i + 1}. ${s.skin_name}`, value: `Weapon: ${s.weapon} | Game: ${s.game_type} | Price: ${s.price_tokens} tokens | 👤 ${s.username}` });
         });
-        embed.setFooter({ text: 'Browse marketplace: https://pixelpulse.zentriva-clubsync.online' });
+        embed.setFooter({ text: 'Browse marketplace: https://pixelpulse.zentriva.online' });
         await interaction.editReply({ embeds: [embed] });
         break;
       }
@@ -2455,7 +2455,7 @@ async function handleDiscordSlashCommand(interaction) {
           const diffEmoji = q.difficulty === 'easy' ? '🟢' : q.difficulty === 'medium' ? '🟡' : '🔴';
           embed.addFields({
             name: `${i + 1}. ${q.title} ${diffEmoji}`,
-            value: `${q.description || ''}\nReward: ${q.reward_points} Royal Coins • [Take Quiz](https://pixelpulse.zentriva-clubsync.online/#quizzes)`
+            value: `${q.description || ''}\nReward: ${q.reward_points} Royal Coins • [Take Quiz](https://pixelpulse.zentriva.online/#quizzes)`
           });
         });
         embed.setFooter({ text: 'Complete quizzes on the website to earn coins and climb the leaderboard' });
@@ -2492,7 +2492,7 @@ async function handleDiscordSlashCommand(interaction) {
             '',
             '💡 Share a YouTube or Twitch link in any channel to auto-upload it as a clip!',
             '',
-            '🔗 Website: https://pixelpulse.zentriva-clubsync.online'
+            '🔗 Website: https://pixelpulse.zentriva.online'
           ].join('\n'));
         await interaction.reply({ embeds: [embed] });
         break;
@@ -2653,7 +2653,7 @@ async function handleDiscordSlashCommand(interaction) {
             'No need to select anything — gambling channels are visible to all members.',
             '',
             '**Ready to play? 3 easy steps:**',
-            '`1.` Register at https://pixelpulse.zentriva-clubsync.online',
+            '`1.` Register at https://pixelpulse.zentriva.online',
             '`2.` Type `/link <username>` here to link your account',
             '`3.` Type `/gamble` for a step-by-step guide',
             '',
@@ -2667,7 +2667,7 @@ async function handleDiscordSlashCommand(interaction) {
             '🎌 **Anime** & 🎮 **Gaming** channels require `/onboard` selection.',
             '🎰 **Gambling** channels are open to everyone!',
             '',
-            '🔗 Website: https://pixelpulse.zentriva-clubsync.online'
+            '🔗 Website: https://pixelpulse.zentriva.online'
           ].join('\n'))
           .setFooter({ text: 'PixelPulse — Play. Trade. Win.' });
 
@@ -2686,7 +2686,7 @@ async function handleDiscordSlashCommand(interaction) {
               '**3 EASY STEPS TO START PLAYING:**',
               '',
               '**STEP 1: Link Your Account**',
-              '```Register at https://pixelpulse.zentriva-clubsync.online\nThen type: /link <your-username>```',
+              '```Register at https://pixelpulse.zentriva.online\nThen type: /link <your-username>```',
               '',
               '**STEP 2: Fund Your Balance**',
               '',
@@ -2735,7 +2735,7 @@ async function handleDiscordSlashCommand(interaction) {
         const username = interaction.options.getString('username');
         const user = await dbGet('SELECT id, discord_id FROM users WHERE username = ?', [username]);
         if (!user) {
-          await interaction.reply({ content: `No PixelPulse account found with username "${username}". Create one at https://pixelpulse.zentriva-clubsync.online`, ephemeral: true });
+          await interaction.reply({ content: `No PixelPulse account found with username "${username}". Create one at https://pixelpulse.zentriva.online`, ephemeral: true });
           return;
         }
         if (user.discord_id && user.discord_id !== interaction.user.id) {
@@ -2782,7 +2782,7 @@ async function handleDiscordSlashCommand(interaction) {
             '**Steps:**',
             '1. Send BTC to the address above',
             '2. Wait 1 confirmation (~10 min)',
-            '3. Claim on the website: https://pixelpulse.zentriva-clubsync.online',
+            '3. Claim on the website: https://pixelpulse.zentriva.online',
             '4. Use /balance to check your updated balance',
             '',
             'Your balance is shared between website, Telegram, and Discord.'
@@ -3131,7 +3131,7 @@ async function handleDiscordSlashCommand(interaction) {
           rankEmbed.addFields({ name: `${medal} ${rank.icon} ${u.username || 'Anonymous'}`, value: `**${rank.name}** | Staked: $${totalStaked.toFixed(2)} | Won: $${(u.total_won || 0).toFixed(2)} | ${u.total_bets} bets` });
         });
         rankEmbed.addFields({ name: 'Rank Tiers', value: '🥉 Bronze | 🥈 Silver ($50+) | 🥇 Gold ($200+) | 💎 Platinum ($500+) | 💠 Diamond ($1000+) | 👑 Legend ($5000+)' });
-        rankEmbed.setURL('https://pixelpulse.zentriva-clubsync.online');
+        rankEmbed.setURL('https://pixelpulse.zentriva.online');
         await interaction.editReply({ embeds: [rankEmbed] });
         break;
       }
@@ -3213,7 +3213,7 @@ async function handleDiscordSelectMenu(interaction) {
         '',
         'You can change your interests anytime by running `/onboard` again.',
         '',
-        '🔗 Visit the website: https://pixelpulse.zentriva-clubsync.online'
+        '🔗 Visit the website: https://pixelpulse.zentriva.online'
       ].join('\n'));
 
     await interaction.update({ embeds: [embed], components: [] });
@@ -3242,7 +3242,7 @@ async function handleDiscordClipAutoUpload(message) {
     if (!user) {
       // User hasn't linked their Discord to PixelPulse yet
       await message.reply({
-        content: `Nice clip! Link your Discord account to PixelPulse to auto-upload clips to your profile.\nSign up at https://pixelpulse.zentriva-clubsync.online/ and link your Discord in your profile settings.`,
+        content: `Nice clip! Link your Discord account to PixelPulse to auto-upload clips to your profile.\nSign up at https://pixelpulse.zentriva.online/ and link your Discord in your profile settings.`,
         allowedMentions: { repliedUser: false }
       }).catch(() => {});
       return;
@@ -3265,7 +3265,7 @@ async function handleDiscordClipAutoUpload(message) {
       embedUrl = `https://www.youtube.com/embed/${ytMatch[1]}`;
     } else if (twMatch) {
       const channel = twMatch[3];
-      if (channel) embedUrl = `https://player.twitch.tv/?channel=${channel}&parent=${message.guild ? 'pixelpulse.zentriva-clubsync.online' : 'localhost'}`;
+      if (channel) embedUrl = `https://player.twitch.tv/?channel=${channel}&parent=${message.guild ? 'pixelpulse.zentriva.online' : 'localhost'}`;
     }
 
     // Insert clip
@@ -3280,7 +3280,7 @@ async function handleDiscordClipAutoUpload(message) {
     notifyNewClip(title, 'General', user.username, embedUrl).catch(() => {});
 
     await message.reply({
-      content: `Clip uploaded to PixelPulse! View it on your profile: https://pixelpulse.zentriva-clubsync.online/\n+${ROYAL_COIN_REWARDS.CLIP_UPLOAD} Royal Coins earned!`,
+      content: `Clip uploaded to PixelPulse! View it on your profile: https://pixelpulse.zentriva.online/\n+${ROYAL_COIN_REWARDS.CLIP_UPLOAD} Royal Coins earned!`,
       allowedMentions: { repliedUser: false }
     }).catch(() => {});
 
@@ -3652,7 +3652,7 @@ function getEmailTransporter() {
 
 async function sendEmail(to, subject, body) {
   const transporter = getEmailTransporter();
-  const from = process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@pixelpulse.zentriva-clubsync.online';
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@pixelpulse.zentriva.online';
   const result = await dbRun('INSERT INTO email_queue (to_email, subject, body, status) VALUES (?, ?, ?, ?)', [to, subject, body, 'pending']);
   const queuedId = result.lastID;
 
@@ -3749,7 +3749,7 @@ Or deposit BTC on the website
 
 ⚡ New here? Type /gamble for a step-by-step guide!
 
-🔗 Website: https://pixelpulse.zentriva-clubsync.online
+🔗 Website: https://pixelpulse.zentriva.online
   `;
   ctx.reply(welcomeMessage);
 });
@@ -3768,7 +3768,7 @@ bot.command('markets', async (ctx) => {
     message += `${index + 1}. ${market.title}\n   Options: ${options}\n   Ends: ${new Date(market.end_date).toLocaleDateString()}\n\n`;
   });
   
-  message += '🔗 Predict now: https://pixelpulse.zentriva-clubsync.online';
+  message += '🔗 Predict now: https://pixelpulse.zentriva.online';
   ctx.reply(message);
 });
 
@@ -3785,7 +3785,7 @@ bot.command('clips', async (ctx) => {
     message += `${index + 1}. ${clip.title}\n   Game: ${clip.game_type}\n   👍 ${clip.upvotes} upvotes\n   👤 ${clip.username}\n\n`;
   });
   
-  message += '🔗 Watch clips: https://pixelpulse.zentriva-clubsync.online';
+  message += '🔗 Watch clips: https://pixelpulse.zentriva.online';
   ctx.reply(message);
 });
 
@@ -3802,7 +3802,7 @@ bot.command('marketplace', async (ctx) => {
     message += `${index + 1}. ${skin.skin_name}\n   Weapon: ${skin.weapon}\n   Game: ${skin.game_type}\n   Price: ${skin.price_btc} BTC\n   👤 ${skin.username}\n\n`;
   });
   
-  message += '🔗 Browse marketplace: https://pixelpulse.zentriva-clubsync.online';
+  message += '🔗 Browse marketplace: https://pixelpulse.zentriva.online';
   ctx.reply(message);
 });
 
@@ -3850,7 +3850,7 @@ bot.command('help', (ctx) => {
 /stats — Platform statistics
 /help — This help message
 
-🔗 Website: https://pixelpulse.zentriva-clubsync.online
+🔗 Website: https://pixelpulse.zentriva.online
   `;
   ctx.reply(helpMessage);
 });
@@ -3887,7 +3887,7 @@ STEP 2: Fund Your Balance
    Example: 100 Stars = $1.50
 
 ₿ Option B: Deposit Crypto
-Go to https://pixelpulse.zentriva-clubsync.online
+Go to https://pixelpulse.zentriva.online
 Login → Wallet → Deposit BTC
 
 STEP 3: Start Playing!
@@ -3898,7 +3898,7 @@ STEP 3: Start Playing!
 
 🎮 More games on the website:
 💣 Mines • 🔵 Plinko • ⚔️ PvP Color Clash
-https://pixelpulse.zentriva-clubsync.online
+https://pixelpulse.zentriva.online
 
 USEFUL:
 /balance — Check your balance
@@ -3924,7 +3924,7 @@ bot.command('depositcrypto', async (ctx) => {
   try {
     const btcPrice = await getBtcPriceUsd();
     const minUsd = Math.floor(MIN_BTC_DEPOSIT * btcPrice * 100) / 100;
-    ctx.reply(`₿ Deposit BTC to Arcade\n\nWallet Address:\n${BTC_WALLET}\n\nMinimum: ${MIN_BTC_DEPOSIT} BTC (~$${minUsd})\nCurrent BTC Price: $${btcPrice.toLocaleString()}\n\nSteps:\n1. Send BTC to the address above\n2. Wait 1 confirmation (~10 min)\n3. Go to the website to claim your deposit:\nhttps://pixelpulse.zentriva-clubsync.online\n\nYour BTC will be converted to USD balance automatically.`);
+    ctx.reply(`₿ Deposit BTC to Arcade\n\nWallet Address:\n${BTC_WALLET}\n\nMinimum: ${MIN_BTC_DEPOSIT} BTC (~$${minUsd})\nCurrent BTC Price: $${btcPrice.toLocaleString()}\n\nSteps:\n1. Send BTC to the address above\n2. Wait 1 confirmation (~10 min)\n3. Go to the website to claim your deposit:\nhttps://pixelpulse.zentriva.online\n\nYour BTC will be converted to USD balance automatically.`);
   } catch(e) { ctx.reply('Error getting deposit info. Try again.'); }
 });
 
@@ -4339,7 +4339,7 @@ bot.command('rankings', async (ctx) => {
     `);
 
     if (!gameStaked || gameStaked.length === 0) {
-      ctx.reply('🏆 Gambler Rankings\n\nNo gamblers ranked yet. Start playing to claim your spot!\n\n🔗 https://pixelpulse.zentriva-clubsync.online');
+      ctx.reply('🏆 Gambler Rankings\n\nNo gamblers ranked yet. Start playing to claim your spot!\n\n🔗 https://pixelpulse.zentriva.online');
       return;
     }
 
@@ -4354,14 +4354,14 @@ bot.command('rankings', async (ctx) => {
       const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
       msg += `${medal} ${rank.icon} ${u.username || 'Anonymous'}\n   💰 Staked: $${totalStaked.toFixed(2)} | 🎯 ${u.total_bets} bets\n   ${rank.name}\n\n`;
     });
-    msg += 'RANKS:\n🥉 Bronze | 🥈 Silver ($50+) | 🥇 Gold ($200+)\n💎 Platinum ($500+) | 💠 Diamond ($1000+) | 👑 Legend ($5000+)\n\n🔗 https://pixelpulse.zentriva-clubsync.online';
+    msg += 'RANKS:\n🥉 Bronze | 🥈 Silver ($50+) | 🥇 Gold ($200+)\n💎 Platinum ($500+) | 💠 Diamond ($1000+) | 👑 Legend ($5000+)\n\n🔗 https://pixelpulse.zentriva.online';
     ctx.reply(msg);
   } catch(e) { console.error('Telegram rankings error:', e); ctx.reply('Error loading rankings.'); }
 });
 
 // Handle text messages
 bot.on('text', (ctx) => {
-  ctx.reply('Use /help to see available commands. Visit https://pixelpulse.zentriva-clubsync.online for anime streaming and predictions!');
+  ctx.reply('Use /help to see available commands. Visit https://pixelpulse.zentriva.online for anime streaming and predictions!');
 });
 
 // Post and pin game modules to the Telegram channel
@@ -4415,12 +4415,12 @@ async function postAndPinGameModules() {
       `3️⃣ /balance (check winnings)\n\n` +
       `All games are provably fair!\n` +
       `Min stake: $0.50 on Telegram, $2 on web\n\n` +
-      `🔗 Website: https://pixelpulse.zentriva-clubsync.online\n` +
+      `🔗 Website: https://pixelpulse.zentriva.online\n` +
       `📱 Type /gamble for a full guide`;
 
     const keyboard = Markup.inlineKeyboard([
       [
-        Markup.button.url('🎮 Play on Website', 'https://pixelpulse.zentriva-clubsync.online'),
+        Markup.button.url('🎮 Play on Website', 'https://pixelpulse.zentriva.online'),
         Markup.button.callback('💰 Buy Stars', 'buy_stars_info')
       ],
       [
@@ -4484,7 +4484,7 @@ bot.action('game_info_crash', (ctx) => {
 
 bot.action('game_info_mines', (ctx) => {
   ctx.answerCbQuery();
-  ctx.reply(`💣 Mines\n\nPick cards and avoid the mines! Cash out anytime.\n\nPlay on the website: https://pixelpulse.zentriva-clubsync.online\n\nChoose 3-7 mines. More mines = bigger multipliers!\n5% house edge on payouts.`);
+  ctx.reply(`💣 Mines\n\nPick cards and avoid the mines! Cash out anytime.\n\nPlay on the website: https://pixelpulse.zentriva.online\n\nChoose 3-7 mines. More mines = bigger multipliers!\n5% house edge on payouts.`);
 });
 
 bot.action('game_info_dice', (ctx) => {
@@ -4494,12 +4494,12 @@ bot.action('game_info_dice', (ctx) => {
 
 bot.action('game_info_plinko', (ctx) => {
   ctx.answerCbQuery();
-  ctx.reply(`🔵 Plinko\n\nDrop the ball and watch it bounce through the pegs!\n\nPlay on the website: https://pixelpulse.zentriva-clubsync.online\n\n3 risk levels: Low, Medium, High\nEdge slots pay up to 16x!\n4% house edge.`);
+  ctx.reply(`🔵 Plinko\n\nDrop the ball and watch it bounce through the pegs!\n\nPlay on the website: https://pixelpulse.zentriva.online\n\n3 risk levels: Low, Medium, High\nEdge slots pay up to 16x!\n4% house edge.`);
 });
 
 bot.action('game_info_pvp', (ctx) => {
   ctx.answerCbQuery();
-  ctx.reply(`⚔️ PvP Color Clash\n\nGuess your opponent's color (red or blue)!\nFirst to 3 correct guesses wins.\nMax 5 turns — tiebreaker by score.\n\nPlay on the website: https://pixelpulse.zentriva-clubsync.online\n\n3% house fee on combined stakes.`);
+  ctx.reply(`⚔️ PvP Color Clash\n\nGuess your opponent's color (red or blue)!\nFirst to 3 correct guesses wins.\nMax 5 turns — tiebreaker by score.\n\nPlay on the website: https://pixelpulse.zentriva.online\n\n3% house fee on combined stakes.`);
 });
 
 // Express middleware
@@ -8481,7 +8481,7 @@ app.get('/api/referral/my-code', authenticateRequest, async (req, res) => {
     code = 'PP' + req.userId + Math.random().toString(36).slice(2, 7).toUpperCase();
     await dbRun('UPDATE users SET referral_code = ? WHERE id = ?', [code, req.userId]);
   }
-  res.json({ code, link: `https://pixelpulse.zentriva-clubsync.online/?ref=${code}`, reward: 'Earn $1.00 when a friend makes their first deposit' });
+  res.json({ code, link: `https://pixelpulse.zentriva.online/?ref=${code}`, reward: 'Earn $1.00 when a friend makes their first deposit' });
 });
 
 // API: Get recent winners feed
@@ -12750,19 +12750,19 @@ async function postPhotoToChannel(photoUrl, caption) {
 
 // --- Auto-update: New anime market created ---
 async function notifyNewAnimeMarket(animeTitle, releaseDate, coverImage) {
-  const msg = `🎬 NEW ANIME MARKET!\n\n📺 ${animeTitle}\n📅 Release: ${releaseDate || 'TBA'}\n\n🔮 Predict: Will it release on time or be delayed?\n🎮 Place your predictions now!\n\n🔗 https://pixelpulse.zentriva-clubsync.online`;
+  const msg = `🎬 NEW ANIME MARKET!\n\n📺 ${animeTitle}\n📅 Release: ${releaseDate || 'TBA'}\n\n🔮 Predict: Will it release on time or be delayed?\n🎮 Place your predictions now!\n\n🔗 https://pixelpulse.zentriva.online`;
   await postPhotoToChannel(coverImage, msg);
 }
 
 // --- Auto-update: New esports market created ---
 async function notifyNewEsportsMarket(matchTitle, league, game, scheduledAt) {
-  const msg = `🎮 NEW ${game.toUpperCase()} MATCH!\n\n⚔️ ${matchTitle}\n🏆 ${league || 'Tournament'}\n⏰ ${scheduledAt ? new Date(scheduledAt).toLocaleString() : 'TBA'}\n\n🔮 Predict the winner now!\n🔗 https://pixelpulse.zentriva-clubsync.online`;
+  const msg = `🎮 NEW ${game.toUpperCase()} MATCH!\n\n⚔️ ${matchTitle}\n🏆 ${league || 'Tournament'}\n⏰ ${scheduledAt ? new Date(scheduledAt).toLocaleString() : 'TBA'}\n\n🔮 Predict the winner now!\n🔗 https://pixelpulse.zentriva.online`;
   await postToChannel(msg);
 }
 
 // --- Auto-update: Market resolved with big win ---
 async function notifyMarketResolved(marketTitle, winner, totalVolume, topPayout) {
-  const msg = `🏁 MARKET RESOLVED!\n\n📊 ${marketTitle}\n🏆 Winner: ${winner}\n💰 Total Volume: ${totalVolume.toFixed(4)} BTC${topPayout ? `\n🤑 Biggest Win: ${topPayout.toFixed(4)} BTC` : ''}\n\n🎉 Congratulations to all winners!\n🔗 https://pixelpulse.zentriva-clubsync.online`;
+  const msg = `🏁 MARKET RESOLVED!\n\n📊 ${marketTitle}\n🏆 Winner: ${winner}\n💰 Total Volume: ${totalVolume.toFixed(4)} BTC${topPayout ? `\n🤑 Biggest Win: ${topPayout.toFixed(4)} BTC` : ''}\n\n🎉 Congratulations to all winners!\n🔗 https://pixelpulse.zentriva.online`;
   await postToChannel(msg);
 }
 
@@ -12795,7 +12795,7 @@ async function postWeeklyGamblerRankings() {
       const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
       msg += `${medal} ${rank.icon} ${u.username || 'Anonymous'}\n   💰 $${totalStaked.toFixed(2)} staked | 🎯 ${u.total_bets} bets\n   ${rank.name}\n\n`;
     });
-    msg += `Rank up by staking more!\n🥉 Bronze | 🥈 Silver ($50+) | 🥇 Gold ($200+)\n💎 Platinum ($500+) | 💠 Diamond ($1000+) | 👑 Legend ($5000+)\n\n🎮 Play now: https://pixelpulse.zentriva-clubsync.online`;
+    msg += `Rank up by staking more!\n🥉 Bronze | 🥈 Silver ($50+) | 🥇 Gold ($200+)\n💎 Platinum ($500+) | 💠 Diamond ($1000+) | 👑 Legend ($5000+)\n\n🎮 Play now: https://pixelpulse.zentriva.online`;
 
     await postToChannel(msg);
 
@@ -12838,7 +12838,7 @@ async function postWeeklyBigWins() {
       const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
       msg += `${medal} ${win.username || 'Anonymous'} — ${win.potential_payout.toFixed(4)} BTC\n   📊 ${win.market_title}\n\n`;
     });
-    msg += `💰 Total payouts this week!\n🎮 Keep predicting, keep winning!\n🔗 https://pixelpulse.zentriva-clubsync.online`;
+    msg += `💰 Total payouts this week!\n🎮 Keep predicting, keep winning!\n🔗 https://pixelpulse.zentriva.online`;
     
     await postToChannel(msg);
   } catch (err) {
@@ -12861,11 +12861,11 @@ async function postClipOfTheWeek() {
     `, [oneWeekAgo]);
     
     if (!topClip) {
-      await postToChannel('🎬 CLIP OF THE WEEK\n\nNo clips were submitted this week.\nBe the first to share your highlight! 🎥\n\n🔗 https://pixelpulse.zentriva-clubsync.online');
+      await postToChannel('🎬 CLIP OF THE WEEK\n\nNo clips were submitted this week.\nBe the first to share your highlight! 🎥\n\n🔗 https://pixelpulse.zentriva.online');
       return;
     }
     
-    const msg = `🎬 CLIP OF THE WEEK! 🎬\n\n🎥 "${topClip.title}"\n🎮 Game: ${topClip.game_type}\n👤 ${topClip.username}\n👍 ${topClip.upvotes} upvotes\n\n🔥 Congrats to ${topClip.username} for the top clip this week!\n\nWatch and vote on more clips:\n🔗 https://pixelpulse.zentriva-clubsync.online`;
+    const msg = `🎬 CLIP OF THE WEEK! 🎬\n\n🎥 "${topClip.title}"\n🎮 Game: ${topClip.game_type}\n👤 ${topClip.username}\n👍 ${topClip.upvotes} upvotes\n\n🔥 Congrats to ${topClip.username} for the top clip this week!\n\nWatch and vote on more clips:\n🔗 https://pixelpulse.zentriva.online`;
     
     await postPhotoToChannel(topClip.thumbnail_url || null, msg);
   } catch (err) {
@@ -12883,7 +12883,7 @@ async function postWeeklyStats() {
     const totalVolume = (await dbGet('SELECT COALESCE(SUM(total_volume), 0) as volume FROM betting_markets')).volume;
     const pool = await dbGet('SELECT * FROM platform_fee_pool WHERE id = 1');
     
-    const msg = `📊 WEEKLY PLATFORM STATS\n\n🎬 Clips: ${totalClips}\n💼 Skins Listed: ${totalSkins}\n🔮 Active Markets: ${activeMarkets}\n🏁 Resolved This Week: ${resolvedThisWeek}\n💰 Total Volume: ${totalVolume.toFixed(4)} BTC\n🏦 Platform Fee Pool: ${(pool?.accumulated_btc || 0).toFixed(6)} BTC\n\n📈 Growing every week!\n🔗 https://pixelpulse.zentriva-clubsync.online`;
+    const msg = `📊 WEEKLY PLATFORM STATS\n\n🎬 Clips: ${totalClips}\n💼 Skins Listed: ${totalSkins}\n🔮 Active Markets: ${activeMarkets}\n🏁 Resolved This Week: ${resolvedThisWeek}\n💰 Total Volume: ${totalVolume.toFixed(4)} BTC\n🏦 Platform Fee Pool: ${(pool?.accumulated_btc || 0).toFixed(6)} BTC\n\n📈 Growing every week!\n🔗 https://pixelpulse.zentriva.online`;
     
     await postToChannel(msg);
   } catch (err) {
@@ -12910,7 +12910,7 @@ async function postAnimeNews() {
       msg += `🎬 ${title}\n📅 ${date}\n🎭 ${genres}\n⭐ Score: ${score}\n\n`;
     }
     
-    msg += '🔮 Predict release dates on PixelPulse!\n🔗 https://pixelpulse.zentriva-clubsync.online';
+    msg += '🔮 Predict release dates on PixelPulse!\n🔗 https://pixelpulse.zentriva.online';
     
     // Try to get cover image from first anime
     const coverImage = topAnime[0]?.coverImage || topAnime[0]?.images?.jpg?.large_image_url || null;
@@ -12981,7 +12981,7 @@ async function postGamingNews() {
       msg += `🔗 ${item.link}\n\n`;
       newsItems.push({ title: item.title, desc: item.desc, link: item.link, source: item.source });
     }
-    msg += '💬 What do you think? Discuss below!\n🎮 Join the community: https://pixelpulse.zentriva-clubsync.online';
+    msg += '💬 What do you think? Discuss below!\n🎮 Join the community: https://pixelpulse.zentriva.online';
 
     await postToChannel(msg);
 
@@ -12999,7 +12999,7 @@ async function postQuizOfTheDay() {
     if (!quiz) return;
 
     const diffEmoji = quiz.difficulty === 'easy' ? '🟢 Easy' : quiz.difficulty === 'medium' ? '🟡 Medium' : '🔴 Hard';
-    const msg = `🧠 QUIZ OF THE DAY\n\n❓ ${quiz.title}\n📝 ${quiz.description || ''}\n📊 Difficulty: ${diffEmoji}\n💰 Reward: ${quiz.reward_points} Royal Coins\n\nTake the quiz now and earn coins!\n🔗 https://pixelpulse.zentriva-clubsync.online`;
+    const msg = `🧠 QUIZ OF THE DAY\n\n❓ ${quiz.title}\n📝 ${quiz.description || ''}\n📊 Difficulty: ${diffEmoji}\n💰 Reward: ${quiz.reward_points} Royal Coins\n\nTake the quiz now and earn coins!\n🔗 https://pixelpulse.zentriva.online`;
 
     await postToChannel(msg);
 
@@ -13032,13 +13032,13 @@ const discussionPrompts = [
 async function postDiscussionPrompt() {
   try {
     const prompt = discussionPrompts[Math.floor(Math.random() * discussionPrompts.length)];
-    const msg = `💬 DAILY DISCUSSION\n\n${prompt}\n\n👇 Reply with your thoughts!\n🎮 Trade safely at https://pixelpulse.zentriva-clubsync.online`;
+    const msg = `💬 DAILY DISCUSSION\n\n${prompt}\n\n👇 Reply with your thoughts!\n🎮 Trade safely at https://pixelpulse.zentriva.online`;
     await postToChannel(msg);
 
     await dbRun('INSERT INTO community_posts (post_type, title, content) VALUES (?, ?, ?)',
       ['discussion', 'Daily Discussion', prompt]);
 
-    await fb.postDiscussionToPage('Daily Discussion 💬', prompt, 'https://pixelpulse.zentriva-clubsync.online');
+    await fb.postDiscussionToPage('Daily Discussion 💬', prompt, 'https://pixelpulse.zentriva.online');
   } catch (err) {
     console.error('Error posting discussion prompt:', err);
   }
@@ -13148,7 +13148,7 @@ async function postDailyPoll() {
     if (TELEGRAM_CHANNEL_ID && bot?.telegram) {
       setTimeout(async () => {
         try {
-          const msg = `💬 Tell us more!\n\n${poll.followUp}\n\n👇 Reply below — we read everything!\n🎮 https://pixelpulse.zentriva-clubsync.online`;
+          const msg = `💬 Tell us more!\n\n${poll.followUp}\n\n👇 Reply below — we read everything!\n🎮 https://pixelpulse.zentriva.online`;
           await bot.telegram.sendMessage(TELEGRAM_CHANNEL_ID, msg);
         } catch (e) {
           console.error('Error posting poll follow-up:', e.message);
@@ -13165,7 +13165,7 @@ async function postDailyPoll() {
 // --- Auto-update: New clip posted on webapp → notify Telegram ---
 async function notifyNewClip(clipTitle, gameType, username, videoUrl) {
   try {
-    const msg = `🎬 NEW CLIP ALERT!\n\n🎥 "${clipTitle}"\n🎮 Game: ${gameType}\n👤 Shared by ${username}\n\nWatch and vote on PixelPulse!\n🔗 https://pixelpulse.zentriva-clubsync.online`;
+    const msg = `🎬 NEW CLIP ALERT!\n\n🎥 "${clipTitle}"\n🎮 Game: ${gameType}\n👤 Shared by ${username}\n\nWatch and vote on PixelPulse!\n🔗 https://pixelpulse.zentriva.online`;
     await postToChannel(msg);
   } catch (err) {
     console.error('Error posting new clip notification:', err);
@@ -13176,7 +13176,7 @@ async function notifyNewClip(clipTitle, gameType, username, videoUrl) {
 async function notifyNewSkinListing(skinName, gameType, price, currency, username) {
   try {
     const priceStr = price > 0 ? `${price} ${currency}` : 'token trade';
-    const msg = `💼 NEW LISTING\n\n📦 ${skinName}\n🎮 Game: ${gameType}\n💰 Price: ${priceStr}\n👤 Listed by ${username}\n\nCheck it out on PixelPulse!\n🔗 https://pixelpulse.zentriva-clubsync.online`;
+    const msg = `💼 NEW LISTING\n\n📦 ${skinName}\n🎮 Game: ${gameType}\n💰 Price: ${priceStr}\n👤 Listed by ${username}\n\nCheck it out on PixelPulse!\n🔗 https://pixelpulse.zentriva.online`;
     await postToChannel(msg);
   } catch (err) {
     console.error('Error posting skin listing notification:', err);
@@ -13186,7 +13186,7 @@ async function notifyNewSkinListing(skinName, gameType, price, currency, usernam
 // --- Auto-update: Token trade completed → notify Telegram ---
 async function notifyTokenTrade(fromUser, toUser, tokenType, amount) {
   try {
-    const msg = `🔄 TOKEN TRADE COMPLETED\n\n👤 ${fromUser} → ${toUser}\n💰 ${amount} ${tokenType}\n\n✅ Escrow-protected trade successful!\n🔗 https://pixelpulse.zentriva-clubsync.online`;
+    const msg = `🔄 TOKEN TRADE COMPLETED\n\n👤 ${fromUser} → ${toUser}\n💰 ${amount} ${tokenType}\n\n✅ Escrow-protected trade successful!\n🔗 https://pixelpulse.zentriva.online`;
     await postToChannel(msg);
   } catch (err) {
     console.error('Error posting token trade notification:', err);
